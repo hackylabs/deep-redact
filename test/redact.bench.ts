@@ -1,9 +1,11 @@
 import {bench, describe} from 'vitest';
 import fastRedact from 'fast-redact';
-import {Redaction} from '../src';
+import {Redaction, RedactionConfig} from '../src';
 import {dummyUser} from './setup/dummyUser';
 
-const blacklistedKeys = [
+type Blacklist = RedactionConfig['blacklistedKeys'];
+
+const blacklistedKeys: Blacklist = [
   'firstName',
   'lastName',
   'surname',
@@ -20,6 +22,22 @@ const blacklistedKeys = [
   'cardNumber',
   'ein',
   'ssn',
+];
+
+const complexBlacklistedKeys: Blacklist = [
+  'email',
+  'phone',
+  'password',
+  'birthDate',
+  'ip',
+  'macAddress',
+  'wallet',
+  {key: 'address', retainStructure: true},
+  'iban',
+  'cardNumber',
+  'ein',
+  'ssn',
+  {key: 'name', fuzzy: true, caseSensitive: false},
 ];
 
 const fastRedactBlacklistedKeys = [
@@ -55,6 +73,11 @@ describe('Redaction benchmark', () => {
 
   bench('default config, single user', () => {
     const redaction = new Redaction({blacklistedKeys});
+    redaction.redact(dummyUser);
+  });
+
+  bench('config per key, single user', () => {
+    const redaction = new Redaction({blacklistedKeys: complexBlacklistedKeys});
     redaction.redact(dummyUser);
   });
 
