@@ -58,7 +58,7 @@ describe('Redaction', () => {
 
   it('should redact multiple types', () => {
     const redaction = new Redaction({
-      types: ['string', 'number', 'boolean', 'bigint', 'symbol', 'undefined', 'object'],
+      types: ['string', 'number', 'boolean', 'bigint', 'object'],
       blacklistedKeys: ['password', 'age', 'isAdult', 'bigInt', 'symbol', 'undef', 'func'],
     });
     const obj = {
@@ -85,7 +85,7 @@ describe('Redaction', () => {
       isAdult: '[REDACTED]',
       timestamp: 1234567890,
       bigInt: '[REDACTED]',
-      symbol: '[REDACTED]',
+      symbol: expect.any(Symbol),
       undef: undefined,
       func: expect.any(Function),
       asyncFunc: expect.any(Function),
@@ -222,16 +222,6 @@ describe('Redaction', () => {
     const obj = {
       user: 'USERID',
       other: null,
-    };
-
-    expect(redaction.redact(obj)).toEqual(obj);
-  });
-
-  it('should not redact undefined', () => {
-    const redaction = new Redaction({types: ['undefined']});
-    const obj = {
-      user: 'USERID',
-      other: undefined,
     };
 
     expect(redaction.redact(obj)).toEqual(obj);

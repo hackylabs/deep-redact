@@ -1,4 +1,4 @@
-type Types = 'string' | 'number' | 'bigint' | 'boolean' | 'symbol' | 'undefined' | 'object' | 'function';
+type Types = 'string' | 'number' | 'bigint' | 'boolean' | 'object';
 
 export interface BlacklistKeyConfig {
   fuzzyKeyMatch?: boolean
@@ -68,9 +68,10 @@ export class Redaction {
   }
 
   private deepRedact = (value: unknown, parentShouldRedact = false): unknown => {
-    if (typeof value === 'function' || typeof value === 'undefined' || value === null) return value;
+    if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'undefined' || value === null) return value;
 
     if (!(value instanceof Object)) {
+      // @ts-expect-error - we already know that value is not a function, symbol, undefined, null, or an object
       if (!this.config.types.includes(typeof value)) return value;
 
       let shouldRedact = parentShouldRedact;
