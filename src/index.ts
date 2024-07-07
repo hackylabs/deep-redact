@@ -1,7 +1,14 @@
 type Types = 'string' | 'number' | 'bigint' | 'boolean' | 'symbol' | 'undefined' | 'object' | 'function';
 
+export interface BlacklistConfig {
+  fuzzy?: boolean
+  caseSensitive?: boolean
+  retainStructure?: boolean
+  key: string
+}
+
 export interface RedactionConfig {
-  blacklistedKeys?: string[]
+  blacklistedKeys?: Array<string | BlacklistConfig>
   stringTests?: RegExp[]
   fuzzy?: boolean
   caseSensitive?: boolean
@@ -21,7 +28,7 @@ export class Redaction {
     caseSensitive: true,
     retainStructure: false,
     replaceStringByLength: false,
-    replacement: 'REDACTED',
+    replacement: '[REDACTED]',
     types: ['string'],
   };
 
@@ -29,7 +36,35 @@ export class Redaction {
     this.config = {
       ...this.config,
       ...config,
+      blacklistedKeys: config.blacklistedKeys?.map((key) => {
+        if (typeof key === 'string') return key;
+
+        return {
+          fuzzy: this.config.fuzzy,
+          caseSensitive: this.config.caseSensitive,
+          retainStructure: this.config.retainStructure,
+          ...key,
+        };
+      }) ?? [],
     };
+  }
+
+  private complexShouldRedact = (key: string, config: BlacklistConfig): boolean => {
+    if (config.fuzzy && config.caseSensitive) return key.includes(config.key);
+
+    if (config.fuzzy && !config.caseSensitive) return normaliseString(key).includes(normaliseString(config.key));
+
+    if (!config.fuzzy && config.caseSensitive) return key === config.key;
+
+    return normaliseString(config.key) === normaliseString(key);
+  }
+
+  private shouldReactObjectValue = (key: string): boolean => {
+    return this.config.blacklistedKeys.some((redactableKey) => {
+      return typeof redactableKey === 'string'
+        ? key === redactableKey
+        : this.complexShouldRedact(key, redactableKey);
+    });
   }
 
   private deepRedact = (value: unknown, parentShouldRedact = false): unknown => {
@@ -51,30 +86,14 @@ export class Redaction {
       return shouldRedact ? this.config.replacement : value;
     }
 
-    if (parentShouldRedact && !this.config.retainStructure) {
-      return this.config.replacement;
-    }
+    if (typeof value === 'function') return value;
+
+    if (parentShouldRedact && !this.config.retainStructure) return this.config.replacement;
 
     if (Array.isArray(value)) return value.map((val) => this.deepRedact(val, parentShouldRedact));
 
     return Object.fromEntries(Object.entries(value).map(([key, val]) => {
-      const shouldRedact = parentShouldRedact
-        || this.config.blacklistedKeys.some((redactableKey) => {
-          if (this.config.fuzzy && this.config.caseSensitive) {
-            return key.includes(redactableKey);
-          }
-
-          if (this.config.fuzzy && !this.config.caseSensitive) {
-            return normaliseString(key).includes(normaliseString(redactableKey));
-          }
-
-          if (!this.config.fuzzy && this.config.caseSensitive) {
-            return key === redactableKey;
-          }
-
-          return normaliseString(key) === normaliseString(redactableKey);
-        });
-
+      const shouldRedact = parentShouldRedact || this.shouldReactObjectValue(key);
       return [key, this.deepRedact(val, shouldRedact)];
     }));
   };
