@@ -15,10 +15,10 @@ describe('Redaction', () => {
 
     expect(redaction.redact(obj)).toEqual({
       userid: 'USERID',
-      password: 'REDACTED',
+      password: '[REDACTED]',
       nested: {
         userid: 'USERID',
-        password: 'REDACTED',
+        password: '[REDACTED]',
       },
     });
   });
@@ -36,10 +36,10 @@ describe('Redaction', () => {
 
     expect(redaction.redact(arr)).toEqual(Array.from({length: 3}, () => ({
       userid: 'USERID',
-      password: 'REDACTED',
+      password: '[REDACTED]',
       nested: {
         userid: 'USERID',
-        password: 'REDACTED',
+        password: '[REDACTED]',
       },
     })));
   });
@@ -47,7 +47,7 @@ describe('Redaction', () => {
   it('should redact a string', () => {
     const redaction = new Redaction({stringTests: [/\d{13,16}/]});
 
-    expect(redaction.redact('1234567890123456')).toBe('REDACTED');
+    expect(redaction.redact('1234567890123456')).toBe('[REDACTED]');
   });
 
   it('should redact a string by length', () => {
@@ -58,18 +58,21 @@ describe('Redaction', () => {
 
   it('should redact multiple types', () => {
     const redaction = new Redaction({
-      types: ['string', 'number', 'boolean', 'bigint', 'symbol', 'undefined', 'object', 'function'],
+      types: ['string', 'number', 'boolean', 'bigint', 'symbol', 'undefined', 'object'],
       blacklistedKeys: ['password', 'age', 'isAdult', 'bigInt', 'symbol', 'undef', 'func'],
     });
-    const func = () => {
-    };
     const obj = {
       age: 20,
       isAdult: true,
       bigInt: BigInt(10),
       symbol: Symbol('symbol'),
       undef: undefined,
-      func,
+      func: () => {
+        return 'secret';
+      },
+      asyncFunc: async () => {
+        return 'secret';
+      },
       obj: {
         password: 'PASSWORD',
         userid: 'USERID',
@@ -77,21 +80,43 @@ describe('Redaction', () => {
     };
 
     expect(redaction.redact(obj)).toEqual({
-      age: 'REDACTED',
-      isAdult: 'REDACTED',
-      bigInt: 'REDACTED',
-      symbol: 'REDACTED',
-      undef: 'REDACTED',
-      func: 'REDACTED',
+      age: '[REDACTED]',
+      isAdult: '[REDACTED]',
+      bigInt: '[REDACTED]',
+      symbol: '[REDACTED]',
+      undef: '[REDACTED]',
+      func: expect.any(Function),
+      asyncFunc: expect.any(Function),
       obj: {
-        password: 'REDACTED',
+        password: '[REDACTED]',
         userid: 'USERID',
       },
     });
   });
 
-  it('should redact an object of strings with fuzzy matching', () => {
-    const redaction = new Redaction({blacklistedKeys: ['pass'], fuzzy: true});
+  it('should redact an object of strings with case insensitive and fuzzy matching', () => {
+    const redaction = new Redaction({blacklistedKeys: [{key: 'pass', fuzzy: true, caseSensitive: false}]});
+    const obj = {
+      user: 'USERID',
+      PASSWORD: 'PASSWORD',
+      nested: {
+        user: 'USERID',
+        PASSWORD: 'PASSWORD',
+      },
+    };
+
+    expect(redaction.redact(obj)).toEqual({
+      user: 'USERID',
+      PASSWORD: '[REDACTED]',
+      nested: {
+        user: 'USERID',
+        PASSWORD: '[REDACTED]',
+      },
+    });
+  });
+
+  it('should redact an object of strings with fuzzy case sensitive matching', () => {
+    const redaction = new Redaction({blacklistedKeys: [{key: 'pass', fuzzy: true, caseSensitive: true}]});
     const obj = {
       user: 'USERID',
       password: 'PASSWORD',
@@ -103,16 +128,37 @@ describe('Redaction', () => {
 
     expect(redaction.redact(obj)).toEqual({
       user: 'USERID',
-      password: 'REDACTED',
+      password: '[REDACTED]',
       nested: {
         user: 'USERID',
-        password: 'REDACTED',
+        password: '[REDACTED]',
       },
     });
   });
 
-  it('should redact an object of strings with case insensitive matching', () => {
-    const redaction = new Redaction({blacklistedKeys: ['password'], caseSensitive: false});
+  it('should redact an object of strings with case sensitive non-fuzzy matching', () => {
+    const redaction = new Redaction({blacklistedKeys: [{key: 'password', fuzzy: false, caseSensitive: true}]});
+    const obj = {
+      user: 'USERID',
+      password: 'PASSWORD',
+      nested: {
+        user: 'USERID',
+        password: 'PASSWORD',
+      },
+    };
+
+    expect(redaction.redact(obj)).toEqual({
+      user: 'USERID',
+      password: '[REDACTED]',
+      nested: {
+        user: 'USERID',
+        password: '[REDACTED]',
+      },
+    });
+  });
+
+  it('should redact an object of strings with case insensitive non-fuzzy matching', () => {
+    const redaction = new Redaction({blacklistedKeys: [{key: 'password', fuzzy: false, caseSensitive: false}]});
     const obj = {
       user: 'USERID',
       PASSWORD: 'PASSWORD',
@@ -124,33 +170,49 @@ describe('Redaction', () => {
 
     expect(redaction.redact(obj)).toEqual({
       user: 'USERID',
-      PASSWORD: 'REDACTED',
+      PASSWORD: '[REDACTED]',
       nested: {
         user: 'USERID',
-        PASSWORD: 'REDACTED',
+        PASSWORD: '[REDACTED]',
       },
     });
   });
 
-  it('should redact an object of strings with case insensitive and fuzzy matching', () => {
-    const redaction = new Redaction({blacklistedKeys: ['pass'], fuzzy: true, caseSensitive: false});
+  it('should not retain the structure of the object', () => {
+    const redaction = new Redaction({blacklistedKeys: ['password', 'secret']});
     const obj = {
       user: 'USERID',
-      PASSWORD: 'PASSWORD',
-      nested: {
+      password: 'PASSWORD',
+      secret: {
         user: 'USERID',
-        PASSWORD: 'PASSWORD',
+        password: 'PASSWORD',
       },
-    };
-
+    }
     expect(redaction.redact(obj)).toEqual({
       user: 'USERID',
-      PASSWORD: 'REDACTED',
-      nested: {
+      password: '[REDACTED]',
+      secret: '[REDACTED]',
+    })
+  });
+
+  it('should retain the structure of the object', () => {
+    const redaction = new Redaction({blacklistedKeys: ['password', 'secret'], retainStructure: true});
+    const obj = {
+      user: 'USERID',
+      password: 'PASSWORD',
+      secret: {
         user: 'USERID',
-        PASSWORD: 'REDACTED',
-      },
-    });
+        password: 'PASSWORD',
+      }
+    }
+    expect(redaction.redact(obj)).toEqual({
+      user: 'USERID',
+      password: '[REDACTED]',
+      secret: {
+        user: '[REDACTED]',
+        password: '[REDACTED]',
+      }
+    })
   });
 
   it('should not redact null', () => {
