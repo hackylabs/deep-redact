@@ -68,6 +68,8 @@ export class Redaction {
   }
 
   private deepRedact = (value: unknown, parentShouldRedact = false): unknown => {
+    if (typeof value === 'function' || typeof value === 'undefined' || value === null) return value;
+
     if (!(value instanceof Object)) {
       if (!this.config.types.includes(typeof value)) return value;
 
@@ -83,10 +85,11 @@ export class Redaction {
           : this.config.replacement;
       }
 
-      return shouldRedact ? this.config.replacement : value;
+      return shouldRedact
+        ? this.config.replacement
+        : value;
     }
 
-    if (typeof value === 'function') return value;
 
     if (parentShouldRedact && !this.config.retainStructure) return this.config.replacement;
 

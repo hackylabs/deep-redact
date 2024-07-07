@@ -64,6 +64,7 @@ describe('Redaction', () => {
     const obj = {
       age: 20,
       isAdult: true,
+      timestamp: 1234567890,
       bigInt: BigInt(10),
       symbol: Symbol('symbol'),
       undef: undefined,
@@ -82,9 +83,10 @@ describe('Redaction', () => {
     expect(redaction.redact(obj)).toEqual({
       age: '[REDACTED]',
       isAdult: '[REDACTED]',
+      timestamp: 1234567890,
       bigInt: '[REDACTED]',
       symbol: '[REDACTED]',
-      undef: '[REDACTED]',
+      undef: undefined,
       func: expect.any(Function),
       asyncFunc: expect.any(Function),
       obj: {
