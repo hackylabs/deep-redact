@@ -4,8 +4,15 @@
   "description": "",
   "main": "index.js",
   "private": true,
+  "exports": {
+    "import": "./dist/esm/index.js",
+    "require": "./dist/cjs/index.js"
+  },
   "scripts": {
     "lint": "eslint",
+    "build": "npm run lint && npm run test && npm run build:esm && npm run build:cjs",
+    "build:esm": "tsc --project tsconfig.esm.json",
+    "build:cjs": "tsc --project tsconfig.cjs.json",
     "bench": "npx vitest bench",
     "test:dev": "npx vitest",
     "test": "npx vitest run"
