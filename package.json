@@ -6,9 +6,12 @@
   "private": true,
   "scripts": {
     "lint": "eslint",
-    "test": "npx vitest"
+    "bench": "npx vitest bench",
+    "test:dev": "npx vitest",
+    "test": "npx vitest run"
   },
   "devDependencies": {
+    "@types/fast-redact": "3.0.4",
     "@types/node": "20.14.9",
     "@typescript-eslint/eslint-plugin": "7.14.1",
     "@typescript-eslint/parser": "7.14.1",
@@ -20,6 +23,7 @@
     "eslint-plugin-mocha": "10.4.3",
     "eslint-plugin-n": "17.9.0",
     "eslint-plugin-promise": "6.2.0",
+    "fast-redact": "3.5.0",
     "prettier": "2.5.1",
     "typescript": "5.5.2",
     "vitest": "1.6.0"
