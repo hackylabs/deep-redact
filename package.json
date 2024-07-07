@@ -1,0 +1,25 @@
+{
+  "name": "deep-redact",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+    "lint": "eslint"
+  },
+  "devDependencies": {
+    "@types/node": "20.14.9",
+    "@typescript-eslint/eslint-plugin": "7.14.1",
+    "@typescript-eslint/parser": "7.14.1",
+    "@vitest/coverage-v8": "1.6.0",
+    "eslint": "8.57.0",
+    "eslint-config-airbnb-base": "15.0.0",
+    "eslint-config-airbnb-typescript": "18.0.0",
+    "eslint-plugin-import": "2.29.1",
+    "eslint-plugin-mocha": "10.4.3",
+    "eslint-plugin-n": "17.9.0",
+    "eslint-plugin-promise": "6.2.0",
+    "prettier": "2.5.1",
+    "typescript": "5.5.2"
+  }
+}
