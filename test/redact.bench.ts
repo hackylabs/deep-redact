@@ -37,7 +37,7 @@ const complexBlacklistedKeys: Blacklist = [
   'cardNumber',
   'ein',
   'ssn',
-  {key: 'name', fuzzy: true, caseSensitive: false},
+  {key: 'name', fuzzyKeyMatch: true, caseSensitiveKeyMatch: false},
 ];
 
 const fastRedactBlacklistedKeys = [
@@ -82,17 +82,17 @@ describe('Redaction benchmark', () => {
   });
 
   bench('fuzzy matching, single user', () => {
-    const redaction = new Redaction({blacklistedKeys, fuzzy: true});
+    const redaction = new Redaction({blacklistedKeys, fuzzyKeyMatch: true});
     redaction.redact(dummyUser);
   });
 
   bench('case insensitive matching, single user', () => {
-    const redaction = new Redaction({blacklistedKeys, caseSensitive: false});
+    const redaction = new Redaction({blacklistedKeys, caseSensitiveKeyMatch: false});
     redaction.redact(dummyUser);
   });
 
   bench('fuzzy and case insensitive matching, single user', () => {
-    const redaction = new Redaction({blacklistedKeys, fuzzy: true, caseSensitive: false});
+    const redaction = new Redaction({blacklistedKeys, fuzzyKeyMatch: true, caseSensitiveKeyMatch: false});
     redaction.redact(dummyUser);
   });
 

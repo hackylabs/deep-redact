@@ -1,8 +1,8 @@
 type Types = 'string' | 'number' | 'bigint' | 'boolean' | 'symbol' | 'undefined' | 'object' | 'function';
 
-export interface BlacklistConfig {
-  fuzzy?: boolean
-  caseSensitive?: boolean
+export interface BlacklistKeyConfig {
+  fuzzyKeyMatch?: boolean
+  caseSensitiveKeyMatch?: boolean
   retainStructure?: boolean
   key: string
 }
@@ -10,8 +10,8 @@ export interface BlacklistConfig {
 export interface RedactionConfig {
   blacklistedKeys?: Array<string | BlacklistConfig>
   stringTests?: RegExp[]
-  fuzzy?: boolean
-  caseSensitive?: boolean
+  fuzzyKeyMatch?: boolean
+  caseSensitiveKeyMatch?: boolean
   retainStructure?: boolean
   replaceStringByLength?: boolean
   replacement?: string
@@ -24,8 +24,8 @@ export class Redaction {
   private readonly config: Required<RedactionConfig> = {
     blacklistedKeys: [],
     stringTests: [],
-    fuzzy: false,
-    caseSensitive: true,
+    fuzzyKeyMatch: false,
+    caseSensitiveKeyMatch: true,
     retainStructure: false,
     replaceStringByLength: false,
     replacement: '[REDACTED]',
@@ -40,8 +40,8 @@ export class Redaction {
         if (typeof key === 'string') return key;
 
         return {
-          fuzzy: this.config.fuzzy,
-          caseSensitive: this.config.caseSensitive,
+          fuzzyKeyMatch: this.config.fuzzyKeyMatch,
+          caseSensitiveKeyMatch: this.config.caseSensitiveKeyMatch,
           retainStructure: this.config.retainStructure,
           ...key,
         };
@@ -49,12 +49,12 @@ export class Redaction {
     };
   }
 
-  private complexShouldRedact = (key: string, config: BlacklistConfig): boolean => {
-    if (config.fuzzy && config.caseSensitive) return key.includes(config.key);
+  private complexShouldRedact = (key: string, config: BlacklistKeyConfig): boolean => {
+    if (config.fuzzyKeyMatch && config.caseSensitiveKeyMatch) return key.includes(config.key);
 
-    if (config.fuzzy && !config.caseSensitive) return normaliseString(key).includes(normaliseString(config.key));
+    if (config.fuzzyKeyMatch && !config.caseSensitiveKeyMatch) return normaliseString(key).includes(normaliseString(config.key));
 
-    if (!config.fuzzy && config.caseSensitive) return key === config.key;
+    if (!config.fuzzyKeyMatch && config.caseSensitiveKeyMatch) return key === config.key;
 
     return normaliseString(config.key) === normaliseString(key);
   }

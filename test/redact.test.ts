@@ -97,7 +97,7 @@ describe('Redaction', () => {
   });
 
   it('should redact an object of strings with case insensitive and fuzzy matching', () => {
-    const redaction = new Redaction({blacklistedKeys: [{key: 'pass', fuzzy: true, caseSensitive: false}]});
+    const redaction = new Redaction({blacklistedKeys: [{key: 'pass', fuzzyKeyMatch: true, caseSensitiveKeyMatch: false}]});
     const obj = {
       user: 'USERID',
       PASSWORD: 'PASSWORD',
@@ -118,7 +118,7 @@ describe('Redaction', () => {
   });
 
   it('should redact an object of strings with fuzzy case sensitive matching', () => {
-    const redaction = new Redaction({blacklistedKeys: [{key: 'pass', fuzzy: true, caseSensitive: true}]});
+    const redaction = new Redaction({blacklistedKeys: [{key: 'pass', fuzzyKeyMatch: true, caseSensitiveKeyMatch: true}]});
     const obj = {
       user: 'USERID',
       password: 'PASSWORD',
@@ -139,7 +139,7 @@ describe('Redaction', () => {
   });
 
   it('should redact an object of strings with case sensitive non-fuzzy matching', () => {
-    const redaction = new Redaction({blacklistedKeys: [{key: 'password', fuzzy: false, caseSensitive: true}]});
+    const redaction = new Redaction({blacklistedKeys: [{key: 'password', fuzzyKeyMatch: false, caseSensitiveKeyMatch: true}]});
     const obj = {
       user: 'USERID',
       password: 'PASSWORD',
@@ -160,7 +160,7 @@ describe('Redaction', () => {
   });
 
   it('should redact an object of strings with case insensitive non-fuzzy matching', () => {
-    const redaction = new Redaction({blacklistedKeys: [{key: 'password', fuzzy: false, caseSensitive: false}]});
+    const redaction = new Redaction({blacklistedKeys: [{key: 'password', fuzzyKeyMatch: false, caseSensitiveKeyMatch: false}]});
     const obj = {
       user: 'USERID',
       PASSWORD: 'PASSWORD',
