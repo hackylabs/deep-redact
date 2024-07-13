@@ -4,7 +4,7 @@
   "description": "A fast and configurable zero-dependency library for redacting strings or deeply redacting objects.",
   "private": false,
   "license": "MIT",
-  "author": "Ben Green (https://bengreen.dev)",
+  "author": "Benjamin Green (https://bengreen.dev)",
   "keywords": [
     "redact",
     "redaction",
@@ -30,14 +30,15 @@
   },
   "scripts": {
     "lint": "eslint",
-    "build": "npm run lint && npm run test && npm run bench && npm run build:esm && npm run build:cjs && npm run update-readme",
+    "build": "npm run lint && npm run test && npm run bench && npm run build:esm && npm run build:cjs && npm run update-readme && npm run update-license",
     "build:esm": "tsc --project tsconfig.esm.json",
     "build:cjs": "tsc --project tsconfig.cjs.json",
     "bench": "npx vitest bench --watch=false",
     "bench:dev": "npx vitest bench",
     "test:dev": "npx vitest",
     "test": "npx vitest run",
-    "update-readme": "npx ts-node ./scripts/update-readme.ts"
+    "update-readme": "npx ts-node ./scripts/update-readme.ts",
+    "update-license": "npx ts-node ./scripts/update-license.ts"
   },
   "//": [
     "fast-redact installed only as a benchmark comparison and is not used in the library",
