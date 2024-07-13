@@ -1,7 +1,7 @@
 {
   "name": "deep-redact",
   "version": "1.0.0",
-  "description": "A fast and configurable library for redacting string or deeply redacting objects.",
+  "description": "A fast and configurable zero-dependency library for redacting strings or deeply redacting objects.",
   "private": false,
   "license": "MIT",
   "author": "Ben Green (https://bengreen.dev)",
@@ -37,6 +37,10 @@
     "test": "npx vitest run",
     "update-readme": "npx ts-node ./scripts/update-readme.ts"
   },
+  "//": [
+    "fast-redact installed only as a benchmark comparison and is not used in the library",
+    "all other dependencies are for development purposes only"
+  ],
   "devDependencies": {
     "@types/fast-redact": "3.0.4",
     "@types/node": "20.14.9",
