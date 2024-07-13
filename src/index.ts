@@ -1,4 +1,4 @@
-type Types = 'string' | 'number' | 'bigint' | 'boolean' | 'object';
+export type Types = 'string' | 'number' | 'bigint' | 'boolean' | 'object';
 
 export interface BlacklistKeyConfig {
   fuzzyKeyMatch?: boolean
