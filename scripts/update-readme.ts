@@ -6,7 +6,7 @@ import {mainOptions} from "./mainOptions";
 import {blacklistKeyConfig} from "./blacklistKeyConfig";
 import {benchmarks} from "./benchTable";
 
-const readme = readFileSync(join(__dirname, 'README-template.txt')).toString();
+const readme = readFileSync(join(__dirname, 'templates', 'README.txt')).toString();
 
 const output = readme
   .replace('<--MAIN_OPTIONS-->', mainOptions)
