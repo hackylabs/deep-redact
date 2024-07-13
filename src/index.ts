@@ -8,7 +8,7 @@ export interface BlacklistKeyConfig {
 }
 
 export interface RedactionConfig {
-  blacklistedKeys?: Array<string | BlacklistConfig>
+  blacklistedKeys?: Array<string | BlacklistKeyConfig>
   stringTests?: RegExp[]
   fuzzyKeyMatch?: boolean
   caseSensitiveKeyMatch?: boolean
