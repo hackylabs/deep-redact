@@ -1,21 +1,42 @@
 {
   "name": "deep-redact",
   "version": "1.0.0",
-  "description": "",
+  "description": "A fast and configurable library for redacting string or deeply redacting objects.",
   "main": "index.js",
-  "private": true,
+  "private": false,
+  "license": "MIT",
+  "author": "Ben Green (https://bengreen.dev)",
+  "keywords": [
+    "redact",
+    "redaction",
+    "redactor",
+    "redacting",
+    "redacted",
+    "secrets",
+    "sensitive data",
+    "sensitive information",
+    "personal data",
+    "personally identifiable information",
+    "general data protection regulation",
+    "data protection",
+    "data security",
+    "GDPR",
+    "PII"
+  ],
   "exports": {
     "import": "./dist/esm/index.js",
     "require": "./dist/cjs/index.js"
   },
   "scripts": {
     "lint": "eslint",
-    "build": "npm run lint && npm run test && npm run build:esm && npm run build:cjs",
+    "build": "npm run lint && npm run test && npm run bench && npm run build:esm && npm run build:cjs && npm run update-readme",
     "build:esm": "tsc --project tsconfig.esm.json",
     "build:cjs": "tsc --project tsconfig.cjs.json",
-    "bench": "npx vitest bench",
+    "bench": "npx vitest bench --watch=false",
+    "bench:dev": "npx vitest bench",
     "test:dev": "npx vitest",
-    "test": "npx vitest run"
+    "test": "npx vitest run",
+    "update-readme": "npx ts-node ./scripts/update-readme.ts"
   },
   "devDependencies": {
     "@types/fast-redact": "3.0.4",

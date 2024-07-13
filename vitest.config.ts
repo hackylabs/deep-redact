@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import {defineConfig} from 'vitest/config';
 
 export default defineConfig({
   test: {
@@ -10,7 +10,12 @@ export default defineConfig({
         branches: 100,
         functions: 100,
         lines: 100,
-      }
+      },
+      include: ['src/**/*.ts'],
     },
+    include: ['test/**/*.test.ts'],
+    benchmark: {
+      outputJson: 'benchmark.json',
+    }
   },
 });

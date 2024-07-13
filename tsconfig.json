@@ -1,18 +1,18 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ES6",
+    "module": "CommonJS",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
     "noImplicitAny": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
     "strictFunctionTypes": true,
     "declaration": true,
     "noEmit": false,
     "noEmitOnError": true,
-    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "moduleResolution": "Node",
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "scripts/**/*"],
 }

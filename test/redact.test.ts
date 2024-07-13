@@ -97,7 +97,13 @@ describe('Redaction', () => {
   });
 
   it('should redact an object of strings with case insensitive and fuzzy matching', () => {
-    const redaction = new Redaction({blacklistedKeys: [{key: 'pass', fuzzyKeyMatch: true, caseSensitiveKeyMatch: false}]});
+    const redaction = new Redaction({
+      blacklistedKeys: [{
+        key: 'pass',
+        fuzzyKeyMatch: true,
+        caseSensitiveKeyMatch: false
+      }], fuzzyKeyMatch: false, caseSensitiveKeyMatch: true
+    });
     const obj = {
       user: 'USERID',
       PASSWORD: 'PASSWORD',
@@ -118,7 +124,11 @@ describe('Redaction', () => {
   });
 
   it('should redact an object of strings with fuzzy case sensitive matching', () => {
-    const redaction = new Redaction({blacklistedKeys: [{key: 'pass', fuzzyKeyMatch: true, caseSensitiveKeyMatch: true}]});
+    const redaction = new Redaction({
+      blacklistedKeys: [{key: 'pass', fuzzyKeyMatch: true, caseSensitiveKeyMatch: true}],
+      fuzzyKeyMatch: false,
+      caseSensitiveKeyMatch: false
+    });
     const obj = {
       user: 'USERID',
       password: 'PASSWORD',
@@ -139,7 +149,13 @@ describe('Redaction', () => {
   });
 
   it('should redact an object of strings with case sensitive non-fuzzy matching', () => {
-    const redaction = new Redaction({blacklistedKeys: [{key: 'password', fuzzyKeyMatch: false, caseSensitiveKeyMatch: true}]});
+    const redaction = new Redaction({
+      blacklistedKeys: [{
+        key: 'password',
+        fuzzyKeyMatch: false,
+        caseSensitiveKeyMatch: true
+      }], fuzzyKeyMatch: true, caseSensitiveKeyMatch: false
+    });
     const obj = {
       user: 'USERID',
       password: 'PASSWORD',
@@ -160,7 +176,13 @@ describe('Redaction', () => {
   });
 
   it('should redact an object of strings with case insensitive non-fuzzy matching', () => {
-    const redaction = new Redaction({blacklistedKeys: [{key: 'password', fuzzyKeyMatch: false, caseSensitiveKeyMatch: false}]});
+    const redaction = new Redaction({
+      blacklistedKeys: [{
+        key: 'password',
+        fuzzyKeyMatch: false,
+        caseSensitiveKeyMatch: false
+      }], fuzzyKeyMatch: true, caseSensitiveKeyMatch: true
+    });
     const obj = {
       user: 'USERID',
       PASSWORD: 'PASSWORD',

@@ -60,6 +60,8 @@ const fastRedactBlacklistedKeys = [
   'ssn',
 ];
 
+const fastRedactArrayBlacklistedKeys = fastRedactBlacklistedKeys.map((key) => `*.${key}`);
+
 describe('Redaction benchmark', () => {
   bench('fast redact, single user', () => {
     const redact = fastRedact({paths: fastRedactBlacklistedKeys});
@@ -67,8 +69,8 @@ describe('Redaction benchmark', () => {
   });
 
   bench('fast redact, 1000 users', () => {
-    const redact = fastRedact({paths: fastRedactBlacklistedKeys});
-    Array(1000).fill(dummyUser).map(redact);
+    const redact = fastRedact({paths: fastRedactArrayBlacklistedKeys});
+    redact(Array(1000).fill(dummyUser));
   });
 
   bench('default config, single user', () => {
@@ -108,6 +110,6 @@ describe('Redaction benchmark', () => {
 
   bench('default config, 1000 users', () => {
     const redaction = new Redaction({blacklistedKeys});
-    Array(1000).fill(dummyUser).map((user) => redaction.redact(user));
+    redaction.redact(Array(1000).fill(dummyUser));
   });
 });
