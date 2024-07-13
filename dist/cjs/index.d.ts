@@ -1,9 +1,15 @@
-type Types = 'string' | 'number' | 'bigint' | 'boolean' | 'symbol' | 'undefined' | 'object' | 'function';
+export type Types = 'string' | 'number' | 'bigint' | 'boolean' | 'object';
+export interface BlacklistKeyConfig {
+    fuzzyKeyMatch?: boolean;
+    caseSensitiveKeyMatch?: boolean;
+    retainStructure?: boolean;
+    key: string;
+}
 export interface RedactionConfig {
-    blacklistedKeys?: string[];
+    blacklistedKeys?: Array<string | BlacklistKeyConfig>;
     stringTests?: RegExp[];
-    fuzzy?: boolean;
-    caseSensitive?: boolean;
+    fuzzyKeyMatch?: boolean;
+    caseSensitiveKeyMatch?: boolean;
     retainStructure?: boolean;
     replaceStringByLength?: boolean;
     replacement?: string;
@@ -12,7 +18,8 @@ export interface RedactionConfig {
 export declare class Redaction {
     private readonly config;
     constructor(config: RedactionConfig);
+    private complexShouldRedact;
+    private shouldReactObjectValue;
     private deepRedact;
     redact: (value: unknown) => unknown;
 }
-export {};
