@@ -2,7 +2,6 @@
   "name": "deep-redact",
   "version": "1.0.0",
   "description": "A fast and configurable library for redacting string or deeply redacting objects.",
-  "main": "index.js",
   "private": false,
   "license": "MIT",
   "author": "Ben Green (https://bengreen.dev)",
