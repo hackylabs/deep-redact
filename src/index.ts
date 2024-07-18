@@ -4,6 +4,7 @@ export interface BlacklistKeyConfig {
   fuzzyKeyMatch?: boolean
   caseSensitiveKeyMatch?: boolean
   retainStructure?: boolean
+  remove?: boolean
   key: string
 }
 
@@ -15,6 +16,7 @@ export interface RedactionConfig {
   retainStructure?: boolean
   replaceStringByLength?: boolean
   replacement?: string
+  remove?: boolean
   types?: Types[]
 }
 
@@ -27,6 +29,7 @@ export class Redaction {
     fuzzyKeyMatch: false,
     caseSensitiveKeyMatch: true,
     retainStructure: false,
+    remove: false,
     replaceStringByLength: false,
     replacement: '[REDACTED]',
     types: ['string'],
@@ -43,6 +46,7 @@ export class Redaction {
           fuzzyKeyMatch: this.config.fuzzyKeyMatch,
           caseSensitiveKeyMatch: this.config.caseSensitiveKeyMatch,
           retainStructure: this.config.retainStructure,
+          remove: this.config.remove,
           ...key,
         }
       }) ?? [],
@@ -78,18 +82,23 @@ export class Redaction {
         shouldRedact = shouldRedact || this.config.stringTests.some((test) => test.test(value))
 
         if (!shouldRedact) return value
+        if (this.config.remove) return undefined
 
         return this.config.replaceStringByLength
           ? this.config.replacement.repeat(value.length)
           : this.config.replacement
       }
 
-      return shouldRedact
-        ? this.config.replacement
-        : value
+      if (!shouldRedact) return value
+
+      return this.config.remove
+        ? undefined
+        : this.config.replacement
     }
 
-    if (parentShouldRedact && !this.config.retainStructure) return this.config.replacement
+    if (parentShouldRedact && (!this.config.retainStructure || this.config.remove)) {
+      return this.config.remove ? undefined : this.config.replacement
+    }
 
     if (Array.isArray(value)) return value.map((val) => this.deepRedact(val, parentShouldRedact))
 

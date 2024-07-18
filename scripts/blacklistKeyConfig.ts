@@ -20,6 +20,12 @@ const tableData: TableData = [
     required: 'N',
   },
   {
+    key: 'remove',
+    type: 'boolean',
+    default: 'Main options `remove`',
+    required: 'N',
+  },
+  {
     key: 'retainStructure',
     type: 'boolean',
     default: 'Main options `retainStructure`',
