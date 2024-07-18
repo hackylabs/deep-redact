@@ -1,9 +1,13 @@
-import {describe, expect, it} from 'vitest';
-import {Redaction} from '../src';
+import { describe, it, expect } from 'vitest'
+import type { IHeapSnapshot, Nullable } from '@memlab/core'
+import { config, takeNodeMinimalHeap } from '@memlab/core'
+import { Redaction } from '../src'
+import { dummyUser } from './setup/dummyUser'
+import { blacklistedKeys } from './setup/blacklist'
 
 describe('Redaction', () => {
   it('should deep redact an object', () => {
-    const redaction = new Redaction({blacklistedKeys: ['password']});
+    const redaction = new Redaction({ blacklistedKeys: ['password'] })
     const obj = {
       userid: 'USERID',
       password: 'PASSWORD',
@@ -11,7 +15,7 @@ describe('Redaction', () => {
         userid: 'USERID',
         password: 'PASSWORD',
       },
-    };
+    }
 
     expect(redaction.redact(obj)).toEqual({
       userid: 'USERID',
@@ -20,47 +24,47 @@ describe('Redaction', () => {
         userid: 'USERID',
         password: '[REDACTED]',
       },
-    });
-  });
+    })
+  })
 
   it('should deep redact an array of objects', () => {
-    const redaction = new Redaction({blacklistedKeys: ['password']});
-    const arr = Array.from({length: 3}, () => ({
+    const redaction = new Redaction({ blacklistedKeys: ['password'] })
+    const arr = Array.from({ length: 3 }, () => ({
       userid: 'USERID',
       password: 'PASSWORD',
       nested: {
         userid: 'USERID',
         password: 'PASSWORD',
       },
-    }));
+    }))
 
-    expect(redaction.redact(arr)).toEqual(Array.from({length: 3}, () => ({
+    expect(redaction.redact(arr)).toEqual(Array.from({ length: 3 }, () => ({
       userid: 'USERID',
       password: '[REDACTED]',
       nested: {
         userid: 'USERID',
         password: '[REDACTED]',
       },
-    })));
-  });
+    })))
+  })
 
   it('should redact a string', () => {
-    const redaction = new Redaction({stringTests: [/\d{13,16}/]});
+    const redaction = new Redaction({ stringTests: [/\d{13,16}/] })
 
-    expect(redaction.redact('1234567890123456')).toBe('[REDACTED]');
-  });
+    expect(redaction.redact('1234567890123456')).toBe('[REDACTED]')
+  })
 
   it('should redact a string by length', () => {
-    const redaction = new Redaction({stringTests: [/\d{13,16}/], replaceStringByLength: true, replacement: '*'});
+    const redaction = new Redaction({ stringTests: [/\d{13,16}/], replaceStringByLength: true, replacement: '*' })
 
-    expect(redaction.redact('1234567890123456')).toBe('****************');
-  });
+    expect(redaction.redact('1234567890123456')).toBe('****************')
+  })
 
   it('should redact multiple types', () => {
     const redaction = new Redaction({
       types: ['string', 'number', 'boolean', 'bigint', 'object'],
       blacklistedKeys: ['password', 'age', 'isAdult', 'bigInt', 'symbol', 'undef', 'func'],
-    });
+    })
     const obj = {
       age: 20,
       isAdult: true,
@@ -68,17 +72,13 @@ describe('Redaction', () => {
       bigInt: BigInt(10),
       symbol: Symbol('symbol'),
       undef: undefined,
-      func: () => {
-        return 'secret';
-      },
-      asyncFunc: async () => {
-        return 'secret';
-      },
+      func: () => 'secret',
+      asyncFunc: async () => 'secret',
       obj: {
         password: 'PASSWORD',
         userid: 'USERID',
       },
-    };
+    }
 
     expect(redaction.redact(obj)).toEqual({
       age: '[REDACTED]',
@@ -93,17 +93,19 @@ describe('Redaction', () => {
         password: '[REDACTED]',
         userid: 'USERID',
       },
-    });
-  });
+    })
+  })
 
   it('should redact an object of strings with case insensitive and fuzzy matching', () => {
     const redaction = new Redaction({
       blacklistedKeys: [{
         key: 'pass',
         fuzzyKeyMatch: true,
-        caseSensitiveKeyMatch: false
-      }], fuzzyKeyMatch: false, caseSensitiveKeyMatch: true
-    });
+        caseSensitiveKeyMatch: false,
+      }],
+      fuzzyKeyMatch: false,
+      caseSensitiveKeyMatch: true,
+    })
     const obj = {
       user: 'USERID',
       PASSWORD: 'PASSWORD',
@@ -111,7 +113,7 @@ describe('Redaction', () => {
         user: 'USERID',
         PASSWORD: 'PASSWORD',
       },
-    };
+    }
 
     expect(redaction.redact(obj)).toEqual({
       user: 'USERID',
@@ -120,15 +122,15 @@ describe('Redaction', () => {
         user: 'USERID',
         PASSWORD: '[REDACTED]',
       },
-    });
-  });
+    })
+  })
 
   it('should redact an object of strings with fuzzy case sensitive matching', () => {
     const redaction = new Redaction({
-      blacklistedKeys: [{key: 'pass', fuzzyKeyMatch: true, caseSensitiveKeyMatch: true}],
+      blacklistedKeys: [{ key: 'pass', fuzzyKeyMatch: true, caseSensitiveKeyMatch: true }],
       fuzzyKeyMatch: false,
-      caseSensitiveKeyMatch: false
-    });
+      caseSensitiveKeyMatch: false,
+    })
     const obj = {
       user: 'USERID',
       password: 'PASSWORD',
@@ -136,7 +138,7 @@ describe('Redaction', () => {
         user: 'USERID',
         password: 'PASSWORD',
       },
-    };
+    }
 
     expect(redaction.redact(obj)).toEqual({
       user: 'USERID',
@@ -145,17 +147,19 @@ describe('Redaction', () => {
         user: 'USERID',
         password: '[REDACTED]',
       },
-    });
-  });
+    })
+  })
 
   it('should redact an object of strings with case sensitive non-fuzzy matching', () => {
     const redaction = new Redaction({
       blacklistedKeys: [{
         key: 'password',
         fuzzyKeyMatch: false,
-        caseSensitiveKeyMatch: true
-      }], fuzzyKeyMatch: true, caseSensitiveKeyMatch: false
-    });
+        caseSensitiveKeyMatch: true,
+      }],
+      fuzzyKeyMatch: true,
+      caseSensitiveKeyMatch: false,
+    })
     const obj = {
       user: 'USERID',
       password: 'PASSWORD',
@@ -163,7 +167,7 @@ describe('Redaction', () => {
         user: 'USERID',
         password: 'PASSWORD',
       },
-    };
+    }
 
     expect(redaction.redact(obj)).toEqual({
       user: 'USERID',
@@ -172,17 +176,19 @@ describe('Redaction', () => {
         user: 'USERID',
         password: '[REDACTED]',
       },
-    });
-  });
+    })
+  })
 
   it('should redact an object of strings with case insensitive non-fuzzy matching', () => {
     const redaction = new Redaction({
       blacklistedKeys: [{
         key: 'password',
         fuzzyKeyMatch: false,
-        caseSensitiveKeyMatch: false
-      }], fuzzyKeyMatch: true, caseSensitiveKeyMatch: true
-    });
+        caseSensitiveKeyMatch: false,
+      }],
+      fuzzyKeyMatch: true,
+      caseSensitiveKeyMatch: true,
+    })
     const obj = {
       user: 'USERID',
       PASSWORD: 'PASSWORD',
@@ -190,7 +196,7 @@ describe('Redaction', () => {
         user: 'USERID',
         PASSWORD: 'PASSWORD',
       },
-    };
+    }
 
     expect(redaction.redact(obj)).toEqual({
       user: 'USERID',
@@ -199,11 +205,11 @@ describe('Redaction', () => {
         user: 'USERID',
         PASSWORD: '[REDACTED]',
       },
-    });
-  });
+    })
+  })
 
   it('should not retain the structure of the object', () => {
-    const redaction = new Redaction({blacklistedKeys: ['password', 'secret']});
+    const redaction = new Redaction({ blacklistedKeys: ['password', 'secret'] })
     const obj = {
       user: 'USERID',
       password: 'PASSWORD',
@@ -217,17 +223,17 @@ describe('Redaction', () => {
       password: '[REDACTED]',
       secret: '[REDACTED]',
     })
-  });
+  })
 
   it('should retain the structure of the object', () => {
-    const redaction = new Redaction({blacklistedKeys: ['password', 'secret'], retainStructure: true});
+    const redaction = new Redaction({ blacklistedKeys: ['password', 'secret'], retainStructure: true })
     const obj = {
       user: 'USERID',
       password: 'PASSWORD',
       secret: {
         user: 'USERID',
         password: 'PASSWORD',
-      }
+      },
     }
     expect(redaction.redact(obj)).toEqual({
       user: 'USERID',
@@ -235,17 +241,42 @@ describe('Redaction', () => {
       secret: {
         user: '[REDACTED]',
         password: '[REDACTED]',
-      }
+      },
     })
-  });
+  })
 
   it('should not redact null', () => {
-    const redaction = new Redaction({types: ['object']});
+    const redaction = new Redaction({ types: ['object'] })
     const obj = {
       user: 'USERID',
       other: null,
-    };
+    }
 
-    expect(redaction.redact(obj)).toEqual(obj);
-  });
-});
+    expect(redaction.redact(obj)).toEqual(obj)
+  })
+
+  it('should not leak memory', async () => {
+    config.muteConsole = true
+
+    let redaction: Nullable<Redaction> = new Redaction({
+      blacklistedKeys,
+      retainStructure: true,
+      fuzzyKeyMatch: false,
+      caseSensitiveKeyMatch: true,
+      replaceStringByLength: true,
+      replacement: '*',
+    })
+
+    let heap: IHeapSnapshot = await takeNodeMinimalHeap()
+
+    redaction.redact(Array(10000).fill(dummyUser))
+
+    expect(heap.hasObjectWithClassName('Redaction')).toBe(true)
+
+    redaction = null
+
+    heap = await takeNodeMinimalHeap()
+
+    expect(heap.hasObjectWithClassName('Redaction')).toBe(false)
+  })
+})

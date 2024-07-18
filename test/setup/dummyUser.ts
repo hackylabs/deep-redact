@@ -70,17 +70,17 @@ export const dummyUser = {
   userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 Safari/537.36',
   role: 'admin',
   someMap: new Map().set('someMap', 'bar'),
-  someWeakMap: new WeakMap().set({foo: 'bar'}, 'someWeakMap'),
+  someWeakMap: new WeakMap().set({ foo: 'bar' }, 'someWeakMap'),
   someSet: new Set().add('someSet'),
   someSymbol: Symbol('someSymbol'),
   someFunction: () => {
-    throw new Error('someFunction oops');
+    throw new Error('someFunction oops')
   },
   somePromise: async () => {
-    throw new Error('somePromise oops');
+    throw new Error('somePromise oops')
   },
   someClass: class {
     constructor(readonly foo = 'bar') {
     }
   },
-};
+}

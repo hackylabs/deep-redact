@@ -1,5 +1,5 @@
 import benchmarkJson from '../benchmark.json'
-import {renderTable, type TableData} from './_renderTable'
+import { renderTable, type TableData } from './_renderTable'
 
 interface BenchmarkInput {
   name: string,
@@ -15,7 +15,7 @@ const tableData: TableData = benchmarkData.map(({
   name,
   hz,
   sampleCount,
-  moe
+  moe,
 }) => ({
   scenario: name,
   'ops / sec': Number(hz.toFixed(2)),
