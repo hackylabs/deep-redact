@@ -4,10 +4,27 @@
     "airbnb-typescript/base"
   ],
   "parserOptions": {
-    "project": "./tsconfig.json"
+    "project": "./tsconfig.eslint.json"
   },
   "rules": {
     "import/prefer-default-export": "off",
-    "import/no-default-export": "error"
-  }
+    "import/no-extraneous-dependencies": "off",
+    "import/no-default-export": "error",
+    "@typescript-eslint/semi": ["error", "never"],
+    "@typescript-eslint/quotes": ["error", "single"],
+    "@typescript-eslint/indent": ["error", 2],
+    "semi": ["error", "never"],
+    "quotes": ["error", "single"],
+    "indent": ["error", 2],
+    "max-len": "off",
+    "arrow-body-style": "off"
+  },
+  "overrides": [
+    {
+      "files": ["vitest.config.ts"],
+      "rules": {
+        "import/no-default-export": "off"
+      }
+    }
+  ]
 }

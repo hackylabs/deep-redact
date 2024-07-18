@@ -1,4 +1,4 @@
-import {renderTable, type TableData} from './_renderTable'
+import { renderTable, type TableData } from './_renderTable'
 
 const tableData: TableData = [
   {
@@ -59,12 +59,12 @@ const tableData: TableData = [
   },
   {
     key: 'types',
-    description: "JS types (values of `typeof` keyword). Only values with a typeof equal to `string`, `number`, `bigint`, `boolean` or `object` may be redacted. The other types are only listed as options to keep TypeScript happy, so you never need to list them.",
+    description: 'JS types (values of `typeof` keyword). Only values with a typeof equal to `string`, `number`, `bigint`, `boolean` or `object` may be redacted. The other types are only listed as options to keep TypeScript happy, so you never need to list them.',
     type: 'array',
-    options: "Array<'string'￨'number'￨'bigint'￨'boolean'￨'symbol'￨'undefined'￨'object'￨'function'>",
-    default: "['string']",
+    options: 'Array<\'string\'￨\'number\'￨\'bigint\'￨\'boolean\'￨\'symbol\'￨\'undefined\'￨\'object\'￨\'function\'>',
+    default: '[\'string\']',
     required: 'N',
   },
-];
+]
 
 export const mainOptions = renderTable(tableData)

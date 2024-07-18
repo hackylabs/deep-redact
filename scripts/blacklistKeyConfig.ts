@@ -1,4 +1,4 @@
-import {renderTable, type TableData} from './_renderTable'
+import { renderTable, type TableData } from './_renderTable'
 
 const tableData: TableData = [
   {
