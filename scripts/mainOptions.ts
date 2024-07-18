@@ -34,6 +34,14 @@ const tableData: TableData = [
     required: 'N',
   },
   {
+    key: 'remove',
+    description: 'Determines whether or not to remove the key from the object when it is redacted.',
+    type: 'boolean',
+    options: '',
+    default: 'false',
+    required: 'N',
+  },
+  {
     key: 'retainStructure',
     description: 'Determines whether or not keep all nested values of a key that is going to be redacted.',
     type: 'boolean',
