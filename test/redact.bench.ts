@@ -96,6 +96,11 @@ describe('Redaction benchmark', () => {
     redaction.redact(dummyUser)
   })
 
+  bench('remove item, single object', () => {
+    const redaction = new Redaction({ blacklistedKeys, remove: true })
+    redaction.redact(dummyUser)
+  })
+
   bench('default config, 1000 objects', () => {
     const redaction = new Redaction({ blacklistedKeys })
     redaction.redact(Array(1000).fill(dummyUser))

@@ -13,14 +13,22 @@ export const updateBenchChart = () => {
     .files[0]
     .groups[0]
     .benchmarks
-    .filter(({ name }) => ['JSON.stringify, single object', 'default config, single object', 'fast redact, single object'].includes(name))
+    .filter(({ name }) => {
+      return [
+        'JSON.stringify, single object',
+        'remove item, single object',
+        'default config, single object',
+        'fast redact, single object',
+      ].includes(name)
+    })
   benchmarkData.sort((a, b) => b.hz - a.hz)
 
   const comparison = benchmarkData.map(({ name, hz }) => ({
     rate: hz / benchmarkData[0].hz,
     name: name
       .replace('JSON.stringify, single object', `JSON.stringify\n(${Intl.NumberFormat().format(hz)})`)
-      .replace('default config, single object', `Deep Redact\n(${Intl.NumberFormat().format(hz)})`)
+      .replace('remove item, single object', `Deep Redact\n(remove item)\n(${Intl.NumberFormat().format(hz)})`)
+      .replace('default config, single object', `Deep Redact\n(default config)\n(${Intl.NumberFormat().format(hz)})`)
       .replace('fast redact, single object', `Fast Redact\n(${Intl.NumberFormat().format(hz)})`),
   }))
 
