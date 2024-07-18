@@ -43,6 +43,14 @@ const fastRedactBlacklistedKeys = [
 const fastRedactArrayBlacklistedKeys = fastRedactBlacklistedKeys.map((key) => `*.${key}`)
 
 describe('Redaction benchmark', () => {
+  bench('JSON.stringify, single object', () => {
+    JSON.stringify(dummyUser)
+  })
+
+  bench('JSON.stringify, 1000 objects', () => {
+    JSON.stringify(Array(1000).fill(dummyUser))
+  })
+
   bench('fast redact, single object', () => {
     const redact = fastRedact({ paths: fastRedactBlacklistedKeys })
     redact(dummyUser)

@@ -63,21 +63,27 @@ redaction.redact(obj) // { password: '**********************************', cardN
 | retainStructure | boolean | Main options `retainStructure` | N |
 
 ### Benchmark
+Comparisons are made against JSON.stringify and fast-redact as well as different configurations of deep-redact, using
+[this test object](./test/setup/dummyUser.ts). The benchmark is run on a 2021 iMac with an M1 chip with 16GB memory
+running Sonoma 14.5.
 
-Comparisons are made against fast-redact as well as different configurations of deep-redact. The benchmark is run on a
-2021 iMac with an M1 chip with 16GB memory running Sonoma 14.5.
+JSON.stringify is included as a benchmark because it is the fastest way to deeply iterate over an object although it
+doesn't redact any sensitive information. Fast-redact is included as a benchmark because it's the next fastest redaction
+library available. Neither JSON.stringify nor fast-redact offer the same level of configurability as deep-redact.
 
 ![Benchmark](./benchmark.png)
 
 | scenario | ops / sec | margin of error | sample count |
 | --- | --- | --- | --- |
-| default config, single object | 116212.26 | 0.00004 | 58107 |
-| fuzzy matching, single object | 107920.15 | 0.00005 | 53961 |
-| case insensitive matching, single object | 107873.24 | 0.00005 | 53937 |
-| fuzzy and case insensitive matching, single object | 107616 | 0.00005 | 53808 |
-| replace string by length, single object | 97006.48 | 0.00012 | 48504 |
-| retain structure, single object | 87680.67 | 0.00005 | 43841 |
-| config per key, single object | 73718 | 0.00007 | 36859 |
-| fast redact, single object | 18751.42 | 0.00042 | 9376 |
-| default config, 1000 objects | 107.78 | 0.04764 | 54 |
-| fast redact, 1000 objects | 73.25 | 0.17148 | 37 |
+| JSON.stringify, single object | 288939.61 | 0.00001 | 144470 |
+| default config, single object | 108952.16 | 0.00004 | 54477 |
+| fuzzy and case insensitive matching, single object | 102564.2 | 0.00004 | 51283 |
+| fuzzy matching, single object | 102126.93 | 0.00005 | 51064 |
+| case insensitive matching, single object | 102034.7 | 0.00005 | 51018 |
+| replace string by length, single object | 89743.27 | 0.00012 | 44872 |
+| retain structure, single object | 81309.96 | 0.00006 | 40655 |
+| config per key, single object | 63947.79 | 0.00007 | 31974 |
+| fast redact, single object | 17404.21 | 0.0002 | 8703 |
+| JSON.stringify, 1000 objects | 381.99 | 0.00832 | 192 |
+| default config, 1000 objects | 102.75 | 0.04431 | 52 |
+| fast redact, 1000 objects | 67.41 | 0.60982 | 34 |

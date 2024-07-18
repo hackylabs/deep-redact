@@ -49,9 +49,13 @@ redaction.redact(obj) // { password: '**********************************', cardN
 <--BLACKLIST_KEY_CONFIG-->
 
 ### Benchmark
+Comparisons are made against JSON.stringify and fast-redact as well as different configurations of deep-redact, using
+[this test object](./test/setup/dummyUser.ts). The benchmark is run on a 2021 iMac with an M1 chip with 16GB memory
+running Sonoma 14.5.
 
-Comparisons are made against fast-redact as well as different configurations of deep-redact. The benchmark is run on a
-2021 iMac with an M1 chip with 16GB memory running Sonoma 14.5.
+JSON.stringify is included as a benchmark because it is the fastest way to deeply iterate over an object although it
+doesn't redact any sensitive information. Fast-redact is included as a benchmark because it's the next fastest redaction
+library available. Neither JSON.stringify nor fast-redact offer the same level of configurability as deep-redact.
 
 ![Benchmark](./benchmark.png)
 
