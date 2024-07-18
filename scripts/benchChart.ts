@@ -13,14 +13,15 @@ export const updateBenchChart = () => {
     .files[0]
     .groups[0]
     .benchmarks
-    .filter(({ name }) => ['default config, single object', 'fast redact, single object'].includes(name))
+    .filter(({ name }) => ['JSON.stringify, single object', 'default config, single object', 'fast redact, single object'].includes(name))
   benchmarkData.sort((a, b) => b.hz - a.hz)
 
   const comparison = benchmarkData.map(({ name, hz }) => ({
     rate: hz / benchmarkData[0].hz,
     name: name
-      .replace('default config, single object', `Deep Redact\n\n(${Intl.NumberFormat().format(hz)})`)
-      .replace('fast redact, single object', `Fast Redact\n\n(${Intl.NumberFormat().format(hz)})`),
+      .replace('JSON.stringify, single object', `JSON.stringify\n(${Intl.NumberFormat().format(hz)})`)
+      .replace('default config, single object', `Deep Redact\n(${Intl.NumberFormat().format(hz)})`)
+      .replace('fast redact, single object', `Fast Redact\n(${Intl.NumberFormat().format(hz)})`),
   }))
 
   new ChartJSImage()
@@ -29,7 +30,7 @@ export const updateBenchChart = () => {
     .chd(`t:${comparison.map(({ rate }) => rate).join(',')}`)
     .chl(comparison.map(({ name }) => name).join('|'))
     .chtt('ops / sec')
-    .chs('800x600')
+    .chs('800x999')
     .toDataURI()
     .then(async (dataURI) => {
       const buffer = Buffer.from(dataURI.split(',')[1], 'base64')
