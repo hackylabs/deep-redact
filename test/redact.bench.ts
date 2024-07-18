@@ -43,52 +43,52 @@ const fastRedactBlacklistedKeys = [
 const fastRedactArrayBlacklistedKeys = fastRedactBlacklistedKeys.map((key) => `*.${key}`)
 
 describe('Redaction benchmark', () => {
-  bench('fast redact, single user', () => {
+  bench('fast redact, single object', () => {
     const redact = fastRedact({ paths: fastRedactBlacklistedKeys })
     redact(dummyUser)
   })
 
-  bench('fast redact, 1000 users', () => {
+  bench('fast redact, 1000 objects', () => {
     const redact = fastRedact({ paths: fastRedactArrayBlacklistedKeys })
     redact(Array(1000).fill(dummyUser))
   })
 
-  bench('default config, single user', () => {
+  bench('default config, single object', () => {
     const redaction = new Redaction({ blacklistedKeys })
     redaction.redact(dummyUser)
   })
 
-  bench('config per key, single user', () => {
+  bench('config per key, single object', () => {
     const redaction = new Redaction({ blacklistedKeys: complexBlacklistedKeys })
     redaction.redact(dummyUser)
   })
 
-  bench('fuzzy matching, single user', () => {
+  bench('fuzzy matching, single object', () => {
     const redaction = new Redaction({ blacklistedKeys, fuzzyKeyMatch: true })
     redaction.redact(dummyUser)
   })
 
-  bench('case insensitive matching, single user', () => {
+  bench('case insensitive matching, single object', () => {
     const redaction = new Redaction({ blacklistedKeys, caseSensitiveKeyMatch: false })
     redaction.redact(dummyUser)
   })
 
-  bench('fuzzy and case insensitive matching, single user', () => {
+  bench('fuzzy and case insensitive matching, single object', () => {
     const redaction = new Redaction({ blacklistedKeys, fuzzyKeyMatch: true, caseSensitiveKeyMatch: false })
     redaction.redact(dummyUser)
   })
 
-  bench('replace string by length, single user', () => {
+  bench('replace string by length, single object', () => {
     const redaction = new Redaction({ blacklistedKeys, replaceStringByLength: true, replacement: '*' })
     redaction.redact(dummyUser)
   })
 
-  bench('retain structure, single user', () => {
+  bench('retain structure, single object', () => {
     const redaction = new Redaction({ blacklistedKeys, retainStructure: true })
     redaction.redact(dummyUser)
   })
 
-  bench('default config, 1000 users', () => {
+  bench('default config, 1000 objects', () => {
     const redaction = new Redaction({ blacklistedKeys })
     redaction.redact(Array(1000).fill(dummyUser))
   })

@@ -5,7 +5,9 @@ import { join } from 'node:path'
 import { mainOptions } from './mainOptions'
 import { blacklistKeyConfig } from './blacklistKeyConfig'
 import { benchmarks } from './benchTable'
+import { updateBenchChart } from './benchChart'
 
+updateBenchChart()
 const readme = readFileSync(join(__dirname, 'templates', 'README.txt')).toString()
 
 const output = readme
