@@ -67,15 +67,17 @@ redaction.redact(obj) // { password: '**********************************', cardN
 Comparisons are made against fast-redact as well as different configurations of deep-redact. The benchmark is run on a
 2021 iMac with an M1 chip with 16GB memory running Sonoma 14.5.
 
+![Benchmark](./benchmark.png)
+
 | scenario | ops / sec | margin of error | sample count |
 | --- | --- | --- | --- |
-| default config, single user | 109266.69 | 0.00004 | 54634 |
-| fuzzy matching, single user | 99994.92 | 0.00005 | 49998 |
-| case insensitive matching, single user | 99233.13 | 0.00005 | 49617 |
-| fuzzy and case insensitive matching, single user | 98810.66 | 0.00007 | 49406 |
-| replace string by length, single user | 93204.99 | 0.00005 | 46603 |
-| retain structure, single user | 76531.47 | 0.0002 | 38266 |
-| config per key, single user | 74752.86 | 0.00006 | 37377 |
-| fast redact, single user | 18618.31 | 0.00046 | 9311 |
-| default config, 1000 users | 97.89 | 0.08195 | 49 |
-| fast redact, 1000 users | 75.99 | 0.17738 | 38 |
+| default config, single object | 116212.26 | 0.00004 | 58107 |
+| fuzzy matching, single object | 107920.15 | 0.00005 | 53961 |
+| case insensitive matching, single object | 107873.24 | 0.00005 | 53937 |
+| fuzzy and case insensitive matching, single object | 107616 | 0.00005 | 53808 |
+| replace string by length, single object | 97006.48 | 0.00012 | 48504 |
+| retain structure, single object | 87680.67 | 0.00005 | 43841 |
+| config per key, single object | 73718 | 0.00007 | 36859 |
+| fast redact, single object | 18751.42 | 0.00042 | 9376 |
+| default config, 1000 objects | 107.78 | 0.04764 | 54 |
+| fast redact, 1000 objects | 73.25 | 0.17148 | 37 |

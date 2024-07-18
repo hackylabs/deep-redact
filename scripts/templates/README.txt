@@ -53,4 +53,6 @@ redaction.redact(obj) // { password: '**********************************', cardN
 Comparisons are made against fast-redact as well as different configurations of deep-redact. The benchmark is run on a
 2021 iMac with an M1 chip with 16GB memory running Sonoma 14.5.
 
+![Benchmark](./benchmark.png)
+
 <--BENCH-->
