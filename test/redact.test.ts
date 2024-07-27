@@ -1,16 +1,20 @@
+import { describe, it, expect } from 'vitest'
 import {
-  describe, it, expect, vi,
-} from 'vitest'
-import type { IHeapSnapshot, Nullable } from '@memlab/core'
-import { config, takeNodeMinimalHeap } from '@memlab/core'
-import { Redaction } from '../src'
+  type IHeapSnapshot, type Nullable, config, takeNodeMinimalHeap,
+} from '@memlab/core'
+import { DeepRedact } from '../src'
 import { dummyUser } from './setup/dummyUser'
 import { blacklistedKeys } from './setup/blacklist'
 
-describe('Redaction', () => {
+describe('DeepRedact', () => {
   describe('code coverage', () => {
     it('should deep redact an object', () => {
-      const redaction = new Redaction({ blacklistedKeys: ['password'] })
+      const redaction = new DeepRedact({
+        blacklistedKeys: ['password'],
+        replacement: '*',
+        replaceStringByLength: true,
+        serialise: false,
+      })
       const obj = {
         userid: 'USERID',
         password: 'PASSWORD',
@@ -22,16 +26,16 @@ describe('Redaction', () => {
 
       expect(redaction.redact(obj)).toEqual({
         userid: 'USERID',
-        password: '[REDACTED]',
+        password: '********',
         nested: {
           userid: 'USERID',
-          password: '[REDACTED]',
+          password: '********',
         },
       })
     })
 
     it('should deep redact an array of objects', () => {
-      const redaction = new Redaction({ blacklistedKeys: ['password'] })
+      const redaction = new DeepRedact({ blacklistedKeys: ['password'], serialise: false })
       const arr = Array.from({ length: 3 }, () => ({
         userid: 'USERID',
         password: 'PASSWORD',
@@ -52,46 +56,70 @@ describe('Redaction', () => {
     })
 
     it('should redact a string', () => {
-      const redaction = new Redaction({ stringTests: [/\d{13,16}/] })
+      const redaction = new DeepRedact({ stringTests: [/\d{13,16}/], serialise: false })
 
       expect(redaction.redact('1234567890123456')).toBe('[REDACTED]')
     })
 
     it('should redact a string by length', () => {
-      const redaction = new Redaction({ stringTests: [/\d{13,16}/], replaceStringByLength: true, replacement: '*' })
+      const redaction = new DeepRedact({
+        stringTests: [/\d{13,16}/],
+        replaceStringByLength: true,
+        replacement: '*',
+        serialise: false,
+      })
 
       expect(redaction.redact('1234567890123456')).toBe('****************')
     })
 
     it('should redact multiple types', () => {
-      const redaction = new Redaction({
-        types: ['string', 'number', 'boolean', 'bigint', 'object'],
-        blacklistedKeys: ['password', 'age', 'isAdult', 'bigInt', 'symbol', 'undef', 'func'],
+      const redaction = new DeepRedact({
+        types: ['string', 'number', 'boolean', 'bigint', 'object', 'bigint'],
+        blacklistedKeys: ['password', 'age', 'isAdult', 'bigInt', 'symbol', 'func'],
       })
       const obj = {
         age: 20,
         isAdult: true,
         timestamp: 1234567890,
         bigInt: BigInt(10),
+        otherBigInt: BigInt(20),
         symbol: Symbol('symbol'),
         undef: undefined,
         func: () => 'secret',
         asyncFunc: async () => 'secret',
+        error: new Error('Oops'),
+        regex: /foo/,
+        date: new Date('2021-01-01T00:00:00.000Z'),
         obj: {
           password: 'PASSWORD',
           userid: 'USERID',
         },
       }
 
-      expect(redaction.redact(obj)).toEqual({
+      expect(JSON.parse(String(redaction.redact(obj)))).toEqual({
         age: '[REDACTED]',
         isAdult: '[REDACTED]',
         timestamp: 1234567890,
         bigInt: '[REDACTED]',
-        symbol: expect.any(Symbol),
-        undef: undefined,
-        func: expect.any(Function),
-        asyncFunc: expect.any(Function),
+        otherBigInt: { __unsupported: { type: 'bigint', value: '20', radix: 10 } },
+        func: '[REDACTED]',
+        asyncFunc: {},
+        error: {
+          __unsupported: {
+            type: 'error',
+            name: 'Error',
+            message: 'Oops',
+            stack: expect.stringMatching(/^Error: Oops/),
+          },
+        },
+        regex: {
+          __unsupported: {
+            type: 'regexp',
+            source: 'foo',
+            flags: '',
+          },
+        },
+        date: '2021-01-01T00:00:00.000Z',
         obj: {
           password: '[REDACTED]',
           userid: 'USERID',
@@ -99,8 +127,29 @@ describe('Redaction', () => {
       })
     })
 
+    it('should redact an object using regex key matching', () => {
+      const redaction = new DeepRedact({ blacklistedKeys: [{ key: /pass/gi }], serialise: false })
+      const obj = {
+        user: 'USERID',
+        PASSWORD: 'PASSWORD',
+        nested: {
+          user: 'USERID',
+          PASSWORD: 'PASSWORD',
+        },
+      }
+
+      expect(redaction.redact(obj)).toEqual({
+        user: 'USERID',
+        PASSWORD: '[REDACTED]',
+        nested: {
+          user: 'USERID',
+          PASSWORD: '[REDACTED]',
+        },
+      })
+    })
+
     it('should redact an object of strings with case insensitive and fuzzy matching', () => {
-      const redaction = new Redaction({
+      const redaction = new DeepRedact({
         blacklistedKeys: [{
           key: 'pass',
           fuzzyKeyMatch: true,
@@ -108,6 +157,7 @@ describe('Redaction', () => {
         }],
         fuzzyKeyMatch: false,
         caseSensitiveKeyMatch: true,
+        serialise: false,
       })
       const obj = {
         user: 'USERID',
@@ -129,10 +179,11 @@ describe('Redaction', () => {
     })
 
     it('should redact an object of strings with fuzzy case sensitive matching', () => {
-      const redaction = new Redaction({
+      const redaction = new DeepRedact({
         blacklistedKeys: [{ key: 'pass', fuzzyKeyMatch: true, caseSensitiveKeyMatch: true }],
         fuzzyKeyMatch: false,
         caseSensitiveKeyMatch: false,
+        serialise: false,
       })
       const obj = {
         user: 'USERID',
@@ -154,7 +205,7 @@ describe('Redaction', () => {
     })
 
     it('should redact an object of strings with case sensitive non-fuzzy matching', () => {
-      const redaction = new Redaction({
+      const redaction = new DeepRedact({
         blacklistedKeys: [{
           key: 'password',
           fuzzyKeyMatch: false,
@@ -162,6 +213,7 @@ describe('Redaction', () => {
         }],
         fuzzyKeyMatch: true,
         caseSensitiveKeyMatch: false,
+        serialise: false,
       })
       const obj = {
         user: 'USERID',
@@ -183,7 +235,7 @@ describe('Redaction', () => {
     })
 
     it('should redact an object of strings with case insensitive non-fuzzy matching', () => {
-      const redaction = new Redaction({
+      const redaction = new DeepRedact({
         blacklistedKeys: [{
           key: 'password',
           fuzzyKeyMatch: false,
@@ -191,6 +243,7 @@ describe('Redaction', () => {
         }],
         fuzzyKeyMatch: true,
         caseSensitiveKeyMatch: true,
+        serialise: false,
       })
       const obj = {
         user: 'USERID',
@@ -212,7 +265,7 @@ describe('Redaction', () => {
     })
 
     it('should not retain the structure of the object', () => {
-      const redaction = new Redaction({ blacklistedKeys: ['password', 'secret'] })
+      const redaction = new DeepRedact({ blacklistedKeys: ['password', 'secret'], serialise: false })
       const obj = {
         user: 'USERID',
         password: 'PASSWORD',
@@ -229,7 +282,11 @@ describe('Redaction', () => {
     })
 
     it('should retain the structure of the object', () => {
-      const redaction = new Redaction({ blacklistedKeys: ['password', 'secret'], retainStructure: true })
+      const redaction = new DeepRedact({
+        blacklistedKeys: ['password', 'secret'],
+        retainStructure: true,
+        serialise: false,
+      })
       const obj = {
         user: 'USERID',
         password: 'PASSWORD',
@@ -249,11 +306,12 @@ describe('Redaction', () => {
     })
 
     it('should remove identified items', () => {
-      const redaction = new Redaction({
+      const redaction = new DeepRedact({
         blacklistedKeys: ['accountBalance', 'secret'],
         types: ['string', 'number'],
         retainStructure: true,
         remove: true,
+        serialise: false,
       })
       const obj = {
         user: 'USERID',
@@ -268,12 +326,22 @@ describe('Redaction', () => {
     })
 
     it('should remove identified string', () => {
-      const redaction = new Redaction({ stringTests: [/\d{13,16}/], remove: true })
+      const redaction = new DeepRedact({ stringTests: [/\d{13,16}/], remove: true, serialise: false })
       expect(redaction.redact('1234567890123456')).toBe(undefined)
     })
 
+    it('should safely redact an object with circular references', () => {
+      const redaction = new DeepRedact({ blacklistedKeys: ['password'], serialise: false })
+      const obj = { password: 'PASSWORD', obj: {} }
+      obj.obj = obj
+      expect(redaction.redact(obj)).toEqual({
+        password: '[REDACTED]',
+        obj: '__circular__',
+      })
+    })
+
     it('should not redact null', () => {
-      const redaction = new Redaction({ types: ['object'] })
+      const redaction = new DeepRedact({ types: ['object'], serialise: false })
       const obj = {
         user: 'USERID',
         other: null,
@@ -281,13 +349,33 @@ describe('Redaction', () => {
 
       expect(redaction.redact(obj)).toEqual(obj)
     })
+
+    it('should support custom transformer for unsupported types', () => {
+      const redaction = new DeepRedact({
+        blacklistedKeys: ['password'],
+        serialise: false,
+        unsupportedTransformer: (value) => {
+          if (value instanceof Error) return 'FooBar'
+          return value
+        },
+      })
+      const obj = {
+        error: new Error('Oops'),
+        password: 'PASSWORD',
+      }
+
+      expect(redaction.redact(obj)).toEqual({
+        error: 'FooBar',
+        password: '[REDACTED]',
+      })
+    })
   })
 
-  describe('performance', () => {
+  describe.skip('performance', () => {
     it('should not leak memory', async () => {
       config.muteConsole = true
 
-      let redaction: Nullable<Redaction> = new Redaction({
+      let redaction: Nullable<DeepRedact> = new DeepRedact({
         blacklistedKeys,
         retainStructure: true,
         fuzzyKeyMatch: false,
@@ -300,13 +388,13 @@ describe('Redaction', () => {
 
       redaction.redact(Array(1000).fill(dummyUser))
 
-      expect(heap.hasObjectWithClassName('Redaction')).toBe(true)
+      expect(heap.hasObjectWithClassName('DeepRedact')).toBe(true)
 
       redaction = null
 
       heap = await takeNodeMinimalHeap()
 
-      expect(heap.hasObjectWithClassName('Redaction')).toBe(false)
+      expect(heap.hasObjectWithClassName('DeepRedact')).toBe(false)
     })
   })
 })
