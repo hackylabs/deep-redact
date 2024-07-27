@@ -16,27 +16,26 @@ export const updateBenchChart = () => {
     .filter(({ name }) => {
       return [
         'JSON.stringify, single object',
-        'remove item, single object',
-        'default config, single object',
+        'DeepRedact, default config, single object',
         'fast redact, single object',
       ].includes(name)
     })
-  benchmarkData.sort((a, b) => b.hz - a.hz)
+  benchmarkData.sort((a, b) => a.hz - b.hz)
 
   const comparison = benchmarkData.map(({ name, hz }) => ({
     rate: hz / benchmarkData[0].hz,
     name: name
-      .replace('JSON.stringify, single object', `JSON.stringify\n(${Intl.NumberFormat().format(hz)})`)
-      .replace('remove item, single object', `Deep Redact\n(remove item)\n(${Intl.NumberFormat().format(hz)})`)
-      .replace('default config, single object', `Deep Redact\n(default config)\n(${Intl.NumberFormat().format(hz)})`)
+      .replace('JSON.stringify, single object', `JSON.stringify\n(no redaction or replacer)\n(${Intl.NumberFormat().format(hz)})`)
+      .replace('DeepRedact, default config, single object', `Deep Redact\n(default config)\n(${Intl.NumberFormat().format(hz)})`)
       .replace('fast redact, single object', `Fast Redact\n(${Intl.NumberFormat().format(hz)})`),
   }))
 
   new ChartJSImage()
     .cht('bvs')
-    .chco('43B3AE45|c0c0c0')
+    .chco('F0F0F0|43B3AE45|F0F0F0')
     .chd(`t:${comparison.map(({ rate }) => rate).join(',')}`)
     .chl(comparison.map(({ name }) => name).join('|'))
+    .chlps('align,top|anchor,start|offset,10')
     .chtt('ops / sec')
     .chs('800x999')
     .toDataURI()
