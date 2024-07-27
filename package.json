@@ -60,7 +60,7 @@
     "eslint-plugin-promise": "7.0.0",
     "fast-redact": "3.5.0",
     "image-charts": "6.1.19",
-    "prettier": "2.5.1",
+    "prettier": "3.3.3",
     "typescript": "5.5.4",
     "vitest": "2.0.4"
   }
