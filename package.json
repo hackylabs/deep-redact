@@ -29,6 +29,9 @@
       "types": "./dist/esm/index.d.ts"
     }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "lint": "eslint",
     "build": "npm run lint && npm run test && npm run bench && npm run build:esm && npm run build:cjs && npm run update-readme && npm run update-license",
