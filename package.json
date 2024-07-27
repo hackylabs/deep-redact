@@ -61,7 +61,7 @@
     "fast-redact": "3.5.0",
     "image-charts": "6.1.19",
     "prettier": "2.5.1",
-    "typescript": "5.5.2",
+    "typescript": "5.5.4",
     "vitest": "1.6.0"
   }
 }
