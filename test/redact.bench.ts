@@ -1,6 +1,6 @@
 import { bench, describe } from 'vitest'
 import fastRedact from 'fast-redact'
-import { Redaction } from '../src'
+import { DeepRedact } from '../src'
 import { dummyUser } from './setup/dummyUser'
 import { Blacklist, blacklistedKeys } from './setup/blacklist'
 
@@ -43,66 +43,92 @@ const fastRedactBlacklistedKeys = [
 const fastRedactArrayBlacklistedKeys = fastRedactBlacklistedKeys.map((key) => `*.${key}`)
 
 describe('Redaction benchmark', () => {
-  bench('JSON.stringify, single object', () => {
-    JSON.stringify(dummyUser)
+  bench('JSON.stringify, single object', async () => {
+    await new Promise((resolve) => {
+      resolve(JSON.stringify(dummyUser))
+    })
   })
 
-  bench('JSON.stringify, 1000 objects', () => {
-    JSON.stringify(Array(1000).fill(dummyUser))
+  bench('JSON.stringify, 1000 objects', async () => {
+    await new Promise((resolve) => {
+      resolve(JSON.stringify(Array(1000).fill(dummyUser)))
+    })
   })
 
-  bench('fast redact, single object', () => {
-    const redact = fastRedact({ paths: fastRedactBlacklistedKeys })
-    redact(dummyUser)
+  bench('fast redact, single object', async () => {
+    await new Promise((resolve) => {
+      const redact = fastRedact({ paths: fastRedactBlacklistedKeys })
+      resolve(redact(dummyUser))
+    })
   })
 
-  bench('fast redact, 1000 objects', () => {
-    const redact = fastRedact({ paths: fastRedactArrayBlacklistedKeys })
-    redact(Array(1000).fill(dummyUser))
+  bench('fast redact, 1000 objects', async () => {
+    await new Promise((resolve) => {
+      const redact = fastRedact({ paths: fastRedactArrayBlacklistedKeys })
+      resolve(redact(Array(1000).fill(dummyUser)))
+    })
   })
 
-  bench('default config, single object', () => {
-    const redaction = new Redaction({ blacklistedKeys })
-    redaction.redact(dummyUser)
+  bench('DeepRedact, default config, single object', async () => {
+    await new Promise((resolve) => {
+      const redaction = new DeepRedact({ blacklistedKeys })
+      resolve(redaction.redact(dummyUser))
+    })
   })
 
-  bench('config per key, single object', () => {
-    const redaction = new Redaction({ blacklistedKeys: complexBlacklistedKeys })
-    redaction.redact(dummyUser)
+  bench('DeepRedact, config per key, single object', async () => {
+    await new Promise((resolve) => {
+      const redaction = new DeepRedact({ blacklistedKeys: complexBlacklistedKeys })
+      resolve(redaction.redact(dummyUser))
+    })
   })
 
-  bench('fuzzy matching, single object', () => {
-    const redaction = new Redaction({ blacklistedKeys, fuzzyKeyMatch: true })
-    redaction.redact(dummyUser)
+  bench('DeepRedact, fuzzy matching, single object', async () => {
+    await new Promise((resolve) => {
+      const redaction = new DeepRedact({ blacklistedKeys, fuzzyKeyMatch: true })
+      resolve(redaction.redact(dummyUser))
+    })
   })
 
-  bench('case insensitive matching, single object', () => {
-    const redaction = new Redaction({ blacklistedKeys, caseSensitiveKeyMatch: false })
-    redaction.redact(dummyUser)
+  bench('DeepRedact, case insensitive matching, single object', async () => {
+    await new Promise((resolve) => {
+      const redaction = new DeepRedact({ blacklistedKeys, caseSensitiveKeyMatch: false })
+      resolve(redaction.redact(dummyUser))
+    })
   })
 
-  bench('fuzzy and case insensitive matching, single object', () => {
-    const redaction = new Redaction({ blacklistedKeys, fuzzyKeyMatch: true, caseSensitiveKeyMatch: false })
-    redaction.redact(dummyUser)
+  bench('DeepRedact, fuzzy and case insensitive matching, single object', async () => {
+    await new Promise((resolve) => {
+      const redaction = new DeepRedact({ blacklistedKeys, fuzzyKeyMatch: true, caseSensitiveKeyMatch: false })
+      resolve(redaction.redact(dummyUser))
+    })
   })
 
-  bench('replace string by length, single object', () => {
-    const redaction = new Redaction({ blacklistedKeys, replaceStringByLength: true, replacement: '*' })
-    redaction.redact(dummyUser)
+  bench('DeepRedact, replace string by length, single object', async () => {
+    await new Promise((resolve) => {
+      const redaction = new DeepRedact({ blacklistedKeys, replaceStringByLength: true, replacement: '*' })
+      resolve(redaction.redact(dummyUser))
+    })
   })
 
-  bench('retain structure, single object', () => {
-    const redaction = new Redaction({ blacklistedKeys, retainStructure: true })
-    redaction.redact(dummyUser)
+  bench('DeepRedact, retain structure, single object', async () => {
+    await new Promise((resolve) => {
+      const redaction = new DeepRedact({ blacklistedKeys, retainStructure: true })
+      resolve(redaction.redact(dummyUser))
+    })
   })
 
-  bench('remove item, single object', () => {
-    const redaction = new Redaction({ blacklistedKeys, remove: true })
-    redaction.redact(dummyUser)
+  bench('DeepRedact, remove item, single object', async () => {
+    await new Promise((resolve) => {
+      const redaction = new DeepRedact({ blacklistedKeys, remove: true })
+      resolve(redaction.redact(dummyUser))
+    })
   })
 
-  bench('default config, 1000 objects', () => {
-    const redaction = new Redaction({ blacklistedKeys })
-    redaction.redact(Array(1000).fill(dummyUser))
+  bench('DeepRedact, default config, 1000 objects', async () => {
+    await new Promise((resolve) => {
+      const redaction = new DeepRedact({ blacklistedKeys })
+      resolve(redaction.redact(Array(1000).fill(dummyUser)))
+    })
   })
 })
