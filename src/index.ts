@@ -24,7 +24,7 @@ export interface DeepRedactConfig {
 
 const normaliseString = (key: string): string => key.toLowerCase().replace(/\W/g, '')
 
-export class DeepRedact {
+class DeepRedact {
   private circularReference: WeakSet<object> | null = new WeakSet()
 
   private readonly config: Required<DeepRedactConfig> = {
@@ -162,3 +162,5 @@ export class DeepRedact {
     return this.config.serialise ? JSON.stringify(redacted) : redacted
   }
 }
+
+export { DeepRedact as default, DeepRedact }
