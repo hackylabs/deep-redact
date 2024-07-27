@@ -7,6 +7,7 @@
     "project": "./tsconfig.eslint.json"
   },
   "rules": {
+    "no-restricted-exports": ["off"],
     "import/prefer-default-export": "off",
     "import/no-extraneous-dependencies": "off",
     "import/no-default-export": "error",
@@ -21,7 +22,7 @@
   },
   "overrides": [
     {
-      "files": ["vitest.config.ts"],
+      "files": ["vitest.config.ts", "src/index.ts"],
       "rules": {
         "import/no-default-export": "off"
       }
