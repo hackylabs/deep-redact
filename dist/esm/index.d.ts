@@ -1,11 +1,12 @@
-export type Types = 'string' | 'number' | 'bigint' | 'boolean' | 'object';
+export type Types = 'string' | 'number' | 'bigint' | 'boolean' | 'object' | 'function';
 export interface BlacklistKeyConfig {
     fuzzyKeyMatch?: boolean;
     caseSensitiveKeyMatch?: boolean;
     retainStructure?: boolean;
-    key: string;
+    remove?: boolean;
+    key: string | RegExp;
 }
-export interface RedactionConfig {
+export interface DeepRedactConfig {
     blacklistedKeys?: Array<string | BlacklistKeyConfig>;
     stringTests?: RegExp[];
     fuzzyKeyMatch?: boolean;
@@ -13,13 +14,21 @@ export interface RedactionConfig {
     retainStructure?: boolean;
     replaceStringByLength?: boolean;
     replacement?: string;
+    remove?: boolean;
     types?: Types[];
+    serialise?: boolean;
+    unsupportedTransformer?: (value: unknown) => unknown;
 }
-export declare class Redaction {
+declare class DeepRedact {
+    private circularReference;
     private readonly config;
-    constructor(config: RedactionConfig);
-    private complexShouldRedact;
-    private shouldReactObjectValue;
+    constructor(config: DeepRedactConfig);
+    private static unsupportedTransformer;
+    private removeCircular;
+    private redactString;
+    private static complexShouldRedact;
+    private shouldRedactObjectValue;
     private deepRedact;
     redact: (value: unknown) => unknown;
 }
+export { DeepRedact as default, DeepRedact };
