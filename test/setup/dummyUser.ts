@@ -1,4 +1,4 @@
-export const dummyUser = {
+const dummyUser = {
   id: 1,
   firstName: 'Emily',
   lastName: 'Johnson',
@@ -69,8 +69,15 @@ export const dummyUser = {
   ssn: '900-590-289',
   userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 Safari/537.36',
   role: 'admin',
+}
+
+const extendedDummyUser = {
+  ...dummyUser,
+  someCircular: {
+    obj: {} as any,
+  },
   someMap: new Map().set('someMap', 'bar'),
-  someWeakMap: new WeakMap().set({ foo: 'bar' }, 'someWeakMap'),
+  someWeakMap: new WeakMap().set({foo: 'bar'}, 'someWeakMap'),
   someSet: new Set().add('someSet'),
   someSymbol: Symbol('someSymbol'),
   someFunction: () => {
@@ -83,4 +90,28 @@ export const dummyUser = {
     constructor(readonly foo = 'bar') {
     }
   },
+  someError: new Error('someError oops'),
+  someDate: new Date(),
+  someRegExp: /someRegExp/gi,
+  someBuffer: Buffer.from('someBuffer'),
+  someArrayBuffer: new ArrayBuffer(8),
+  someDataView: new DataView(new ArrayBuffer(8)),
+  someInt8Array: new Int8Array(8),
+  someBigInt64Array: new BigInt64Array(8),
+  someBigUint64Array: new BigUint64Array(8),
+  someFloat32Array: new Float32Array(8),
+  someFloat64Array: new Float64Array(8),
+  someInt16Array: new Int16Array(8),
+  someInt32Array: new Int32Array(8),
+  someBigInt: BigInt(9007199254740991),
+  someFunctionArray: [() => {
+    throw new Error('someFunctionArray oops')
+  }],
+  somePromiseArray: [async () => {
+    throw new Error('somePromiseArray oops')
+  }],
 }
+
+extendedDummyUser.someCircular.obj = extendedDummyUser
+
+export { dummyUser, extendedDummyUser }
