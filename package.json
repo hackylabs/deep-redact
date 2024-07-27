@@ -43,7 +43,7 @@
   },
   "//": [
     "fast-redact installed only as a benchmark comparison and is not used in the library",
-    "all other dependencies are for development purposes only"
+    "all dependencies are for development purposes only"
   ],
   "devDependencies": {
     "@memlab/core": "1.1.34",
