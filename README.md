@@ -67,7 +67,7 @@ redaction.redact(obj) // { password: '**********************************', cardN
 
 | key | type | default | required |
 | --- | --- | --- | --- |
-| key | string | RegExp |  | Y |
+| key | string￨RegExp |  | Y |
 | fuzzyKeyMatch | boolean | Main options `fuzzyKeyMatch` | N |
 | caseSensitiveKeyMatch | boolean | Main options `caseSensitiveKeyMatch` | N |
 | remove | boolean | Main options `remove` | N |
