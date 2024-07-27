@@ -2,11 +2,14 @@
 
 Faster than fast-redact <sup>1</sup> as well as being safer and more configurable than many other redaction libraries,
 Deep Redact is a zero-dependency tool that redacts sensitive information from strings and objects. It is designed to be
-used in a production environment where sensitive information needs to be redacted from logs, error messages, and other
-outputs.
+used in a production environment where sensitive information needs to be redacted from logs, error messages, files,
+and other outputs.
 
 Circular references and other unsupported are handled gracefully, and the library is designed to be as fast as possible
 while still being configurable.
+
+Supporting both CommonJS and ESM, with named and default exports, Deep Redact is designed to be versatile and easy to
+use in any modern JavaScript or TypeScript project in Node or the browser.
 
 ## Installation
 
@@ -21,7 +24,7 @@ library outside of your global logging/error-reporting libraries.</h4>
 
 ```typescript
 // ./src/example.ts
-import {DeepRedact} from 'deep-redact';
+import {DeepRedact} from 'deep-redact'; // If you're using CommonJS, import with require('deep-redact') instead. Both CommonJS and ESM support named and default imports.
 
 const redaction = new DeepRedact({
   replacement: '*',
