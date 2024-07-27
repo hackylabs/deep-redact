@@ -5,7 +5,7 @@ export interface BlacklistKeyConfig {
   caseSensitiveKeyMatch?: boolean
   retainStructure?: boolean
   remove?: boolean
-  key: string
+  key: string | RegExp
 }
 
 export interface RedactionConfig {
@@ -113,12 +113,10 @@ export class Redaction {
   }
 
   private static complexShouldRedact = (key: string, config: BlacklistKeyConfig): boolean => {
+    if (config.key instanceof RegExp) return config.key.test(key)
     if (config.fuzzyKeyMatch && config.caseSensitiveKeyMatch) return key.includes(config.key)
-
     if (config.fuzzyKeyMatch && !config.caseSensitiveKeyMatch) return normaliseString(key).includes(normaliseString(config.key))
-
     if (!config.fuzzyKeyMatch && config.caseSensitiveKeyMatch) return key === config.key
-
     return normaliseString(config.key) === normaliseString(key)
   }
 
