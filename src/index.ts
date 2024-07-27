@@ -120,7 +120,7 @@ export class Redaction {
     return normaliseString(config.key) === normaliseString(key)
   }
 
-  private shouldReactObjectValue = (key: string): boolean => {
+  private shouldRedactObjectValue = (key: string): boolean => {
     return this.config.blacklistedKeys.some((redactableKey) => (typeof redactableKey === 'string'
       ? key === redactableKey
       : Redaction.complexShouldRedact(key, redactableKey)))
