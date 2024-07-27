@@ -1,6 +1,6 @@
-import { RedactionConfig } from '../../src'
+import type { DeepRedactConfig } from '../../src'
 
-export type Blacklist = RedactionConfig['blacklistedKeys']
+export type Blacklist = DeepRedactConfig['blacklistedKeys']
 
 export const blacklistedKeys: Blacklist = [
   'firstName',

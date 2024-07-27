@@ -43,7 +43,7 @@ const tableData: TableData = [
   },
   {
     key: 'retainStructure',
-    description: 'Determines whether or not keep all nested values of a key that is going to be redacted.',
+    description: 'Determines whether or not keep all nested values of a key that is going to be redacted. Circular references are always removed.',
     type: 'boolean',
     options: '',
     default: 'false',
@@ -71,6 +71,22 @@ const tableData: TableData = [
     type: 'array',
     options: 'Array<\'string\'￨\'number\'￨\'bigint\'￨\'boolean\'￨\'symbol\'￨\'undefined\'￨\'object\'￨\'function\'>',
     default: '[\'string\']',
+    required: 'N',
+  },
+  {
+    key: 'serialise',
+    description: 'Determines whether or not to serialise the object after redacting. Typical use cases for this are when you want to send it over the network or save to a file, both of which are common use cases for redacting sensitive information.',
+    type: 'boolean',
+    options: '',
+    default: 'true',
+    required: 'N',
+  },
+  {
+    key: 'unsupportedTransformer',
+    description: 'When an unsafe value is encountered or a value that cannot be serialised. By default, this function will transform an unsupported value `Unsupported` object. BigInt values are converted a string. Dates are returned using their own `toISOString` method. Regular expressions are returned as objects with their `source` and `flags` values. Errors are converted objects. This is useful when you have a custom class that you would like to redact. For safety reasons, you should always transform a BigInt to avoid JSON.stringify throwing an error.',
+    type: '(value: unknown) => unknown',
+    options: '',
+    default: 'DeepRedact.transformUnsupported',
     required: 'N',
   },
 ]
