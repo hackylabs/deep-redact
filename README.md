@@ -1,8 +1,12 @@
 # Deep Redact
 
-Faster than fast-redact <sup>1</sup> and more configurable than many other redaction libraries, Deep Redact is a
-zero-dependency tool that redacts sensitive information from strings and objects. It is designed to be used in a
-production environment where sensitive information needs to be redacted from logs, error messages, and other outputs.
+Faster than fast-redact <sup>1</sup> as well as being safer and more configurable than many other redaction libraries,
+Deep Redact is a zero-dependency tool that redacts sensitive information from strings and objects. It is designed to be
+used in a production environment where sensitive information needs to be redacted from logs, error messages, and other
+outputs.
+
+Circular references and other unsupported are handled gracefully, and the library is designed to be as fast as possible
+while still being configurable.
 
 ## Installation
 
@@ -79,16 +83,22 @@ library available. Neither JSON.stringify nor fast-redact offer the same level o
 
 | scenario | ops / sec | op duration (ms) | margin of error | sample count |
 | --- | --- | --- | --- | --- |
-| JSON.stringify, single object | 295911.06 | 0.0033793938 | 0.00002 | 147956 |
-| DeepRedact, default config, single object | 95593.11 | 0.0104610048 | 0.00005 | 47797 |
-| DeepRedact, remove item, single object | 92531.99 | 0.0108070737 | 0.00005 | 46266 |
-| DeepRedact, fuzzy and case insensitive matching, single object | 90517.53 | 0.0110475833 | 0.00005 | 45259 |
-| DeepRedact, case insensitive matching, single object | 90109.12 | 0.0110976562 | 0.00007 | 45055 |
-| DeepRedact, fuzzy matching, single object | 89621.55 | 0.0111580312 | 0.00014 | 44811 |
-| DeepRedact, replace string by length, single object | 85194.47 | 0.0117378506 | 0.00005 | 42598 |
-| DeepRedact, config per key, single object | 71293.68 | 0.014026489 | 0.00008 | 35647 |
-| DeepRedact, retain structure, single object | 67052.16 | 0.0149137623 | 0.00021 | 33527 |
-| fast redact, single object | 19892.24 | 0.0502708627 | 0.00023 | 9947 |
-| DeepRedact, default config, 1000 objects | 13558.45 | 0.0737547209 | 0.00039 | 6780 |
-| JSON.stringify, 1000 objects | 423.19 | 2.3629901509 | 0.00811 | 212 |
-| fast redact, 1000 objects | 76.35 | 13.0976421538 | 0.2063 | 39 |
+| JSON.stringify, tiny object | 3878848.93 | 0.0002578084 | 0 | 1939425 |
+| DeepRedact, default config, tiny object | 1530332.28 | 0.0006534529 | 0.00001 | 765167 |
+| JSON.stringify, large object | 295526.11 | 0.0033837958 | 0.00001 | 147764 |
+| fast redact, tiny object | 228053.93 | 0.0043849277 | 0.00002 | 114027 |
+| DeepRedact, default config, large object | 92714.28 | 0.0107858256 | 0.00006 | 46358 |
+| DeepRedact, remove item, single object | 92349.45 | 0.0108284349 | 0.00005 | 46175 |
+| DeepRedact, fuzzy matching, single object | 89414.82 | 0.0111838282 | 0.00007 | 44708 |
+| DeepRedact, fuzzy and case insensitive matching, single object | 87852.36 | 0.0113827334 | 0.00006 | 43927 |
+| DeepRedact, case insensitive matching, single object | 86797.23 | 0.0115211045 | 0.00006 | 43399 |
+| DeepRedact, replace string by length, single object | 84150.95 | 0.011883407 | 0.00006 | 42076 |
+| DeepRedact, config per key, single object | 71236.85 | 0.0140376786 | 0.00009 | 35619 |
+| DeepRedact, retain structure, single object | 69738.86 | 0.0143392076 | 0.00007 | 34870 |
+| fast redact, large object | 19480.95 | 0.0513321865 | 0.00038 | 9741 |
+| JSON.stringify, 1000 tiny objects | 16003.16 | 0.0624876526 | 0.00017 | 8002 |
+| DeepRedact, default config, 1000 tiny objects | 15827.22 | 0.0631822932 | 0.00043 | 7914 |
+| DeepRedact, default config, 1000 large objects | 13705.52 | 0.072963285 | 0.00054 | 6853 |
+| fast redact, 1000 tiny objects | 7430.88 | 0.1345735164 | 0.00067 | 3716 |
+| JSON.stringify, 1000 large objects | 423.52 | 2.3611880519 | 0.00982 | 212 |
+| fast redact, 1000 large objects | 77.32 | 12.9327971026 | 0.25939 | 39 |
