@@ -3,7 +3,7 @@ import { renderTable, type TableData } from './_renderTable'
 const tableData: TableData = [
   {
     key: 'key',
-    type: 'string | RegExp',
+    type: 'string￨RegExp',
     default: '',
     required: 'Y',
   },
