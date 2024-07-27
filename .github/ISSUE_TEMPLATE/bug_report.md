@@ -11,7 +11,7 @@ assignees: beningreenjam
 A clear and concise description of what the bug is.
 
 **To Reproduce**
-Include, as small and accurately as possible, your `DeepRedact` instance with full config object and a value to be redacted (DUMMY DATA ONLY - DO NOT PASTE UNREDACTED DATA HERE)
+Include, as small and accurately as possible, your `DeepRedact` instance with full config object and a value to be redacted (DUMMY DATA ONLY - DO NOT PASTE RAW PRODUCTION DATA HERE)
 
 **Expected behavior**
 A clear and concise description of what you expected to happen.
