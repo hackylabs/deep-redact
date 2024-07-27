@@ -14,7 +14,7 @@ use in any modern JavaScript or TypeScript project in Node or the browser.
 ## Installation
 
 ```bash
-npm install deep-redact
+npm install @hackylabs/deep-redact
 ```
 
 ## Usage
