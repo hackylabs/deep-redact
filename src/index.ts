@@ -8,7 +8,7 @@ export interface BlacklistKeyConfig {
   key: string | RegExp
 }
 
-export interface RedactionConfig {
+export interface DeepRedactConfig {
   blacklistedKeys?: Array<string | BlacklistKeyConfig>
   stringTests?: RegExp[]
   fuzzyKeyMatch?: boolean
@@ -24,10 +24,10 @@ export interface RedactionConfig {
 
 const normaliseString = (key: string): string => key.toLowerCase().replace(/\W/g, '')
 
-export class Redaction {
+export class DeepRedact {
   private circularReference: WeakSet<object> | null = new WeakSet()
 
-  private readonly config: Required<RedactionConfig> = {
+  private readonly config: Required<DeepRedactConfig> = {
     blacklistedKeys: [],
     stringTests: [],
     fuzzyKeyMatch: false,
@@ -38,10 +38,10 @@ export class Redaction {
     replacement: '[REDACTED]',
     types: ['string'],
     serialise: true,
-    unsupportedTransformer: Redaction.unsupportedTransformer,
+    unsupportedTransformer: DeepRedact.unsupportedTransformer,
   }
 
-  constructor(config: RedactionConfig) {
+  constructor(config: DeepRedactConfig) {
     this.config = {
       ...this.config,
       ...config,
@@ -123,7 +123,7 @@ export class Redaction {
   private shouldRedactObjectValue = (key: string): boolean => {
     return this.config.blacklistedKeys.some((redactableKey) => (typeof redactableKey === 'string'
       ? key === redactableKey
-      : Redaction.complexShouldRedact(key, redactableKey)))
+      : DeepRedact.complexShouldRedact(key, redactableKey)))
   }
 
   private deepRedact = (value: unknown, parentShouldRedact = false): unknown => {
