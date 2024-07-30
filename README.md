@@ -24,7 +24,7 @@ library outside of your global logging/error-reporting libraries.</h4>
 
 ```typescript
 // ./src/example.ts
-import {DeepRedact} from 'deep-redact'; // If you're using CommonJS, import with require('deep-redact') instead. Both CommonJS and ESM support named and default imports.
+import { DeepRedact } from '@hackylabs/deep-redact'; // If you're using CommonJS, import with require('deep-redact') instead. Both CommonJS and ESM support named and default imports.
 
 const redaction = new DeepRedact({
   replacement: '*',
