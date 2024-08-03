@@ -332,12 +332,35 @@ describe('DeepRedact', () => {
 
     it('should safely redact an object with circular references', () => {
       const redaction = new DeepRedact({ blacklistedKeys: ['password'], serialise: false })
-      const obj = { password: 'PASSWORD', obj: {} }
-      obj.obj = obj
-      expect(redaction.redact(obj)).toEqual({
+      const obj = { password: 'PASSWORD', deep: { nested: {} } }
+      obj.deep.nested = obj.deep
+      const redacted = redaction.redact(obj)
+      expect(redacted).toEqual({
         password: '[REDACTED]',
-        obj: '__circular__',
+        deep: {
+          nested: '[[CIRCULAR_REFERENCE: deep.nested]]',
+        },
       })
+    })
+
+    it('should safely redact an array with circular references', () => {
+      const redaction = new DeepRedact({ blacklistedKeys: ['password'], serialise: false })
+      const arr = [{ password: 'PASSWORD', deep: { } }, 'foo']
+      // @ts-expect-error - we are testing circular references
+      arr[0].deep.nested = arr
+      const redacted = redaction.redact(arr)
+      expect(redacted).toEqual([
+        {
+          password: '[REDACTED]',
+          deep: {
+            nested: [
+              '[[CIRCULAR_REFERENCE: [0].deep.nested.[0]]]',
+              'foo',
+            ],
+          },
+        },
+        'foo',
+      ])
     })
 
     it('should not redact null', () => {
@@ -354,18 +377,21 @@ describe('DeepRedact', () => {
       const redaction = new DeepRedact({
         blacklistedKeys: ['password'],
         serialise: false,
-        unsupportedTransformer: (value) => {
-          if (value instanceof Error) return 'FooBar'
-          return value
-        },
+      })
+      redaction.setUnsupportedTransformer((val) => {
+        if (val instanceof Error) return { message: val.message }
+        if (typeof val === 'number') return val / 2
+        return val
       })
       const obj = {
         error: new Error('Oops'),
         password: 'PASSWORD',
+        age: 40,
       }
 
       expect(redaction.redact(obj)).toEqual({
-        error: 'FooBar',
+        age: 20,
+        error: { message: 'Oops' },
         password: '[REDACTED]',
       })
     })
