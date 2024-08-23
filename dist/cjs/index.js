@@ -1,129 +1,152 @@
 "use strict";
+var __rest = (this && this.__rest) || function (s, e) {
+    var t = {};
+    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+        t[p] = s[p];
+    if (s != null && typeof Object.getOwnPropertySymbols === "function")
+        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                t[p[i]] = s[p[i]];
+        }
+    return t;
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DeepRedact = exports.default = void 0;
-const normaliseString = (key) => key.toLowerCase().replace(/\W/g, '');
+const redactorUtils_1 = __importDefault(require("./utils/redactorUtils"));
 class DeepRedact {
+    /**
+     * Create a new DeepRedact instance with the provided configuration.
+     * The configuration will be merged with the default configuration.
+     * `blacklistedKeys` will be normalised to an array inherited from the default configuration as the default values.
+     * @param {DeepRedactConfig} config. The configuration for the redaction.
+     */
     constructor(config) {
-        var _a, _b;
-        this.circularReference = new WeakSet();
+        /**
+         * A WeakSet to store circular references during redaction. Reset to null after redaction is complete.
+         * @private
+         */
+        this.circularReference = null;
+        /**
+         * The configuration for the redaction.
+         * @private
+         */
         this.config = {
-            blacklistedKeys: [],
-            stringTests: [],
-            fuzzyKeyMatch: false,
-            caseSensitiveKeyMatch: true,
-            retainStructure: false,
-            remove: false,
-            replaceStringByLength: false,
-            replacement: '[REDACTED]',
-            types: ['string'],
-            serialise: true,
-            unsupportedTransformer: DeepRedact.unsupportedTransformer,
+            serialise: false,
         };
-        this.removeCircular = (value) => {
-            var _a, _b;
-            if (!(value instanceof Object))
+        /**
+         * A transformer for unsupported data types. If `serialise` is false, the value will be returned as is,
+         * otherwise it will transform the value into a format that is supported by JSON.stringify.
+         *
+         * Error, RegExp, and Date instances are technically supported by JSON.stringify,
+         * but they returned as empty objects, therefore they are also transformed here.
+         * @protected
+         * @param {unknown} value The value that is not supported by JSON.stringify.
+         * @returns {unknown} The value in a format that is supported by JSON.stringify.
+         */
+        this.unsupportedTransformer = (value) => {
+            if (!this.config.serialise)
                 return value;
-            if (!((_a = this.circularReference) === null || _a === void 0 ? void 0 : _a.has(value))) {
-                (_b = this.circularReference) === null || _b === void 0 ? void 0 : _b.add(value);
-                return value;
+            if (typeof value === 'bigint') {
+                return {
+                    __unsupported: {
+                        type: 'bigint',
+                        value: value.toString(),
+                        radix: 10,
+                    },
+                };
             }
-            return '__circular__';
-        };
-        this.redactString = (value, parentShouldRedact = false) => {
-            if (!this.config.stringTests.some((test) => test.test(value)) && !parentShouldRedact)
-                return value;
-            if (this.config.replaceStringByLength)
-                return this.config.replacement.repeat(value.length);
-            return this.config.remove ? undefined : this.config.replacement;
-        };
-        this.shouldRedactObjectValue = (key) => {
-            return this.config.blacklistedKeys.some((redactableKey) => (typeof redactableKey === 'string'
-                ? key === redactableKey
-                : DeepRedact.complexShouldRedact(key, redactableKey)));
-        };
-        this.deepRedact = (value, parentShouldRedact = false) => {
-            if (value === undefined || value === null)
-                return value;
-            let safeValue = this.removeCircular(value);
-            safeValue = this.config.unsupportedTransformer(safeValue);
-            if (!(safeValue instanceof Object)) {
-                // @ts-expect-error - we already know that safeValue is not a function, symbol, undefined, null, or an object
-                if (!this.config.types.includes(typeof safeValue))
-                    return safeValue;
-                if (typeof safeValue === 'string')
-                    return this.redactString(safeValue, parentShouldRedact);
-                if (!parentShouldRedact)
-                    return safeValue;
-                return this.config.remove
-                    ? undefined
-                    : this.config.replacement;
+            if (value instanceof Error) {
+                return {
+                    __unsupported: {
+                        type: 'error',
+                        name: value.name,
+                        message: value.message,
+                        stack: value.stack,
+                    },
+                };
             }
-            if (parentShouldRedact && (!this.config.retainStructure || this.config.remove)) {
-                return this.config.remove ? undefined : this.config.replacement;
+            if (value instanceof RegExp) {
+                return {
+                    __unsupported: {
+                        type: 'regexp',
+                        source: value.source,
+                        flags: value.flags,
+                    },
+                };
             }
-            if (Array.isArray(safeValue))
-                return safeValue.map((val) => this.deepRedact(val, parentShouldRedact));
+            if (value instanceof Date)
+                return value.toISOString();
+            return value;
+        };
+        /**
+         * Calls `unsupportedTransformer` on the provided value and rewrites any circular references.
+         *
+         * Circular references will always be removed to avoid infinite recursion.
+         * When a circular reference is found, the value will be replaced with `[[CIRCULAR_REFERENCE: path.to.original.value]]`.
+         * @protected
+         * @param {unknown} value The value to rewrite.
+         * @param {string | undefined} path The path to the value in the object.
+         * @returns {unknown} The rewritten value.
+         */
+        this.rewriteUnsupported = (value, path) => {
+            const safeValue = this.unsupportedTransformer(value);
+            if (!(safeValue instanceof Object))
+                return safeValue;
+            if (this.circularReference === null)
+                this.circularReference = new WeakSet();
+            if (Array.isArray(safeValue)) {
+                return safeValue.map((val, index) => {
+                    var _a, _b;
+                    const newPath = path ? `${path}.[${index}]` : `[${index}]`;
+                    if ((_a = this.circularReference) === null || _a === void 0 ? void 0 : _a.has(val))
+                        return `[[CIRCULAR_REFERENCE: ${newPath}]]`;
+                    if (val instanceof Object) {
+                        (_b = this.circularReference) === null || _b === void 0 ? void 0 : _b.add(val);
+                        return this.rewriteUnsupported(val, newPath);
+                    }
+                    return val;
+                });
+            }
             return Object.fromEntries(Object.entries(safeValue).map(([key, val]) => {
-                const shouldRedact = parentShouldRedact || this.shouldRedactObjectValue(key);
-                return [key, this.deepRedact(val, shouldRedact)];
+                var _a, _b;
+                const newPath = path ? `${path}.${key}` : key;
+                if ((_a = this.circularReference) === null || _a === void 0 ? void 0 : _a.has(val))
+                    return [key, `[[CIRCULAR_REFERENCE: ${newPath}]]`];
+                if (val instanceof Object)
+                    (_b = this.circularReference) === null || _b === void 0 ? void 0 : _b.add(val);
+                return [key, this.rewriteUnsupported(val, path ? `${path}.${key}` : key)];
             }));
         };
-        this.redact = (value) => {
-            this.circularReference = new WeakSet();
-            const redacted = this.deepRedact(value);
+        /**
+         * Depending on the value of `serialise`, return the value as a JSON string or as the provided value.
+         *
+         * Also resets the `circularReference` property to null after redaction is complete.
+         * This is to ensure that the WeakSet doesn't cause memory leaks.
+         * @private
+         * @param value
+         */
+        this.maybeSerialise = (value) => {
             this.circularReference = null;
-            return this.config.serialise ? JSON.stringify(redacted) : redacted;
+            return this.config.serialise ? JSON.stringify(value) : value;
         };
-        this.config = Object.assign(Object.assign(Object.assign({}, this.config), config), { blacklistedKeys: (_b = (_a = config.blacklistedKeys) === null || _a === void 0 ? void 0 : _a.map((key) => {
-                if (typeof key === 'string')
-                    return key;
-                return Object.assign({ fuzzyKeyMatch: this.config.fuzzyKeyMatch, caseSensitiveKeyMatch: this.config.caseSensitiveKeyMatch, retainStructure: this.config.retainStructure, remove: this.config.remove }, key);
-            })) !== null && _b !== void 0 ? _b : [] });
+        /**
+         * Redact the provided value. The value will be stripped of any circular references and other unsupported data types, before being redacted according to the configuration and finally serialised if required.
+         * @param {unknown} value The value to redact.
+         * @returns {unknown} The redacted value.
+         */
+        this.redact = (value) => {
+            return this.maybeSerialise(this.redactorUtils.recurse(this.rewriteUnsupported(value)));
+        };
+        const { serialise, serialize } = config, rest = __rest(config, ["serialise", "serialize"]);
+        this.redactorUtils = new redactorUtils_1.default(rest);
+        if (serialise !== undefined)
+            this.config.serialise = serialise;
+        if (serialize !== undefined)
+            this.config.serialise = serialize;
     }
 }
 exports.default = DeepRedact;
 exports.DeepRedact = DeepRedact;
-DeepRedact.unsupportedTransformer = (value) => {
-    if (typeof value === 'bigint') {
-        return {
-            __unsupported: {
-                type: 'bigint',
-                value: value.toString(),
-                radix: 10,
-            },
-        };
-    }
-    if (value instanceof Error) {
-        return {
-            __unsupported: {
-                type: 'error',
-                name: value.name,
-                message: value.message,
-                stack: value.stack,
-            },
-        };
-    }
-    if (value instanceof RegExp) {
-        return {
-            __unsupported: {
-                type: 'regexp',
-                source: value.source,
-                flags: value.flags,
-            },
-        };
-    }
-    if (value instanceof Date)
-        return value.toISOString();
-    return value;
-};
-DeepRedact.complexShouldRedact = (key, config) => {
-    if (config.key instanceof RegExp)
-        return config.key.test(key);
-    if (config.fuzzyKeyMatch && config.caseSensitiveKeyMatch)
-        return key.includes(config.key);
-    if (config.fuzzyKeyMatch && !config.caseSensitiveKeyMatch)
-        return normaliseString(key).includes(normaliseString(config.key));
-    if (!config.fuzzyKeyMatch && config.caseSensitiveKeyMatch)
-        return key === config.key;
-    return normaliseString(config.key) === normaliseString(key);
-};

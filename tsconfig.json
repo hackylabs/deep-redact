@@ -1,18 +1,16 @@
 {
   "compilerOptions": {
-    "target": "ES6",
-    "module": "CommonJS",
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "noImplicitAny": true,
-    "strictFunctionTypes": true,
+    "lib": [
+      "esnext"
+    ],
     "declaration": true,
-    "noEmit": false,
-    "noEmitOnError": true,
-    "resolveJsonModule": true,
-    "moduleResolution": "Node",
+    "declarationDir": "./dist/types",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",
+    "baseUrl": ".",
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "../untitled1/scratch_24.ts"],
 }
