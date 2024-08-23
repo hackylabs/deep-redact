@@ -1,8 +1,8 @@
 import { bench, describe } from 'vitest'
 import fastRedact from 'fast-redact'
-import { DeepRedact } from '../src'
-import { dummyUser } from './setup/dummyUser'
-import { Blacklist, blacklistedKeys } from './setup/blacklist'
+import { DeepRedact } from '../../src'
+import { dummyUser } from '../setup/dummyUser'
+import { Blacklist, blacklistedKeys } from '../setup/blacklist'
 
 const complexBlacklistedKeys: Blacklist = [
   'email',
@@ -154,6 +154,13 @@ describe('Redaction benchmark', () => {
   bench('DeepRedact, replace string by length, single object', async () => {
     await new Promise((resolve) => {
       const redaction = new DeepRedact({ blacklistedKeys, replaceStringByLength: true, replacement: '*' })
+      resolve(redaction.redact(dummyUser))
+    })
+  })
+
+  bench('DeepRedact, custom replacer function, single object', async () => {
+    await new Promise((resolve) => {
+      const redaction = new DeepRedact({ blacklistedKeys, replacement: ((value) => `[REDACTED:${typeof value}]`) })
       resolve(redaction.redact(dummyUser))
     })
   })
