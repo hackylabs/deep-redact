@@ -147,4 +147,4 @@ export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, 'blacklistedKe
   stringTests: BaseDeepRedactConfig['stringTests']
 })
 
-export type RedactorUtilsConfig = Omit<BaseDeepRedactConfig, 'serialise'>
+export type RedactorUtilsConfig = Omit<BaseDeepRedactConfig, 'serialise' | 'serialize'>
