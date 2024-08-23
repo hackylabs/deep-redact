@@ -133,18 +133,9 @@ export interface BaseDeepRedactConfig {
   serialise?: boolean,
 
   /**
-   * A function that transforms unsupported data types into a format support by JSON.stringify. If not provided, the default transformer will be used.
-   *
-   * The default transformer will be ignored when `serialise` is false, otherwise it will be used to transform the following types:
-   * - BigInt
-   * - Error
-   * - RegExp
-   * - Date
-   *
-   * @param value The value that is not supported by JSON.stringify.
-   * @returns The value in a format that is supported by JSON.stringify.
+   * Alias of `serialise` for International-English users.
    */
-  unsupportedTransformer?: Transformer
+  serialize?: boolean
 }
 
 export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, 'blacklistedKeysTransformed' | 'blacklistedKeys' | 'stringTests'>> & ({
@@ -156,122 +147,4 @@ export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, 'blacklistedKe
   stringTests: BaseDeepRedactConfig['stringTests']
 })
 
-export type RedactorUtilsConfig = Omit<BaseDeepRedactConfig, 'blacklistedKeysTransformed' | 'unsupportedTransformer' | 'serialise'>
-
-export type TransformerUtilsConfig = Pick<BaseDeepRedactConfig, 'serialise' | 'unsupportedTransformer'>
-
-export interface TransformerUtils {
-  /**
-   * A WeakSet to store circular references during redaction. Reset to null after redaction is complete.
-   */
-  circularReference: WeakSet<object> | null
-
-  /**
-   * The configuration for the transformer.
-   */
-  config: TransformerUtilsConfig
-
-  /**
-   * A transformer for unsupported data types. This will be used when `serialise` is true, or when a custom transformer is not provided.
-   * @private
-   * @param {unknown} value The value that is not supported by JSON.stringify.
-   * @returns {unknown} The value in a format that is supported by JSON.stringify.
-   */
-  unsupportedTransformer: Transformer
-
-  /**
-   * Get the transformer for unsupported data types. If a custom transformer is provided, it will be used, otherwise the default transformer will be used.
-   * @returns {Transformer} The transformer for unsupported data types.
-   */
-  getUnsupportedTransformer: () => Transformer
-
-  /**
-   * Rewrite unsupported data types into a format supported by JSON.stringify. Circular references will be replaced with a string containing the path to the original value.
-   * @param {unknown} value The value to rewrite.
-   * @param {string} path The path to the value in the object.
-   * @returns {unknown} The rewritten value.
-   */
-  rewriteUnsupported: (value: unknown, path?: string) => unknown
-
-  /**
-   * Depending on the value of `serialise`, return the value as a JSON string or as the provided value.
-   * @param value
-   */
-  maybeSerialise: (value: unknown) => unknown
-}
-
-export interface RedactorUtils {
-  /**
-   * The configuration for redaction.
-   */
-  config: Required<Omit<DeepRedactConfig, 'serialise' | 'unsupportedTransformer'> & {
-    blacklistedKeysTransformed: BaseDeepRedactConfig['blacklistedKeysTransformed']
-    blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys']
-  }>
-
-  /**
-   * Normalise a string for comparison. This will convert the string to lowercase and remove any non-word characters.
-   * @param str The string to normalise.
-   * @returns {string} The normalised string.
-   */
-  normaliseString: (value: string) => string
-
-  /**
-   * Determine if a key matches a given blacklistedKeyConfig. This will check the key against the blacklisted keys, using the configuration option for the given key falling back to the default configuration.
-   * @param {string} key The key to check.
-   * @param {BlacklistKeyConfig} config The configuration for the key.
-   * @returns {boolean} Whether the key should be redacted.
-   */
-  complexKeyMatch: (key: string, config: BlacklistKeyConfig) => boolean
-
-  getBlacklistedKeyConfig: (key: string) => Required<BlacklistKeyConfig> | undefined
-
-  redactString: (value: string, replacement: Transformer | string, remove: boolean, shouldRedact: boolean) => unknown
-
-  matchKeyByRootConfig: (key: string, blacklistedKey: string) => boolean
-
-  /**
-   * Determine if a key should be redacted. This will check the key against the blacklisted keys, using the default configuration.
-   * @param {string} key The key to check.
-   * @returns {boolean} Whether the key should be redacted.
-   */
-  shouldRedactObjectValue: (key: string) => boolean
-
-  /**
-   * Get the recursion configuration for a key. This will check the key against the transformed blacklisted keys.
-   * If the key is found, the configuration for the key will be returned, otherwise undefined.
-   * @param {string} key The key of the configuration to get.
-   * @returns {Required<Pick<BlacklistKeyConfig, 'remove' | 'replacement' | 'retainStructure'>>} The configuration for the key.
-   */
-  getRecursionConfig: (key: string | null) => Required<Pick<BlacklistKeyConfig, 'remove' | 'replacement' | 'retainStructure'>>
-
-  /**
-   * Redact a primitive value. This will redact the value if it is a supported type, not an object or array, otherwise it will return the value unchanged.
-   * @param {unknown} value The value to redact.
-   * @param {Transformer | string} replacement The replacement value for redacted data.
-   * @param {boolean} remove Whether the redacted data should be removed.
-   * @param {boolean} parentShouldRedact Whether the value should be redacted based on the parent key.
-   * @returns {unknown} The redacted value.
-   */
-  redactPrimitive: (value: unknown, replacement: Transformer | string, remove: boolean, parentShouldRedact?: boolean) => unknown
-
-  /**
-   * Redact an array. This will redact each value in the array using the `recurse` method.
-   * @param {unknown[]} value The array to redact.
-   * @returns {unknown[]} The redacted array.
-   */
-  redactArray: (value: unknown[]) => unknown[]
-
-  /**
-   * Redact an object. This will recursively redact the object based on the configuration, redacting the keys and values as required.
-   */
-  redactObject: (value: Object, key: string | null, parentShouldRedact?: boolean) => Record<string, unknown>
-
-  /**
-   * Redact a value. If the value is an object or array, the redaction will be performed recursively, otherwise the value will be redacted if it is a supported type using the `replace` method.
-   * @param {unknown} value The value to redact.
-   * @param {boolean} parentShouldRedact Whether the parent object should be redacted.
-   * @returns {unknown} The redacted value.
-   */
-  recurse: (value: unknown, key?: string | null, parentShouldRedact?: boolean) => unknown
-}
+export type RedactorUtilsConfig = Omit<BaseDeepRedactConfig, 'serialise'>

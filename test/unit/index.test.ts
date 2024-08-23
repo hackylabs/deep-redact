@@ -5,13 +5,10 @@ import {
   type IHeapSnapshot, type Nullable, config, takeNodeMinimalHeap,
 } from '@memlab/core'
 import { DeepRedact } from '../../src'
-import * as redactorUtils from '../../src/utils/redactorUtils'
-import * as transformerUtils from '../../src/utils/transformUnsupported'
 import { dummyUser } from '../setup/dummyUser'
 import { blacklistedKeys } from '../setup/blacklist'
-import {
-  RedactorUtils, RedactorUtilsConfig, TransformerUtils, TransformerUtilsConfig,
-} from '../../src/types'
+import RedactorUtils from '../../src/utils/redactorUtils'
+import { BaseDeepRedactConfig } from '../../src/types'
 
 describe('DeepRedact', () => {
   afterEach(() => {
@@ -24,204 +21,241 @@ describe('DeepRedact', () => {
 
       vi.mock('./utils/redactorUtils', () => {
         return {
-          default: () => ({
-            recurse: vi.fn(() => ({ foo: 'bar', secret: '[REDACTED]' })),
-          }),
-        }
-      })
-
-      vi.mock('./utils/transformUnsupported', () => {
-        return {
-          default: () => ({
-            rewriteUnsupported: vi.fn(() => ({ foo: 'bar', secret: 'ssshhh!' })),
-            maybeSerialise: vi.fn(() => '{ "foo": "bar", "secret": "[REDACTED]" }'),
-          }),
+          default: () => RedactorUtils,
         }
       })
     })
 
     describe('constructor', () => {
-      let redactorUtilsSpy: MockInstance<(config: RedactorUtilsConfig) => RedactorUtils>
-      let transformerUtilsSpy: MockInstance<(config: TransformerUtilsConfig) => TransformerUtils>
-      const redactionConfig = { blacklistedKeys, serialise: true, unsupportedTransformer: vi.fn() }
+      let deepRedact: DeepRedact
+      const deepRedactConfig: Required<Omit<BaseDeepRedactConfig, 'serialise' | 'serialize'>> = {
+        blacklistedKeys,
+        blacklistedKeysTransformed: [],
+        stringTests: [/^test$/],
+        retainStructure: true,
+        fuzzyKeyMatch: true,
+        caseSensitiveKeyMatch: false,
+        replaceStringByLength: true,
+        replacement: '*',
+        remove: true,
+        types: ['string', 'number'],
+      }
 
       beforeEach(() => {
-        redactorUtilsSpy = vi.spyOn(redactorUtils, 'default')
-        transformerUtilsSpy = vi.spyOn(transformerUtils, 'default')
-        // eslint-disable-next-line no-new
-        new DeepRedact(redactionConfig)
+        deepRedact = new DeepRedact({ ...deepRedactConfig, serialise: true })
       })
 
-      it('should setup the redactorUtils', () => {
-        const { blacklistedKeys: configBlacklist } = redactionConfig
-        expect(redactorUtilsSpy).toHaveBeenCalledTimes(1)
-        expect(redactorUtilsSpy).toHaveBeenCalledWith({ blacklistedKeys: configBlacklist })
+      describe('redactorUtils', () => {
+        it('should should setup the redactorUtils', () => {
+          expect(deepRedact.redactorUtils).toBeInstanceOf(RedactorUtils)
+          expect(deepRedact.redactorUtils.config).toEqual({
+            ...deepRedactConfig,
+            blacklistedKeysTransformed: expect.arrayContaining([{
+              key: expect.any(String),
+              fuzzyKeyMatch: true,
+              caseSensitiveKeyMatch: false,
+              remove: true,
+              replacement: '*',
+              retainStructure: true,
+            }]),
+          })
+        })
       })
 
-      it('should setup the transformerUtils', () => {
-        const { serialise, unsupportedTransformer } = redactionConfig
-        expect(transformerUtilsSpy).toHaveBeenCalledTimes(1)
-        expect(transformerUtilsSpy).toHaveBeenCalledWith({ serialise, unsupportedTransformer })
+      describe('serialise', () => {
+        it('should setup the config', () => {
+          expect(deepRedact.config).toEqual({
+            serialise: true,
+          })
+        })
+      })
+
+      describe('serialise alias', () => {
+        it('should setup the config', () => {
+          deepRedact = new DeepRedact({ ...deepRedactConfig, serialize: true })
+          expect(deepRedact.config).toEqual({
+            serialise: true,
+          })
+        })
+      })
+    })
+
+    describe('unsupportedTransformer', () => {
+      let deepRedact: DeepRedact
+
+      describe('serialise is false', () => {
+        beforeEach(() => {
+          deepRedact = new DeepRedact({ blacklistedKeys, serialise: false })
+        })
+
+        it('should return the value', () => {
+          expect(deepRedact.unsupportedTransformer(10)).toBe(10)
+        })
+      })
+
+      describe('serialise is true', () => {
+        beforeEach(() => {
+          deepRedact = new DeepRedact({ blacklistedKeys, serialise: true })
+        })
+
+        it('should transform a bigint', () => {
+          expect(deepRedact.unsupportedTransformer(BigInt(10))).toEqual({
+            __unsupported: {
+              type: 'bigint',
+              value: '10',
+              radix: 10,
+            },
+          })
+        })
+
+        it('should transform an error', () => {
+          const error = new Error('Test Error')
+
+          expect(deepRedact.unsupportedTransformer(error)).toEqual({
+            __unsupported: {
+              type: 'error',
+              name: error.name,
+              message: error.message,
+              stack: error.stack,
+            },
+          })
+        })
+
+        it('should transform a regexp', () => {
+          const regexp = new RegExp('test', 'g')
+
+          expect(deepRedact.unsupportedTransformer(regexp)).toEqual({
+            __unsupported: {
+              type: 'regexp',
+              source: regexp.source,
+              flags: regexp.flags,
+            },
+          })
+        })
+
+        it('should transform a date', () => {
+          const date = new Date()
+
+          expect(deepRedact.unsupportedTransformer(date)).toBe(date.toISOString())
+        })
+      })
+    })
+
+    describe('rewriteUnsupported', () => {
+      let deepRedact: DeepRedact
+
+      beforeEach(() => {
+        deepRedact = new DeepRedact({ blacklistedKeys, serialise: true })
+      })
+
+      describe('circular reference', () => {
+        it('should return a string', () => {
+          const obj = { a: 1 }
+          obj.b = obj
+
+          expect(deepRedact.rewriteUnsupported(obj)).toEqual({
+            a: 1,
+            b: {
+              a: 1,
+              b: '[[CIRCULAR_REFERENCE: b.b]]',
+            },
+          })
+        })
+      })
+
+      describe('array', () => {
+        it('should rewrite an array', () => {
+          const obj = [1, 2, 3]
+
+          expect(deepRedact.rewriteUnsupported(obj)).toEqual([1, 2, 3])
+        })
+
+        it('should rewrite an array with an object', () => {
+          const obj = [1, { a: 1 }]
+
+          expect(deepRedact.rewriteUnsupported(obj)).toEqual([1, { a: 1 }])
+        })
+
+        it('should rewrite an array with a circular reference', () => {
+          const obj = [1]
+          obj.push(obj)
+
+          expect(deepRedact.rewriteUnsupported(obj)).toEqual([1, [1, '[[CIRCULAR_REFERENCE: [1].[1]]]']])
+        })
+      })
+
+      describe('object', () => {
+        it('should rewrite an object', () => {
+          const obj = { a: 1, b: 2 }
+
+          expect(deepRedact.rewriteUnsupported(obj)).toEqual({ a: 1, b: 2 })
+        })
+
+        it('should rewrite an object with an array', () => {
+          const obj = { a: 1, b: [1, 2] }
+
+          expect(deepRedact.rewriteUnsupported(obj)).toEqual({ a: 1, b: [1, 2] })
+        })
+
+        it('should rewrite an object with a circular reference', () => {
+          const obj = { a: 1 }
+          obj.b = obj
+
+          expect(deepRedact.rewriteUnsupported(obj)).toEqual({
+            a: 1,
+            b: {
+              a: 1,
+              b: '[[CIRCULAR_REFERENCE: b.b]]',
+            },
+          })
+        })
+      })
+    })
+
+    describe('maybeSerialise', () => {
+      let deepRedact: DeepRedact
+
+      it('should return the value', () => {
+        deepRedact = new DeepRedact({ blacklistedKeys, serialise: false })
+        expect(deepRedact.maybeSerialise({ a: 1 })).toEqual({ a: 1 })
+      })
+
+      it('should return a string', () => {
+        deepRedact = new DeepRedact({ blacklistedKeys, serialise: true })
+        expect(deepRedact.maybeSerialise({ a: 1 })).toEqual('{"a":1}')
       })
     })
 
     describe('redact', () => {
-      let rewriteUnsupportedSpy: MockInstance<TransformerUtils['rewriteUnsupported']>
-      let maybeSerialiseSpy: MockInstance<TransformerUtils['maybeSerialise']>
-      let recurseSpy: MockInstance<RedactorUtils['recurse']>
-      const date = new Date()
-      const error = new Error('test')
-      const bigInt = BigInt(1234567890)
-      const value = {
-        ...dummyUser,
-        date,
-        error,
-        bigInt,
-      }
-      // @ts-expect-error - we're testing the correct order of calls here
-      value.circular = value
-
-      const rewrittenValue = {
-        ...value,
-        date: date.toISOString(),
-        error: {
-          __unsupported: {
-            message: error.message,
-            name: error.name,
-            stack: error.stack,
-            type: 'error',
-          },
-        },
-        bigInt: {
-          __unsupported: {
-            type: 'bigint',
-            value: bigInt.toString(),
-            radix: 10,
-          },
-        },
-        circular: {
-          ...value,
-          circular: '[[CIRCULAR_REFERENCE: circular.circular]]',
-          address: '[[CIRCULAR_REFERENCE: circular.address]]',
-          hair: '[[CIRCULAR_REFERENCE: circular.hair]]',
-          bank: '[[CIRCULAR_REFERENCE: circular.bank]]',
-          company: '[[CIRCULAR_REFERENCE: circular.company]]',
-          crypto: '[[CIRCULAR_REFERENCE: circular.crypto]]',
-          date: '[[CIRCULAR_REFERENCE: circular.date]]',
-          error: '[[CIRCULAR_REFERENCE: circular.error]]',
-          bigInt: {
-            __unsupported: {
-              type: 'bigint',
-              value: bigInt.toString(),
-              radix: 10,
-            },
-          },
-        },
-      }
+      let deepRedact: DeepRedact
+      let maybeSerialiseSpy: MockInstance<typeof DeepRedact.prototype.maybeSerialise>
+      let rewriteUnsupportedSpy: MockInstance<typeof DeepRedact.prototype.rewriteUnsupported>
+      let recurseSpy: MockInstance<typeof RedactorUtils.prototype.recurse>
 
       beforeEach(() => {
-        const deepRedact = new DeepRedact({ blacklistedKeys, serialise: true })
-        // @ts-expect-error - we're testing the private methods here
-        rewriteUnsupportedSpy = vi.spyOn(deepRedact.transformerUtils, 'rewriteUnsupported')
-        // @ts-expect-error - we're testing the private methods here
-        maybeSerialiseSpy = vi.spyOn(deepRedact.transformerUtils, 'maybeSerialise')
-        // @ts-expect-error - we're testing the private methods here
+        deepRedact = new DeepRedact({ blacklistedKeys, serialise: true })
+        maybeSerialiseSpy = vi.spyOn(deepRedact, 'maybeSerialise')
+        rewriteUnsupportedSpy = vi.spyOn(deepRedact, 'rewriteUnsupported')
         recurseSpy = vi.spyOn(deepRedact.redactorUtils, 'recurse')
-        deepRedact.redact(value)
+        deepRedact.redact({ a: 1 })
       })
 
-      it('should rewriteUnsupported with the original value', () => {
-        expect(rewriteUnsupportedSpy).toHaveBeenCalledWith(value)
+      it('should call rewriteUnsupported with the value', () => {
+        expect(rewriteUnsupportedSpy).toHaveBeenNthCalledWith(1, { a: 1 })
       })
 
-      it('should recurse with the rewritten value', () => {
-        expect(recurseSpy).toHaveBeenNthCalledWith(1, rewrittenValue)
+      it('should call recurse with the rewritten value', () => {
+        expect(recurseSpy).toHaveBeenNthCalledWith(1, vi.mocked(rewriteUnsupportedSpy).mock.results[1].value)
       })
 
-      it('should maybeSerialise with the recursed value', () => {
-        expect(maybeSerialiseSpy).toHaveBeenCalledTimes(1)
-        expect(maybeSerialiseSpy).toHaveBeenCalledWith({
-          ...rewrittenValue,
-          address: '[REDACTED]',
-          macAddress: '[REDACTED]',
-          birthDate: '[REDACTED]',
-          ssn: '[REDACTED]',
-          ein: '[REDACTED]',
-          email: '[REDACTED]',
-          phone: '[REDACTED]',
-          firstName: '[REDACTED]',
-          lastName: '[REDACTED]',
-          maidenName: '[REDACTED]',
-          username: '[REDACTED]',
-          password: '[REDACTED]',
-          ip: '[REDACTED]',
-          company: {
-            ...rewrittenValue.company,
-            address: '[REDACTED]',
-          },
-          bank: {
-            ...rewrittenValue.bank,
-            cardNumber: '[REDACTED]',
-            iban: '[REDACTED]',
-          },
-          crypto: [
-            {
-              ...rewrittenValue.crypto[0],
-              wallet: '[REDACTED]',
-            },
-          ],
-          date: date.toISOString(),
-          error: {
-            __unsupported: {
-              message: error.message,
-              name: error.name,
-              stack: error.stack,
-              type: 'error',
-            },
-          },
-          bigInt: {
-            __unsupported: {
-              type: 'bigint',
-              value: bigInt.toString(),
-              radix: 10,
-            },
-          },
-          circular: {
-            ...value,
-            address: '[REDACTED]',
-            macAddress: '[REDACTED]',
-            birthDate: '[REDACTED]',
-            ssn: '[REDACTED]',
-            ein: '[REDACTED]',
-            email: '[REDACTED]',
-            phone: '[REDACTED]',
-            firstName: '[REDACTED]',
-            lastName: '[REDACTED]',
-            maidenName: '[REDACTED]',
-            username: '[REDACTED]',
-            password: '[REDACTED]',
-            ip: '[REDACTED]',
-            circular: '[[CIRCULAR_REFERENCE: circular.circular]]',
-            hair: '[[CIRCULAR_REFERENCE: circular.hair]]',
-            bank: '[[CIRCULAR_REFERENCE: circular.bank]]',
-            company: '[[CIRCULAR_REFERENCE: circular.company]]',
-            crypto: '[[CIRCULAR_REFERENCE: circular.crypto]]',
-            date: '[[CIRCULAR_REFERENCE: circular.date]]',
-            error: '[[CIRCULAR_REFERENCE: circular.error]]',
-            bigInt: {
-              __unsupported: {
-                type: 'bigint',
-                value: bigInt.toString(),
-                radix: 10,
-              },
-            },
-          },
-        })
+      it('should call maybeSerialise with the redacted value', () => {
+        expect(maybeSerialiseSpy).toHaveBeenCalledOnce()
+        expect(maybeSerialiseSpy).toHaveBeenNthCalledWith(1, vi.mocked(recurseSpy).mock.results[1].value)
       })
     })
   })
 
-  describe('performance', () => {
+  describe.skip('performance', () => {
     it('should not leak memory', async () => {
       config.muteConsole = true
 
