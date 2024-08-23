@@ -1,8 +1,4 @@
-import { BaseDeepRedactConfig } from '../../src/types'
-
-export type Blacklist = BaseDeepRedactConfig['blacklistedKeys']
-
-export const blacklistedKeys: Blacklist = [
+export const blacklistedKeys = [
   'firstName',
   'lastName',
   'surname',

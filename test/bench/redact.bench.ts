@@ -2,16 +2,15 @@ import { bench, describe } from 'vitest'
 import fastRedact from 'fast-redact'
 import { DeepRedact } from '../../src'
 import { dummyUser } from '../setup/dummyUser'
-import { Blacklist, blacklistedKeys } from '../setup/blacklist'
+import { blacklistedKeys } from '../setup/blacklist'
 
-const complexBlacklistedKeys: Blacklist = [
+const complexBlacklistedKeys = [
   'email',
   'phone',
   'password',
   'birthDate',
   'ip',
   'macAddress',
-  'wallet',
   { key: 'address', retainStructure: true },
   'iban',
   'cardNumber',
@@ -31,11 +30,22 @@ const fastRedactBlacklistedKeys = [
   'birthDate',
   'ip',
   'macAddress',
-  'crypto.*.wallet',
-  'address.*.*',
+  'address.street',
+  'address.city',
+  'address.state',
+  'address.postalCode',
+  'address.country',
+  'address.coordinates.lat',
+  'address.coordinates.lng',
   'bank.cardNumber',
   'bank.iban',
-  'company.address.*',
+  'company.address.street',
+  'company.address.city',
+  'company.address.state',
+  'company.address.postalCode',
+  'company.address.country',
+  'company.address.coordinates.lat',
+  'company.address.coordinates.lng',
   'ein',
   'ssn',
 ]

@@ -1,11 +1,26 @@
-import { DeepRedactConfig, RedactorUtils, TransformerUtils } from './types'
-import redactorUtils from './utils/redactorUtils'
-import transformUnsupported from './utils/transformUnsupported'
+import { DeepRedactConfig } from './types'
+import RedactorUtils from './utils/redactorUtils'
 
 class DeepRedact {
+  /**
+   * The redactorUtils instance to handle the redaction.
+   * @private
+   */
   private redactorUtils: RedactorUtils
 
-  private transformerUtils: TransformerUtils
+  /**
+   * A WeakSet to store circular references during redaction. Reset to null after redaction is complete.
+   * @private
+   */
+  private circularReference: WeakSet<object> | null = null
+
+  /**
+   * The configuration for the redaction.
+   * @private
+   */
+  private readonly config = {
+    serialise: false,
+  }
 
   /**
    * Create a new DeepRedact instance with the provided configuration.
@@ -14,9 +29,106 @@ class DeepRedact {
    * @param {DeepRedactConfig} config. The configuration for the redaction.
    */
   constructor(config: DeepRedactConfig) {
-    const { serialise, unsupportedTransformer, ...rest } = config
-    this.transformerUtils = transformUnsupported({ unsupportedTransformer, serialise })
-    this.redactorUtils = redactorUtils(rest)
+    const { serialise, serialize, ...rest } = config
+    this.redactorUtils = new RedactorUtils(rest)
+
+    if (serialise !== undefined) this.config.serialise = serialise
+    if (serialize !== undefined) this.config.serialise = serialize
+  }
+
+  /**
+   * A transformer for unsupported data types. If `serialise` is false, the value will be returned as is,
+   * otherwise it will transform the value into a format that is supported by JSON.stringify.
+   *
+   * Error, RegExp, and Date instances are technically supported by JSON.stringify,
+   * but they returned as empty objects, therefore they are also transformed here.
+   * @protected
+   * @param {unknown} value The value that is not supported by JSON.stringify.
+   * @returns {unknown} The value in a format that is supported by JSON.stringify.
+   */
+  protected unsupportedTransformer = (value: unknown): unknown => {
+    if (!this.config.serialise) return value
+
+    if (typeof value === 'bigint') {
+      return {
+        __unsupported: {
+          type: 'bigint',
+          value: value.toString(),
+          radix: 10,
+        },
+      }
+    }
+
+    if (value instanceof Error) {
+      return {
+        __unsupported: {
+          type: 'error',
+          name: value.name,
+          message: value.message,
+          stack: value.stack,
+        },
+      }
+    }
+
+    if (value instanceof RegExp) {
+      return {
+        __unsupported: {
+          type: 'regexp',
+          source: value.source,
+          flags: value.flags,
+        },
+      }
+    }
+
+    if (value instanceof Date) return value.toISOString()
+
+    return value
+  }
+
+  /**
+   * Calls `unsupportedTransformer` on the provided value and rewrites any circular references.
+   *
+   * Circular references will always be removed to avoid infinite recursion.
+   * When a circular reference is found, the value will be replaced with `[[CIRCULAR_REFERENCE: path.to.original.value]]`.
+   * @protected
+   * @param {unknown} value The value to rewrite.
+   * @param {string | undefined} path The path to the value in the object.
+   * @returns {unknown} The rewritten value.
+   */
+  protected rewriteUnsupported = (value: unknown, path?: string): unknown => {
+    const safeValue = this.unsupportedTransformer(value)
+    if (!(safeValue instanceof Object)) return safeValue
+    if (this.circularReference === null) this.circularReference = new WeakSet()
+    if (Array.isArray(safeValue)) {
+      return safeValue.map((val, index) => {
+        const newPath = path ? `${path}.[${index}]` : `[${index}]`
+        if (this.circularReference?.has(val)) return `[[CIRCULAR_REFERENCE: ${newPath}]]`
+        if (val instanceof Object) {
+          this.circularReference?.add(val)
+          return this.rewriteUnsupported(val, newPath)
+        }
+        return val
+      })
+    }
+    return Object.fromEntries(Object.entries(safeValue).map(([key, val]) => {
+      const newPath = path ? `${path}.${key}` : key
+      if (this.circularReference?.has(val)) return [key, `[[CIRCULAR_REFERENCE: ${newPath}]]`]
+      if (val instanceof Object) this.circularReference?.add(val)
+      return [key, this.rewriteUnsupported(val, path ? `${path}.${key}` : key)]
+    }))
+  }
+
+  /**
+   * Depending on the value of `serialise`, return the value as a JSON string or as the provided value.
+   *
+   * Also resets the `circularReference` property to null after redaction is complete.
+   * This is to ensure that the WeakSet doesn't cause memory leaks.
+   * @private
+   * @param value
+   */
+  private maybeSerialise = (value: unknown): unknown => {
+    this.circularReference = null
+    return this.config.serialise ? JSON.stringify(value) : value
   }
 
   /**
@@ -25,7 +137,7 @@ class DeepRedact {
    * @returns {unknown} The redacted value.
    */
   redact = (value: unknown): unknown => {
-    return this.transformerUtils.maybeSerialise(this.redactorUtils.recurse(this.transformerUtils.rewriteUnsupported(value)))
+    return this.maybeSerialise(this.redactorUtils.recurse(this.rewriteUnsupported(value)))
   }
 }
 

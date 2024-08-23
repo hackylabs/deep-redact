@@ -1,13 +1,13 @@
 import {
   describe, it, expect, beforeEach, vi, MockInstance,
 } from 'vitest'
-import { RedactorUtils } from '../../src/types'
-import redactorUtils from '../../src/utils/redactorUtils'
+import RedactorUtils from '../../src/utils/redactorUtils'
 
-describe('redactorUtils', () => {
+describe('RedactorUtils', () => {
   let utils: RedactorUtils
+
   beforeEach(() => {
-    utils = redactorUtils({
+    utils = new RedactorUtils({
       blacklistedKeys: ['a'],
     })
   })
@@ -15,7 +15,7 @@ describe('redactorUtils', () => {
   describe('config', () => {
     describe('when no custom config is provided', () => {
       beforeEach(() => {
-        utils = redactorUtils({})
+        utils = new RedactorUtils({})
       })
 
       it('should use the default config', () => {
@@ -36,7 +36,7 @@ describe('redactorUtils', () => {
 
     describe(' when a full custom config is provided', () => {
       beforeEach(() => {
-        utils = redactorUtils({
+        utils = new RedactorUtils({
           blacklistedKeys: ['a', /b/],
           stringTests: [/^Hello/],
           fuzzyKeyMatch: true,
@@ -85,7 +85,7 @@ describe('redactorUtils', () => {
     describe('when blacklistedKeys are provided as objects', () => {
       describe('when only a key is provided but has other root config', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             fuzzyKeyMatch: true,
             caseSensitiveKeyMatch: false,
             retainStructure: true,
@@ -115,7 +115,7 @@ describe('redactorUtils', () => {
 
       describe('when only a key is provided and no other root config', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: [
               {
                 key: 'a',
@@ -140,7 +140,7 @@ describe('redactorUtils', () => {
 
       describe('when a full object is provided', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: [
               {
                 key: 'a',
@@ -173,73 +173,72 @@ describe('redactorUtils', () => {
   describe('normaliseString', () => {
     describe('when the string is uppercase', () => {
       it('should return the string in lowercase', () => {
-        expect(utils.normaliseString('HELLO')).toBe('hello')
+        expect(RedactorUtils.normaliseString('HELLO')).toBe('hello')
       })
     })
 
     describe('when the string is lowercase', () => {
       it('should return the string in lowercase', () => {
-        expect(utils.normaliseString('hello')).toBe('hello')
+        expect(RedactorUtils.normaliseString('hello')).toBe('hello')
       })
     })
 
     describe('when the string is camelCase', () => {
       it('should return the string in lowercase', () => {
-        expect(utils.normaliseString('helloWorld')).toBe('helloworld')
+        expect(RedactorUtils.normaliseString('helloWorld')).toBe('helloworld')
       })
     })
 
     describe('when the string is snake_case', () => {
       it('should return the string in lowercase', () => {
-        expect(utils.normaliseString('hello_world')).toBe('hello_world')
+        expect(RedactorUtils.normaliseString('hello_world')).toBe('hello_world')
       })
     })
 
     describe('when the string is kebab-case', () => {
       it('should return the string in lowercase', () => {
-        expect(utils.normaliseString('hello-world')).toBe('helloworld')
+        expect(RedactorUtils.normaliseString('hello-world')).toBe('helloworld')
       })
     })
 
     describe('when the string is PascalCase', () => {
       it('should return the string in lowercase', () => {
-        expect(utils.normaliseString('HelloWorld')).toBe('helloworld')
+        expect(RedactorUtils.normaliseString('HelloWorld')).toBe('helloworld')
       })
     })
 
     describe('when the string is a number', () => {
       it('should return the string in lowercase', () => {
-        expect(utils.normaliseString('123')).toBe('123')
+        expect(RedactorUtils.normaliseString('123')).toBe('123')
       })
     })
 
     describe('when the string includes spaces', () => {
       it('should return the string in lowercase', () => {
-        expect(utils.normaliseString('Hello World')).toBe('helloworld')
+        expect(RedactorUtils.normaliseString('Hello World')).toBe('helloworld')
       })
     })
 
     describe('when the string includes special characters', () => {
       it('should return the string in lowercase', () => {
-        expect(utils.normaliseString('HelloWorld!@£$%^&*()+=¡€#¢∞§¶•ªº`~,<.>/?\'":;{}[]\\|')).toBe('helloworld')
+        expect(RedactorUtils.normaliseString('HelloWorld!@£$%^&*()+=¡€#¢∞§¶•ªº`~,<.>/?\'":;{}[]\\|')).toBe('helloworld')
       })
     })
   })
 
   describe('complexKeyMatch', () => {
-    let normaliseStringSpy: MockInstance<typeof utils.normaliseString>
+    let normaliseStringSpy: MockInstance<typeof RedactorUtils.normaliseString>
 
     describe('when the blacklistKeyConfig.key is a RegExp', () => {
       let result: boolean
 
       describe('when the key matches the RegExp', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: [{ key: /^Hello/ }],
           })
-          normaliseStringSpy = vi.spyOn(utils, 'normaliseString')
-          // @ts-expect-error - Testing complexKeyMatch
-          result = utils.complexKeyMatch('HelloWorld', utils.config.blacklistedKeys[0])
+          normaliseStringSpy = vi.spyOn(RedactorUtils, 'normaliseString')
+          result = RedactorUtils.complexKeyMatch('HelloWorld', utils.config.blacklistedKeys[0])
         })
 
         it('should not call normaliseString', () => {
@@ -253,12 +252,11 @@ describe('redactorUtils', () => {
 
       describe('when the key does not match the RegExp', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: [{ key: /^Hello/ }],
           })
-          normaliseStringSpy = vi.spyOn(utils, 'normaliseString')
-          // @ts-expect-error - Testing complexKeyMatch
-          result = utils.complexKeyMatch('World', utils.config.blacklistedKeys[0])
+          normaliseStringSpy = vi.spyOn(RedactorUtils, 'normaliseString')
+          result = RedactorUtils.complexKeyMatch('World', utils.config.blacklistedKeys[0])
         })
 
         it('should not call normaliseString', () => {
@@ -276,16 +274,16 @@ describe('redactorUtils', () => {
 
       describe('when matching exactly', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: [{ key: 'Hello', caseSensitiveKeyMatch: true, fuzzyKeyMatch: false }],
           })
-          normaliseStringSpy = vi.spyOn(utils, 'normaliseString')
+          normaliseStringSpy = vi.spyOn(RedactorUtils, 'normaliseString')
         })
 
         describe('when the key matches', () => {
           beforeEach(() => {
             // @ts-expect-error - Testing complexKeyMatch
-            result = utils.complexKeyMatch('Hello', utils.config.blacklistedKeys[0])
+            result = RedactorUtils.complexKeyMatch('Hello', utils.config.blacklistedKeys[0])
           })
 
           it('should not call normaliseString', () => {
@@ -299,8 +297,7 @@ describe('redactorUtils', () => {
 
         describe('when the key does not match', () => {
           beforeEach(() => {
-            // @ts-expect-error - Testing complexKeyMatch
-            result = utils.complexKeyMatch('World', utils.config.blacklistedKeys[0])
+            result = RedactorUtils.complexKeyMatch('World', utils.config.blacklistedKeys[0])
           })
 
           it('should not call normaliseString', () => {
@@ -315,16 +312,15 @@ describe('redactorUtils', () => {
 
       describe('when matching the key case-insensitive and non-fuzzy', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: [{ key: 'Hello', caseSensitiveKeyMatch: false, fuzzyKeyMatch: false }],
           })
-          normaliseStringSpy = vi.spyOn(utils, 'normaliseString')
+          normaliseStringSpy = vi.spyOn(RedactorUtils, 'normaliseString')
         })
 
         describe('when the key matches', () => {
           beforeEach(() => {
-            // @ts-expect-error - Testing complexKeyMatch
-            result = utils.complexKeyMatch('hello', utils.config.blacklistedKeys[0])
+            result = RedactorUtils.complexKeyMatch('hello', utils.config.blacklistedKeys[0])
           })
 
           it('should call normaliseString', () => {
@@ -339,7 +335,7 @@ describe('redactorUtils', () => {
         describe('when the key does not match', () => {
           beforeEach(() => {
             // @ts-expect-error - Testing complexKeyMatch
-            result = utils.complexKeyMatch('World', utils.config.blacklistedKeys[0])
+            result = RedactorUtils.complexKeyMatch('World', utils.config.blacklistedKeys[0])
           })
 
           it('should call normaliseString', () => {
@@ -354,16 +350,15 @@ describe('redactorUtils', () => {
 
       describe('when matching the key fuzzy and case-sensitive', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: [{ key: 'hello', caseSensitiveKeyMatch: true, fuzzyKeyMatch: true }],
           })
-          normaliseStringSpy = vi.spyOn(utils, 'normaliseString')
+          normaliseStringSpy = vi.spyOn(RedactorUtils, 'normaliseString')
         })
 
         describe('when the key is a match', () => {
           beforeEach(() => {
-            // @ts-expect-error - Testing complexKeyMatch
-            result = utils.complexKeyMatch('helloworld', utils.config.blacklistedKeys[0])
+            result = RedactorUtils.complexKeyMatch('helloworld', utils.config.blacklistedKeys[0])
           })
 
           it('should not call normaliseString', () => {
@@ -377,8 +372,7 @@ describe('redactorUtils', () => {
 
         describe('when the key is not a match', () => {
           beforeEach(() => {
-            // @ts-expect-error - Testing complexKeyMatch
-            result = utils.complexKeyMatch('HelloWorld', utils.config.blacklistedKeys[0])
+            result = RedactorUtils.complexKeyMatch('HelloWorld', utils.config.blacklistedKeys[0])
           })
 
           it('should not call normaliseString', () => {
@@ -393,16 +387,15 @@ describe('redactorUtils', () => {
 
       describe('when matching the the key case-insensitive and fuzzy', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: [{ key: 'hello', caseSensitiveKeyMatch: false, fuzzyKeyMatch: true }],
           })
-          normaliseStringSpy = vi.spyOn(utils, 'normaliseString')
+          normaliseStringSpy = vi.spyOn(RedactorUtils, 'normaliseString')
         })
 
         describe('when the key is a match', () => {
           beforeEach(() => {
-            // @ts-expect-error - Testing complexKeyMatch
-            result = utils.complexKeyMatch('HelloWorld', utils.config.blacklistedKeys[0])
+            result = RedactorUtils.complexKeyMatch('HelloWorld', utils.config.blacklistedKeys[0])
           })
 
           it('should call normaliseString', () => {
@@ -416,8 +409,7 @@ describe('redactorUtils', () => {
 
         describe('when the key is not a match', () => {
           beforeEach(() => {
-            // @ts-expect-error - Testing complexKeyMatch
-            result = utils.complexKeyMatch('World', utils.config.blacklistedKeys[0])
+            result = RedactorUtils.complexKeyMatch('World', utils.config.blacklistedKeys[0])
           })
 
           it('should call normaliseString', () => {
@@ -428,71 +420,6 @@ describe('redactorUtils', () => {
             expect(result).toBe(false)
           })
         })
-      })
-    })
-  })
-
-  describe('matchKeyByRootConfig', () => {
-    let complexKeyMatchSpy: MockInstance<typeof utils.complexKeyMatch>
-    let result: boolean
-
-    describe('when root config is default', () => {
-      beforeEach(() => {
-        utils = redactorUtils({ blacklistedKeys: ['b'] })
-        complexKeyMatchSpy = vi.spyOn(utils, 'complexKeyMatch')
-        result = utils.matchKeyByRootConfig('a', 'a')
-      })
-
-      it('should call complexKeyMatch', () => {
-        expect(complexKeyMatchSpy).toHaveBeenCalledWith('a', {
-          key: 'a',
-          caseSensitiveKeyMatch: true,
-          fuzzyKeyMatch: false,
-        })
-      })
-
-      it('should return true', () => {
-        expect(result).toBe(true)
-      })
-    })
-
-    describe('when root config set to fuzzyKeyMatch', () => {
-      beforeEach(() => {
-        utils = redactorUtils({ blacklistedKeys: ['b'], fuzzyKeyMatch: true })
-        complexKeyMatchSpy = vi.spyOn(utils, 'complexKeyMatch')
-        result = utils.matchKeyByRootConfig('a', 'a')
-      })
-
-      it('should call complexKeyMatch', () => {
-        expect(complexKeyMatchSpy).toHaveBeenCalledWith('a', {
-          key: 'a',
-          caseSensitiveKeyMatch: true,
-          fuzzyKeyMatch: true,
-        })
-      })
-
-      it('should return true', () => {
-        expect(result).toBe(true)
-      })
-    })
-
-    describe('when root config set to caseSensitiveKeyMatch', () => {
-      beforeEach(() => {
-        utils = redactorUtils({ blacklistedKeys: ['b'], caseSensitiveKeyMatch: false })
-        complexKeyMatchSpy = vi.spyOn(utils, 'complexKeyMatch')
-        result = utils.matchKeyByRootConfig('a', 'a')
-      })
-
-      it('should call complexKeyMatch', () => {
-        expect(complexKeyMatchSpy).toHaveBeenCalledWith('a', {
-          key: 'a',
-          caseSensitiveKeyMatch: false,
-          fuzzyKeyMatch: false,
-        })
-      })
-
-      it('should return true', () => {
-        expect(result).toBe(true)
       })
     })
   })
@@ -514,6 +441,7 @@ describe('redactorUtils', () => {
     describe('when the key is in the blacklistedKeys', () => {
       describe('when the key is a string', () => {
         it('should return the blacklisted key config', () => {
+          // @ts-expect-error - Testing getBlacklistedKeyConfig
           expect(utils.getBlacklistedKeyConfig('a')).toEqual({
             key: 'a',
             caseSensitiveKeyMatch: true,
@@ -527,13 +455,12 @@ describe('redactorUtils', () => {
 
       describe('when the key is a RegExp', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: [/a/],
           })
         })
 
         it('should return the blacklisted key config', () => {
-          // @ts-expect-error - Testing getBlacklistedKeyConfig
           const config: RegExp = utils.config.blacklistedKeys[0]
           const regex = /a/
           expect(config.source).toEqual(regex.source)
@@ -551,7 +478,7 @@ describe('redactorUtils', () => {
 
       describe('when the key is a blacklistedConfig object', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: [{ key: 'a' }],
           })
         })
@@ -571,12 +498,12 @@ describe('redactorUtils', () => {
   })
 
   describe('shouldRedactObjectValue', () => {
-    let complexKeyMatchSpy: MockInstance<typeof utils.complexKeyMatch>
+    let complexKeyMatchSpy: MockInstance<typeof RedactorUtils.complexKeyMatch>
     let result: boolean
 
     describe('when the key is an empty string', () => {
       beforeEach(() => {
-        complexKeyMatchSpy = vi.spyOn(utils, 'complexKeyMatch')
+        complexKeyMatchSpy = vi.spyOn(RedactorUtils, 'complexKeyMatch')
         result = utils.shouldRedactObjectValue('')
       })
 
@@ -591,10 +518,10 @@ describe('redactorUtils', () => {
 
     describe('when the key is not in the blacklistedKeys', () => {
       beforeEach(() => {
-        utils = redactorUtils({
+        utils = new RedactorUtils({
           blacklistedKeys: ['a'],
         })
-        complexKeyMatchSpy = vi.spyOn(utils, 'complexKeyMatch')
+        complexKeyMatchSpy = vi.spyOn(RedactorUtils, 'complexKeyMatch')
         result = utils.shouldRedactObjectValue('foo')
       })
 
@@ -618,7 +545,7 @@ describe('redactorUtils', () => {
     describe('when the key is in the blacklistedKeys', () => {
       describe('when the key is a blacklistedConfig object', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: [{ key: 'a' }],
           })
         })
@@ -632,7 +559,7 @@ describe('redactorUtils', () => {
 
   describe('redactString', () => {
     beforeEach(() => {
-      utils = redactorUtils({
+      utils = new RedactorUtils({
         stringTests: [/^Hello/],
       })
     })
@@ -645,7 +572,6 @@ describe('redactorUtils', () => {
 
     describe('when the value is not a string', () => {
       it('should return the value', () => {
-        // @ts-expect-error - Testing redactString
         expect(utils.redactString(123, '[REDACTED]', false, false)).toBe(123)
       })
     })
@@ -672,7 +598,7 @@ describe('redactorUtils', () => {
 
         describe('when replaceStringByLength is true', () => {
           beforeEach(() => {
-            utils = redactorUtils({
+            utils = new RedactorUtils({
               stringTests: [/^Hello/],
               replaceStringByLength: true,
             })
@@ -693,6 +619,7 @@ describe('redactorUtils', () => {
 
     describe('when the key is an empty string', () => {
       it('should return the default recursion config', () => {
+        // @ts-expect-error - Testing getRecursionConfig
         expect(utils.getRecursionConfig('')).toEqual({
           remove: false,
           replacement: '[REDACTED]',
@@ -703,7 +630,7 @@ describe('redactorUtils', () => {
 
     describe('when the key is not in the blacklistedKeys', () => {
       beforeEach(() => {
-        utils = redactorUtils({
+        utils = new RedactorUtils({
           blacklistedKeys: ['a'],
         })
         getBlacklistedKeyConfigSpy = vi.spyOn(utils, 'getBlacklistedKeyConfig')
@@ -726,7 +653,7 @@ describe('redactorUtils', () => {
     describe('when the key is in the blacklistedKeys', () => {
       describe('when the key is a string', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: ['a'],
           })
           getBlacklistedKeyConfigSpy = vi.spyOn(utils, 'getBlacklistedKeyConfig')
@@ -748,7 +675,7 @@ describe('redactorUtils', () => {
 
       describe('when the key is a RegExp', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: [/a/],
           })
           getBlacklistedKeyConfigSpy = vi.spyOn(utils, 'getBlacklistedKeyConfig')
@@ -778,7 +705,7 @@ describe('redactorUtils', () => {
       describe('when the value is not a string', () => {
         describe('when the value is redacted', () => {
           beforeEach(() => {
-            utils = redactorUtils({
+            utils = new RedactorUtils({
               blacklistedKeys: [],
               types: ['string', 'number'],
             })
@@ -797,12 +724,12 @@ describe('redactorUtils', () => {
 
         describe('when the value is not redacted', () => {
           beforeEach(() => {
-            utils = redactorUtils({
+            utils = new RedactorUtils({
               blacklistedKeys: [],
               types: ['string', 'number'],
             })
             redactStringSpy = vi.spyOn(utils, 'redactString')
-            result = utils.redactPrimitive(123, '[REDACTED]', false)
+            result = utils.redactPrimitive(123, '[REDACTED]', false, false)
           })
 
           it('should not call redactString', () => {
@@ -818,11 +745,11 @@ describe('redactorUtils', () => {
       describe('when the value is a string', () => {
         describe('when the value is not redacted', () => {
           beforeEach(() => {
-            utils = redactorUtils({
+            utils = new RedactorUtils({
               stringTests: [/^Hello/],
             })
             redactStringSpy = vi.spyOn(utils, 'redactString')
-            result = utils.redactPrimitive('World', '[REDACTED]', true)
+            result = utils.redactPrimitive('World', '[REDACTED]', true, false)
           })
 
           it('should call redactString with correct arguments', () => {
@@ -836,7 +763,7 @@ describe('redactorUtils', () => {
 
         describe('when the value is redacted', () => {
           beforeEach(() => {
-            utils = redactorUtils({
+            utils = new RedactorUtils({
               stringTests: [/^Hello/],
             })
             redactStringSpy = vi.spyOn(utils, 'redactString')
@@ -858,7 +785,7 @@ describe('redactorUtils', () => {
       describe('when the value is not a string', () => {
         describe('when the value is redacted', () => {
           beforeEach(() => {
-            utils = redactorUtils({
+            utils = new RedactorUtils({
               blacklistedKeys: [],
               types: ['string', 'number'],
               remove: true,
@@ -878,7 +805,7 @@ describe('redactorUtils', () => {
 
         describe('when the value is not redacted', () => {
           beforeEach(() => {
-            utils = redactorUtils({
+            utils = new RedactorUtils({
               stringTests: [/^Hello/],
               remove: true,
             })
@@ -901,7 +828,7 @@ describe('redactorUtils', () => {
       let replaceFn: (value: unknown) => string
       beforeEach(() => {
         replaceFn = vi.fn((value: unknown) => `[REDACTED ${typeof value}]`)
-        utils = redactorUtils({
+        utils = new RedactorUtils({
           replacement: replaceFn,
           types: ['string', 'number'],
         })
@@ -924,7 +851,7 @@ describe('redactorUtils', () => {
 
         describe('when the value is not redacted', () => {
           beforeEach(() => {
-            result = utils.redactPrimitive(123, replaceFn, false)
+            result = utils.redactPrimitive(123, replaceFn, false, false)
           })
 
           it('should not call the replace function', () => {
@@ -954,7 +881,7 @@ describe('redactorUtils', () => {
 
         describe('when the value is not redacted', () => {
           beforeEach(() => {
-            result = utils.redactPrimitive('Hello, world!', replaceFn, false)
+            result = utils.redactPrimitive('Hello, world!', replaceFn, false, false)
           })
 
           it('should not call the replace function', () => {
@@ -981,7 +908,7 @@ describe('redactorUtils', () => {
 
     describe('when the array is not empty', () => {
       beforeEach(() => {
-        utils = redactorUtils({
+        utils = new RedactorUtils({
           blacklistedKeys: ['a'],
           types: ['string', 'number'],
         })
@@ -1056,7 +983,7 @@ describe('redactorUtils', () => {
             replacement: '[REDACTED]',
             remove: false,
           }
-          expect(getRecursionConfigSpy).toHaveBeenNthCalledWith(1, null)
+          expect(getRecursionConfigSpy).toHaveBeenNthCalledWith(1, undefined)
           expect(getRecursionConfigSpy).toHaveNthReturnedWith(1, blacklistKeyObj)
           expect(getRecursionConfigSpy).toHaveBeenNthCalledWith(2, 'a')
           expect(getRecursionConfigSpy).toHaveNthReturnedWith(2, blacklistKeyObj)
@@ -1070,7 +997,7 @@ describe('redactorUtils', () => {
         })
 
         it('should call redactObject', () => {
-          expect(redactObjectSpy).toHaveBeenNthCalledWith(1, { a: { b: { c: 'd' } } }, null, false)
+          expect(redactObjectSpy).toHaveBeenNthCalledWith(1, { a: { b: { c: 'd' } } }, undefined, undefined)
           expect(redactObjectSpy).toHaveNthReturnedWith(1, { a: '[REDACTED]' })
         })
 
@@ -1085,7 +1012,7 @@ describe('redactorUtils', () => {
 
       describe('when the value is an array', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: ['b'],
           })
           shouldRedactObjectValueSpy = vi.spyOn(utils, 'shouldRedactObjectValue')
@@ -1126,7 +1053,7 @@ describe('redactorUtils', () => {
 
       describe('when the value is neither an object nor an array', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             stringTests: [/^Hello/],
           })
           getRecursionConfigSpy = vi.spyOn(utils, 'getRecursionConfig')
@@ -1161,7 +1088,7 @@ describe('redactorUtils', () => {
 
       describe('when the value is an object of non-string values', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: ['a'],
             types: ['number'],
           })
@@ -1189,7 +1116,7 @@ describe('redactorUtils', () => {
     describe('when removing', () => {
       describe('via root config', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: ['a'],
             remove: true,
           })
@@ -1220,7 +1147,7 @@ describe('redactorUtils', () => {
 
         describe('when the value is neither an object nor an array', () => {
           beforeEach(() => {
-            utils = redactorUtils({
+            utils = new RedactorUtils({
               stringTests: [/^Hello/],
               remove: true,
             })
@@ -1239,7 +1166,7 @@ describe('redactorUtils', () => {
 
         describe('when the value is an object of non-string values', () => {
           beforeEach(() => {
-            utils = redactorUtils({
+            utils = new RedactorUtils({
               blacklistedKeys: ['a'],
               types: ['number'],
               remove: true,
@@ -1265,7 +1192,7 @@ describe('redactorUtils', () => {
 
       describe('via getRecursionConfig', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: [{ key: 'a', remove: true }],
           })
         })
@@ -1300,7 +1227,7 @@ describe('redactorUtils', () => {
 
         describe('when the value is an object of non-string values', () => {
           beforeEach(() => {
-            utils = redactorUtils({
+            utils = new RedactorUtils({
               blacklistedKeys: [{ key: 'a', remove: true }],
               types: ['number'],
             })
@@ -1327,7 +1254,7 @@ describe('redactorUtils', () => {
     describe('when retaining structure', () => {
       describe('via root config', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: ['a'],
             retainStructure: true,
           })
@@ -1365,7 +1292,7 @@ describe('redactorUtils', () => {
 
       describe('via blacklistedKeyConfig', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: [{ key: 'a', retainStructure: true }],
           })
           recurseSpy = vi.spyOn(utils, 'recurse')
@@ -1404,7 +1331,7 @@ describe('redactorUtils', () => {
     describe('when using a custom replacement string', () => {
       describe('via root config', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: ['a'],
             replacement: '[SECRET]',
           })
@@ -1438,7 +1365,7 @@ describe('redactorUtils', () => {
 
       describe('via blacklistedKeyConfig', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: [{ key: 'a', replacement: '[SECRET]' }],
           })
         })
@@ -1473,7 +1400,7 @@ describe('redactorUtils', () => {
     describe('when using a custom replacement function', () => {
       describe('via root config', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: ['a'],
             replacement: (value) => `[REDACTED ${typeof value}]`,
           })
@@ -1507,7 +1434,7 @@ describe('redactorUtils', () => {
 
       describe('via blacklistedKeyConfig', () => {
         beforeEach(() => {
-          utils = redactorUtils({
+          utils = new RedactorUtils({
             blacklistedKeys: [{ key: 'a', replacement: (value) => `[REDACTED ${typeof value}]` }],
           })
         })
