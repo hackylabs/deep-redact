@@ -53,34 +53,15 @@ const fastRedactBlacklistedKeys = [
 const fastRedactArrayBlacklistedKeys = fastRedactBlacklistedKeys.map((key) => `*.${key}`)
 
 describe('Redaction benchmark', () => {
-  bench('JSON.stringify, tiny object', async () => {
-    await new Promise((resolve) => {
-      resolve(JSON.stringify({ a: '1' }))
-    })
-  })
-
   bench('JSON.stringify, large object', async () => {
     await new Promise((resolve) => {
       resolve(JSON.stringify(dummyUser))
     })
   })
 
-  bench('JSON.stringify, 1000 tiny objects', async () => {
-    await new Promise((resolve) => {
-      resolve(JSON.stringify(Array(1000).fill({ a: '1' })))
-    })
-  })
-
   bench('JSON.stringify, 1000 large objects', async () => {
     await new Promise((resolve) => {
       resolve(JSON.stringify(Array(1000).fill(dummyUser)))
-    })
-  })
-
-  bench('fast redact, tiny object', async () => {
-    await new Promise((resolve) => {
-      const redact = fastRedact({ paths: ['a'] })
-      resolve(redact({ a: '1' }))
     })
   })
 
@@ -91,13 +72,6 @@ describe('Redaction benchmark', () => {
     })
   })
 
-  bench('fast redact, 1000 tiny objects', async () => {
-    await new Promise((resolve) => {
-      const redact = fastRedact({ paths: ['*.a'] })
-      resolve(redact(Array(1000).fill({ a: '1' })))
-    })
-  })
-
   bench('fast redact, 1000 large objects', async () => {
     await new Promise((resolve) => {
       const redact = fastRedact({ paths: fastRedactArrayBlacklistedKeys })
@@ -105,24 +79,10 @@ describe('Redaction benchmark', () => {
     })
   })
 
-  bench('DeepRedact, default config, tiny object', async () => {
-    await new Promise((resolve) => {
-      const redaction = new DeepRedact({ blacklistedKeys: ['a'] })
-      resolve(redaction.redact({ a: '1' }))
-    })
-  })
-
   bench('DeepRedact, default config, large object', async () => {
     await new Promise((resolve) => {
       const redaction = new DeepRedact({ blacklistedKeys })
       resolve(redaction.redact(dummyUser))
-    })
-  })
-
-  bench('DeepRedact, default config, 1000 tiny objects', async () => {
-    await new Promise((resolve) => {
-      const redaction = new DeepRedact({ blacklistedKeys: ['a'] })
-      resolve(redaction.redact(Array(1000).fill({ a: '1' })))
     })
   })
 

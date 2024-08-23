@@ -15,9 +15,9 @@ export const updateBenchChart = () => {
     .benchmarks
     .filter(({ name }) => {
       return [
-        'JSON.stringify, tiny object',
-        'DeepRedact, default config, tiny object',
-        'fast redact, tiny object',
+        'JSON.stringify, large object',
+        'DeepRedact, default config, large object',
+        'fast redact, large object',
       ].includes(name)
     })
   benchmarkData.sort((a, b) => a.hz - b.hz)
@@ -25,9 +25,9 @@ export const updateBenchChart = () => {
   const comparison = benchmarkData.map(({ name, hz }) => ({
     rate: hz / benchmarkData[0].hz,
     name: name
-      .replace('JSON.stringify, tiny object', `JSON.stringify\n(no redaction, tiny object)\n(${Intl.NumberFormat().format(hz)})`)
-      .replace('DeepRedact, default config, tiny object', `Deep Redact\n(default config, tiny object)\n(${Intl.NumberFormat().format(hz)})`)
-      .replace('fast redact, tiny object', `Fast Redact\n(default config, tiny object)\n(${Intl.NumberFormat().format(hz)})`),
+      .replace('JSON.stringify, large object', `JSON.stringify\n(no redaction)\n(${Intl.NumberFormat().format(hz)})`)
+      .replace('DeepRedact, default config, large object', `Deep Redact\n(default config)\n(${Intl.NumberFormat().format(hz)})`)
+      .replace('fast redact, large object', `Fast Redact\n(default config)\n(${Intl.NumberFormat().format(hz)})`),
   }))
 
   new ChartJSImage()
