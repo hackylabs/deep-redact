@@ -24,7 +24,7 @@ library outside of your global logging/error-reporting libraries.</h4>
 
 ```typescript
 // ./src/example.ts
-import { DeepRedact } from '@hackylabs/deep-redact'; // If you're using CommonJS, import with require('deep-redact') instead. Both CommonJS and ESM support named and default imports.
+import {DeepRedact} from 'deep-redact'; // If you're using CommonJS, import with require('deep-redact') instead. Both CommonJS and ESM support named and default imports.
 
 const redaction = new DeepRedact({
   replacement: '*',
@@ -86,22 +86,23 @@ library available. Neither JSON.stringify nor fast-redact offer the same level o
 
 | scenario | ops / sec | op duration (ms) | margin of error | sample count |
 | --- | --- | --- | --- | --- |
-| JSON.stringify, tiny object | 3878848.93 | 0.0002578084 | 0 | 1939425 |
-| DeepRedact, default config, tiny object | 1530332.28 | 0.0006534529 | 0.00001 | 765167 |
-| JSON.stringify, large object | 295526.11 | 0.0033837958 | 0.00001 | 147764 |
-| fast redact, tiny object | 228053.93 | 0.0043849277 | 0.00002 | 114027 |
-| DeepRedact, default config, large object | 92714.28 | 0.0107858256 | 0.00006 | 46358 |
-| DeepRedact, remove item, single object | 92349.45 | 0.0108284349 | 0.00005 | 46175 |
-| DeepRedact, fuzzy matching, single object | 89414.82 | 0.0111838282 | 0.00007 | 44708 |
-| DeepRedact, fuzzy and case insensitive matching, single object | 87852.36 | 0.0113827334 | 0.00006 | 43927 |
-| DeepRedact, case insensitive matching, single object | 86797.23 | 0.0115211045 | 0.00006 | 43399 |
-| DeepRedact, replace string by length, single object | 84150.95 | 0.011883407 | 0.00006 | 42076 |
-| DeepRedact, config per key, single object | 71236.85 | 0.0140376786 | 0.00009 | 35619 |
-| DeepRedact, retain structure, single object | 69738.86 | 0.0143392076 | 0.00007 | 34870 |
-| fast redact, large object | 19480.95 | 0.0513321865 | 0.00038 | 9741 |
-| JSON.stringify, 1000 tiny objects | 16003.16 | 0.0624876526 | 0.00017 | 8002 |
-| DeepRedact, default config, 1000 tiny objects | 15827.22 | 0.0631822932 | 0.00043 | 7914 |
-| DeepRedact, default config, 1000 large objects | 13705.52 | 0.072963285 | 0.00054 | 6853 |
-| fast redact, 1000 tiny objects | 7430.88 | 0.1345735164 | 0.00067 | 3716 |
-| JSON.stringify, 1000 large objects | 423.52 | 2.3611880519 | 0.00982 | 212 |
-| fast redact, 1000 large objects | 77.32 | 12.9327971026 | 0.25939 | 39 |
+| JSON.stringify, tiny object | 3735441.43 | 0.000267706 | 0 | 1867721 |
+| JSON.stringify, large object | 299036.08 | 0.0033440781 | 0.00001 | 149519 |
+| DeepRedact, default config, tiny object | 248087.76 | 0.0040308317 | 0.00027 | 124044 |
+| fast redact, tiny object | 228499.09 | 0.004376385 | 0.00002 | 114250 |
+| DeepRedact, remove item, single object | 35416.49 | 0.028235434 | 0.00038 | 17709 |
+| DeepRedact, default config, large object | 29092.74 | 0.0343728323 | 0.00043 | 14547 |
+| DeepRedact, custom replacer function, single object | 28316.03 | 0.0353156839 | 0.00046 | 14159 |
+| DeepRedact, replace string by length, single object | 27699.42 | 0.0361018399 | 0.00047 | 13850 |
+| DeepRedact, retain structure, single object | 23340.43 | 0.0428441145 | 0.0006 | 11671 |
+| DeepRedact, config per key, single object | 23160.31 | 0.0431773182 | 0.00048 | 11581 |
+| DeepRedact, fuzzy matching, single object | 22014.2 | 0.0454252213 | 0.00055 | 11008 |
+| fast redact, large object | 20169.37 | 0.0495801345 | 0.0003 | 10085 |
+| JSON.stringify, 1000 tiny objects | 15923.87 | 0.0627988067 | 0.00019 | 7962 |
+| DeepRedact, default config, 1000 tiny objects | 14661.27 | 0.0682069089 | 0.00102 | 7331 |
+| DeepRedact, default config, 1000 large objects | 9969.23 | 0.1003086078 | 0.00147 | 4987 |
+| fast redact, 1000 tiny objects | 7481.15 | 0.1336692531 | 0.00094 | 3741 |
+| DeepRedact, case insensitive matching, single object | 6435.2 | 0.1553953981 | 0.00124 | 3218 |
+| DeepRedact, fuzzy and case insensitive matching, single object | 6021.99 | 0.1660580933 | 0.00128 | 3012 |
+| JSON.stringify, 1000 large objects | 426.99 | 2.3419540467 | 0.00903 | 214 |
+| fast redact, 1000 large objects | 77.09 | 12.9715587436 | 0.12423 | 39 |

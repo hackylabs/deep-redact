@@ -5,6 +5,7 @@
   "private": false,
   "license": "MIT",
   "author": "Benjamin Green (https://bengreen.dev)",
+  "types": "./dist/esm/index.d.ts",
   "keywords": [
     "redact",
     "redaction",
