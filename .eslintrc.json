@@ -9,8 +9,8 @@
   "rules": {
     "no-restricted-exports": ["off"],
     "import/prefer-default-export": "off",
+    "import/no-default-export": "off",
     "import/no-extraneous-dependencies": "off",
-    "import/no-default-export": "error",
     "@typescript-eslint/semi": ["error", "never"],
     "@typescript-eslint/quotes": ["error", "single"],
     "@typescript-eslint/indent": ["error", 2],
@@ -19,13 +19,5 @@
     "indent": ["error", 2],
     "max-len": "off",
     "arrow-body-style": "off"
-  },
-  "overrides": [
-    {
-      "files": ["vitest.config.ts", "src/index.ts"],
-      "rules": {
-        "import/no-default-export": "off"
-      }
-    }
-  ]
+  }
 }

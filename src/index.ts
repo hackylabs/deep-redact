@@ -1,65 +1,51 @@
-export type Types = 'string' | 'number' | 'bigint' | 'boolean' | 'object' | 'function'
-
-export type UnsupportedTransformer = (value: unknown) => unknown
-
-export interface BlacklistKeyConfig {
-  fuzzyKeyMatch?: boolean
-  caseSensitiveKeyMatch?: boolean
-  retainStructure?: boolean
-  remove?: boolean
-  key: string | RegExp
-}
-
-export interface DeepRedactConfig {
-  blacklistedKeys?: Array<string | BlacklistKeyConfig>
-  stringTests?: RegExp[]
-  fuzzyKeyMatch?: boolean
-  caseSensitiveKeyMatch?: boolean
-  retainStructure?: boolean
-  replaceStringByLength?: boolean
-  replacement?: string
-  remove?: boolean
-  types?: Types[]
-  serialise?: boolean,
-  unsupportedTransformer?: UnsupportedTransformer
-}
-
-const normaliseString = (key: string): string => key.toLowerCase().replace(/\W/g, '')
+import { DeepRedactConfig } from './types'
+import RedactorUtils from './utils/redactorUtils'
 
 class DeepRedact {
+  /**
+   * The redactorUtils instance to handle the redaction.
+   * @private
+   */
+  private redactorUtils: RedactorUtils
+
+  /**
+   * A WeakSet to store circular references during redaction. Reset to null after redaction is complete.
+   * @private
+   */
   private circularReference: WeakSet<object> | null = null
 
-  private readonly config: Required<Omit<DeepRedactConfig, 'unsupportedTransformer'>> & Partial<Pick<DeepRedactConfig, 'unsupportedTransformer'>> = {
-    blacklistedKeys: [],
-    stringTests: [],
-    fuzzyKeyMatch: false,
-    caseSensitiveKeyMatch: true,
-    retainStructure: false,
-    remove: false,
-    replaceStringByLength: false,
-    replacement: '[REDACTED]',
-    types: ['string'],
-    serialise: true,
+  /**
+   * The configuration for the redaction.
+   * @private
+   */
+  private readonly config = {
+    serialise: false,
   }
 
+  /**
+   * Create a new DeepRedact instance with the provided configuration.
+   * The configuration will be merged with the default configuration.
+   * `blacklistedKeys` will be normalised to an array inherited from the default configuration as the default values.
+   * @param {DeepRedactConfig} config. The configuration for the redaction.
+   */
   constructor(config: DeepRedactConfig) {
-    this.config = {
-      ...this.config,
-      ...config,
-      blacklistedKeys: config.blacklistedKeys?.map((key) => {
-        if (typeof key === 'string') return key
+    const { serialise, serialize, ...rest } = config
+    this.redactorUtils = new RedactorUtils(rest)
 
-        return {
-          fuzzyKeyMatch: this.config.fuzzyKeyMatch,
-          caseSensitiveKeyMatch: this.config.caseSensitiveKeyMatch,
-          retainStructure: this.config.retainStructure,
-          remove: this.config.remove,
-          ...key,
-        }
-      }) ?? [],
-    }
+    if (serialise !== undefined) this.config.serialise = serialise
+    if (serialize !== undefined) this.config.serialise = serialize
   }
 
+  /**
+   * A transformer for unsupported data types. If `serialise` is false, the value will be returned as is,
+   * otherwise it will transform the value into a format that is supported by JSON.stringify.
+   *
+   * Error, RegExp, and Date instances are technically supported by JSON.stringify,
+   * but they returned as empty objects, therefore they are also transformed here.
+   * @protected
+   * @param {unknown} value The value that is not supported by JSON.stringify.
+   * @returns {unknown} The value in a format that is supported by JSON.stringify.
+   */
   protected unsupportedTransformer = (value: unknown): unknown => {
     if (!this.config.serialise) return value
 
@@ -99,9 +85,20 @@ class DeepRedact {
     return value
   }
 
-  private rewriteUnsupported = (value: unknown, path: string = ''): unknown => {
-    const safeValue = this.getUnsupportedTransformer()(value)
+  /**
+   * Calls `unsupportedTransformer` on the provided value and rewrites any circular references.
+   *
+   * Circular references will always be removed to avoid infinite recursion.
+   * When a circular reference is found, the value will be replaced with `[[CIRCULAR_REFERENCE: path.to.original.value]]`.
+   * @protected
+   * @param {unknown} value The value to rewrite.
+   * @param {string | undefined} path The path to the value in the object.
+   * @returns {unknown} The rewritten value.
+   */
+  protected rewriteUnsupported = (value: unknown, path?: string): unknown => {
+    const safeValue = this.unsupportedTransformer(value)
     if (!(safeValue instanceof Object)) return safeValue
+    if (this.circularReference === null) this.circularReference = new WeakSet()
     if (Array.isArray(safeValue)) {
       return safeValue.map((val, index) => {
         const newPath = path ? `${path}.[${index}]` : `[${index}]`
@@ -121,66 +118,26 @@ class DeepRedact {
     }))
   }
 
-  private redactString = (value: string, parentShouldRedact = false): string | undefined => {
-    if (!this.config.stringTests.some((test) => test.test(value)) && !parentShouldRedact) return value
-    if (this.config.replaceStringByLength) return this.config.replacement.repeat(value.length)
-    return this.config.remove ? undefined : this.config.replacement
-  }
-
-  private static complexShouldRedact = (key: string, config: BlacklistKeyConfig): boolean => {
-    if (config.key instanceof RegExp) return config.key.test(key)
-    if (config.fuzzyKeyMatch && config.caseSensitiveKeyMatch) return key.includes(config.key)
-    if (config.fuzzyKeyMatch && !config.caseSensitiveKeyMatch) return normaliseString(key).includes(normaliseString(config.key))
-    if (!config.fuzzyKeyMatch && config.caseSensitiveKeyMatch) return key === config.key
-    return normaliseString(config.key) === normaliseString(key)
-  }
-
-  private shouldRedactObjectValue = (key: string): boolean => {
-    return this.config.blacklistedKeys.some((redactableKey) => (typeof redactableKey === 'string'
-      ? key === redactableKey
-      : DeepRedact.complexShouldRedact(key, redactableKey)))
-  }
-
-  private deepRedact = (value: unknown, parentShouldRedact = false): unknown => {
-    if (value === undefined || value === null) return value
-
-    if (!(value instanceof Object)) {
-      // @ts-expect-error - we already know that value is not a function, symbol, undefined, null, or an object
-      if (!this.config.types.includes(typeof value)) return value
-      if (typeof value === 'string') return this.redactString(value, parentShouldRedact)
-
-      if (!parentShouldRedact) return value
-
-      return this.config.remove
-        ? undefined
-        : this.config.replacement
-    }
-
-    if (parentShouldRedact && (!this.config.retainStructure || this.config.remove)) {
-      return this.config.remove ? undefined : this.config.replacement
-    }
-
-    if (Array.isArray(value)) return value.map((val) => this.deepRedact(val, parentShouldRedact))
-
-    return Object.fromEntries(Object.entries(value).map(([key, val]) => {
-      const shouldRedact = parentShouldRedact || this.shouldRedactObjectValue(key)
-      return [key, this.deepRedact(val, shouldRedact)]
-    }))
-  }
-
-  private getUnsupportedTransformer = (): UnsupportedTransformer => {
-    return this.config.unsupportedTransformer ?? this.unsupportedTransformer
-  }
-
-  setUnsupportedTransformer = (transformer: UnsupportedTransformer): void => {
-    this.config.unsupportedTransformer = transformer
-  }
-
-  redact = (value: unknown): unknown => {
-    this.circularReference = new WeakSet()
-    const redacted = this.deepRedact(this.rewriteUnsupported(value))
+  /**
+   * Depending on the value of `serialise`, return the value as a JSON string or as the provided value.
+   *
+   * Also resets the `circularReference` property to null after redaction is complete.
+   * This is to ensure that the WeakSet doesn't cause memory leaks.
+   * @private
+   * @param value
+   */
+  private maybeSerialise = (value: unknown): unknown => {
     this.circularReference = null
-    return this.config.serialise ? JSON.stringify(redacted) : redacted
+    return this.config.serialise ? JSON.stringify(value) : value
+  }
+
+  /**
+   * Redact the provided value. The value will be stripped of any circular references and other unsupported data types, before being redacted according to the configuration and finally serialised if required.
+   * @param {unknown} value The value to redact.
+   * @returns {unknown} The redacted value.
+   */
+  redact = (value: unknown): unknown => {
+    return this.maybeSerialise(this.redactorUtils.recurse(this.rewriteUnsupported(value)))
   }
 }
 
