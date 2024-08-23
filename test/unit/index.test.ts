@@ -98,11 +98,21 @@ describe('DeepRedact', () => {
           deepRedact = new DeepRedact({ blacklistedKeys, serialise: true })
         })
 
-        it('should transform a bigint', () => {
-          expect(deepRedact.unsupportedTransformer(BigInt(10))).toEqual({
+        it('should transform a huge bigint', () => {
+          expect(deepRedact.unsupportedTransformer(BigInt(Number.MAX_SAFE_INTEGER + 1))).toEqual({
             __unsupported: {
               type: 'bigint',
-              value: '10',
+              value: '9007199254740992',
+              radix: 10,
+            },
+          })
+        })
+
+        it('should transform a huge (negative) bigint', () => {
+          expect(deepRedact.unsupportedTransformer(BigInt(Number.MIN_SAFE_INTEGER - 1))).toEqual({
+            __unsupported: {
+              type: 'bigint',
+              value: '-9007199254740992',
               radix: 10,
             },
           })
