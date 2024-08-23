@@ -61,7 +61,7 @@
     "@types/node": "20.14.12",
     "@typescript-eslint/eslint-plugin": "7.14.1",
     "@typescript-eslint/parser": "7.14.1",
-    "@vitest/coverage-v8": "2.0.4",
+    "@vitest/coverage-v8": "2.0.5",
     "eslint": "8.57.0",
     "eslint-config-airbnb-base": "15.0.0",
     "eslint-config-airbnb-typescript": "18.0.0",
@@ -71,6 +71,6 @@
     "fast-redact": "3.5.0",
     "image-charts": "6.1.19",
     "typescript": "5.5.4",
-    "vitest": "2.0.4"
+    "vitest": "2.0.5"
   }
 }
