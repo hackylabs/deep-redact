@@ -1,10 +1,13 @@
 {
   "name": "@hackylabs/deep-redact",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "description": "A fast, safe and configurable zero-dependency library for redacting strings or deeply redacting arrays and objects.",
   "private": false,
   "license": "MIT",
   "author": "Benjamin Green (https://bengreen.dev)",
+  "types": "./dist/types/index.d.ts",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.mjs",
   "keywords": [
     "redact",
     "redaction",
@@ -26,7 +29,7 @@
     ".": {
       "import": "./dist/esm/index.js",
       "require": "./dist/cjs/index.js",
-      "types": "./dist/esm/index.d.ts"
+      "types": "./dist/types/index.d.ts"
     }
   },
   "files": [
@@ -39,7 +42,7 @@
   "scripts": {
     "lint": "eslint",
     "build": "npm run lint && npm run test && npm run bench && npm run build:esm && npm run build:cjs && npm run update-readme && npm run update-license",
-    "build:esm": "tsc --project tsconfig.esm.json",
+    "build:esm": "tsc --project tsconfig.esm.json && ./scripts/js-to-mjs.sh",
     "build:cjs": "tsc --project tsconfig.cjs.json",
     "bench": "npx vitest bench --watch=false",
     "bench:dev": "npx vitest bench",

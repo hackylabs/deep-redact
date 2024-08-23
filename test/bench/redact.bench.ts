@@ -1,17 +1,16 @@
 import { bench, describe } from 'vitest'
 import fastRedact from 'fast-redact'
-import { DeepRedact } from '../src'
-import { dummyUser } from './setup/dummyUser'
-import { Blacklist, blacklistedKeys } from './setup/blacklist'
+import { DeepRedact } from '../../src'
+import { dummyUser } from '../setup/dummyUser'
+import { blacklistedKeys } from '../setup/blacklist'
 
-const complexBlacklistedKeys: Blacklist = [
+const complexBlacklistedKeys = [
   'email',
   'phone',
   'password',
   'birthDate',
   'ip',
   'macAddress',
-  'wallet',
   { key: 'address', retainStructure: true },
   'iban',
   'cardNumber',
@@ -31,11 +30,22 @@ const fastRedactBlacklistedKeys = [
   'birthDate',
   'ip',
   'macAddress',
-  'crypto.*.wallet',
-  'address.*.*',
+  'address.street',
+  'address.city',
+  'address.state',
+  'address.postalCode',
+  'address.country',
+  'address.coordinates.lat',
+  'address.coordinates.lng',
   'bank.cardNumber',
   'bank.iban',
-  'company.address.*',
+  'company.address.street',
+  'company.address.city',
+  'company.address.state',
+  'company.address.postalCode',
+  'company.address.country',
+  'company.address.coordinates.lat',
+  'company.address.coordinates.lng',
   'ein',
   'ssn',
 ]
@@ -43,34 +53,15 @@ const fastRedactBlacklistedKeys = [
 const fastRedactArrayBlacklistedKeys = fastRedactBlacklistedKeys.map((key) => `*.${key}`)
 
 describe('Redaction benchmark', () => {
-  bench('JSON.stringify, tiny object', async () => {
-    await new Promise((resolve) => {
-      resolve(JSON.stringify({ a: '1' }))
-    })
-  })
-
   bench('JSON.stringify, large object', async () => {
     await new Promise((resolve) => {
       resolve(JSON.stringify(dummyUser))
     })
   })
 
-  bench('JSON.stringify, 1000 tiny objects', async () => {
-    await new Promise((resolve) => {
-      resolve(JSON.stringify(Array(1000).fill({ a: '1' })))
-    })
-  })
-
   bench('JSON.stringify, 1000 large objects', async () => {
     await new Promise((resolve) => {
       resolve(JSON.stringify(Array(1000).fill(dummyUser)))
-    })
-  })
-
-  bench('fast redact, tiny object', async () => {
-    await new Promise((resolve) => {
-      const redact = fastRedact({ paths: ['a'] })
-      resolve(redact({ a: '1' }))
     })
   })
 
@@ -81,13 +72,6 @@ describe('Redaction benchmark', () => {
     })
   })
 
-  bench('fast redact, 1000 tiny objects', async () => {
-    await new Promise((resolve) => {
-      const redact = fastRedact({ paths: ['*.a'] })
-      resolve(redact(Array(1000).fill({ a: '1' })))
-    })
-  })
-
   bench('fast redact, 1000 large objects', async () => {
     await new Promise((resolve) => {
       const redact = fastRedact({ paths: fastRedactArrayBlacklistedKeys })
@@ -95,24 +79,10 @@ describe('Redaction benchmark', () => {
     })
   })
 
-  bench('DeepRedact, default config, tiny object', async () => {
-    await new Promise((resolve) => {
-      const redaction = new DeepRedact({ blacklistedKeys: ['a'] })
-      resolve(redaction.redact({ a: '1' }))
-    })
-  })
-
   bench('DeepRedact, default config, large object', async () => {
     await new Promise((resolve) => {
       const redaction = new DeepRedact({ blacklistedKeys })
       resolve(redaction.redact(dummyUser))
-    })
-  })
-
-  bench('DeepRedact, default config, 1000 tiny objects', async () => {
-    await new Promise((resolve) => {
-      const redaction = new DeepRedact({ blacklistedKeys: ['a'] })
-      resolve(redaction.redact(Array(1000).fill({ a: '1' })))
     })
   })
 
@@ -154,6 +124,13 @@ describe('Redaction benchmark', () => {
   bench('DeepRedact, replace string by length, single object', async () => {
     await new Promise((resolve) => {
       const redaction = new DeepRedact({ blacklistedKeys, replaceStringByLength: true, replacement: '*' })
+      resolve(redaction.redact(dummyUser))
+    })
+  })
+
+  bench('DeepRedact, custom replacer function, single object', async () => {
+    await new Promise((resolve) => {
+      const redaction = new DeepRedact({ blacklistedKeys, replacement: ((value) => `[REDACTED:${typeof value}]`) })
       resolve(redaction.redact(dummyUser))
     })
   })
