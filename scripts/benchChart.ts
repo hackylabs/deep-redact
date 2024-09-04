@@ -20,7 +20,7 @@ export const updateBenchChart = () => {
         'fast redact, large object',
       ].includes(name)
     })
-  benchmarkData.sort((a, b) => a.hz - b.hz)
+  benchmarkData.sort((a, b) => b.hz - a.hz)
 
   const comparison = benchmarkData.map(({ name, hz }) => ({
     rate: hz / benchmarkData[0].hz,
@@ -31,13 +31,13 @@ export const updateBenchChart = () => {
   }))
 
   new ChartJSImage()
-    .cht('bvs')
+    .cht('bhs')
     .chco('F0F0F0|43B3AE45|F0F0F0')
     .chd(`t:${comparison.map(({ rate }) => rate).join(',')}`)
     .chl(comparison.map(({ name }) => name).join('|'))
-    .chlps('align,top|anchor,start|offset,10')
+    .chlps('align,right|anchor,start|offset,10|textAlign,left')
     .chtt('ops / sec')
-    .chs('800x999')
+    .chs('800x300')
     .toDataURI()
     .then(async (dataURI) => {
       const buffer = Buffer.from(dataURI.split(',')[1], 'base64')
