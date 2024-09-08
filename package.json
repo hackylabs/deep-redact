@@ -5,6 +5,7 @@
   "private": false,
   "license": "MIT",
   "author": "Benjamin Green (https://bengreen.dev)",
+  "funding": "https://ko-fi.com/hackylabs",
   "types": "./dist/types/index.d.ts",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.mjs",
