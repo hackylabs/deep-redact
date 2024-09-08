@@ -15,6 +15,33 @@ describe('DeepRedact', () => {
     vi.restoreAllMocks()
   })
 
+  describe('performance', () => {
+    it('should not leak memory', async () => {
+      config.muteConsole = true
+
+      let redaction: Nullable<DeepRedact> = new DeepRedact({
+        blacklistedKeys,
+        retainStructure: true,
+        fuzzyKeyMatch: false,
+        caseSensitiveKeyMatch: true,
+        replaceStringByLength: true,
+        replacement: '*',
+      })
+
+      let heap: IHeapSnapshot = await takeNodeMinimalHeap()
+
+      redaction.redact(Array(1000).fill(dummyUser))
+
+      expect(heap.hasObjectWithClassName('DeepRedact')).toBe(true)
+
+      redaction = null
+
+      heap = await takeNodeMinimalHeap()
+
+      expect(heap.hasObjectWithClassName('DeepRedact')).toBe(false)
+    })
+  })
+
   describe('code coverage', () => {
     beforeEach(async () => {
       vi.spyOn(JSON, 'stringify')
@@ -262,33 +289,6 @@ describe('DeepRedact', () => {
         expect(maybeSerialiseSpy).toHaveBeenCalledOnce()
         expect(maybeSerialiseSpy).toHaveBeenNthCalledWith(1, vi.mocked(recurseSpy).mock.results[1].value)
       })
-    })
-  })
-
-  describe.skip('performance', () => {
-    it('should not leak memory', async () => {
-      config.muteConsole = true
-
-      let redaction: Nullable<DeepRedact> = new DeepRedact({
-        blacklistedKeys,
-        retainStructure: true,
-        fuzzyKeyMatch: false,
-        caseSensitiveKeyMatch: true,
-        replaceStringByLength: true,
-        replacement: '*',
-      })
-
-      let heap: IHeapSnapshot = await takeNodeMinimalHeap()
-
-      redaction.redact(Array(1000).fill(dummyUser))
-
-      expect(heap.hasObjectWithClassName('DeepRedact')).toBe(true)
-
-      redaction = null
-
-      heap = await takeNodeMinimalHeap()
-
-      expect(heap.hasObjectWithClassName('DeepRedact')).toBe(false)
     })
   })
 })
