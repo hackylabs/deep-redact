@@ -13,5 +13,5 @@
     "moduleResolution": "node",
     "baseUrl": ".",
   },
-  "include": ["src/**/*", "../untitled1/scratch_24.ts"],
+  "include": ["src/**/*"],
 }
