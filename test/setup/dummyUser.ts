@@ -77,7 +77,7 @@ const extendedDummyUser = {
     obj: {} as any,
   },
   someMap: new Map().set('someMap', 'bar'),
-  someWeakMap: new WeakMap().set({foo: 'bar'}, 'someWeakMap'),
+  someWeakMap: new WeakMap().set({ foo: 'bar' }, 'someWeakMap'),
   someSet: new Set().add('someSet'),
   someSymbol: Symbol('someSymbol'),
   someFunction: () => {
