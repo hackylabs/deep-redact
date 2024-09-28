@@ -69,15 +69,25 @@ redaction.redact(obj)
 <--BLACKLIST_KEY_CONFIG-->
 
 ### Benchmark
-Comparisons are made against JSON.stringify and Fast Redact as well as different configurations of Deep Redact, using
-[this test object](./test/setup/dummyUser.ts). Fast Redact was configured to redact the same keys on the same object as
-Deep Redact without using wildcards.
+Comparisons are made against JSON.stringify, Regex.replace, Fast Redact &
+(one of my other creations, [@hackylabs/obglob](https://npmjs.com/package/@hackylabs/obglob)) as well as different
+configurations of Deep Redact, using [this test object](./test/setup/dummyUser.ts). Fast Redact was configured to redact
+the same keys on the same object as Deep Redact without using wildcards.
 
-The benchmark is run on a 2021 iMac with an M1 chip with 16GB memory running Sonoma 14.5.
+The benchmark is run on a 2021 iMac with an M1 chip with 16GB memory running macOS Sequoia 15.0.0.
 
-JSON.stringify is included as a benchmark because it is the fastest way to deeply iterate over an object although it
-doesn't redact any sensitive information. Fast-redact is included as a benchmark because it's the next fastest redaction
-library available. Neither JSON.stringify nor Fast Redact offer the same level of configurability as deep-redact.
+JSON.stringify is included as a benchmark because it is the fastest way to deeply iterate over an object, although it
+doesn't redact any sensitive information.
+
+Regex.replace is included as a benchmark because it is the fastest way to redact sensitive information from a string.
+However, a regex pattern for all keys to be redacted is much harder to configure than a dedicated redaction library,
+especially when dealing with multiple types of values. It also doesn't handle circular references or other unsupported
+values as gracefully as deep-redact unless a third-party library is used to stringify the object beforehand.
+
+Fast-redact is included as a benchmark because it's the next fastest library available specifically for redaction.
+
+Neither JSON.stringify, Regex.replace nor Fast Redact offer the same level of configurability as deep-redact. Both Fast
+Redact and Obglob are slower and rely on dependencies.
 
 ![Benchmark](./benchmark.png)
 

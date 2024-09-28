@@ -17,6 +17,8 @@ export const updateBenchChart = () => {
       return [
         'JSON.stringify, large object',
         'DeepRedact, default config, large object',
+        'ObGlob, large object',
+        'Regex replace, large object',
         'fast redact, large object',
       ].includes(name)
     })
@@ -27,17 +29,19 @@ export const updateBenchChart = () => {
     name: name
       .replace('JSON.stringify, large object', `JSON.stringify\n(no redaction)\n(${Intl.NumberFormat().format(hz)})`)
       .replace('DeepRedact, default config, large object', `Deep Redact\n(default config)\n(${Intl.NumberFormat().format(hz)})`)
+      .replace('ObGlob, large object', `ObGlob\n(${Intl.NumberFormat().format(hz)})`)
+      .replace('Regex replace, large object', `Regex.replace\n(${Intl.NumberFormat().format(hz)})`)
       .replace('fast redact, large object', `Fast Redact\n(default config)\n(${Intl.NumberFormat().format(hz)})`),
   }))
 
   new ChartJSImage()
     .cht('bhs')
-    .chco('F0F0F0|43B3AE45|F0F0F0')
+    .chco(comparison.map(({ name }) => (name.includes('Deep Redact') ? '43B3AE45' : 'F0F0F0')).join('|'))
     .chd(`t:${comparison.map(({ rate }) => rate).join(',')}`)
     .chl(comparison.map(({ name }) => name).join('|'))
     .chlps('align,right|anchor,start|offset,10|textAlign,left')
     .chtt('ops / sec')
-    .chs('800x300')
+    .chs('800x500')
     .toDataURI()
     .then(async (dataURI) => {
       const buffer = Buffer.from(dataURI.split(',')[1], 'base64')
