@@ -1,5 +1,7 @@
 import { bench, describe } from 'vitest'
 import fastRedact from 'fast-redact'
+import superjson from 'superjson'
+import { obglob } from '@hackylabs/obglob'
 import { DeepRedact } from '../../src'
 import { dummyUser } from '../setup/dummyUser'
 import { blacklistedKeys } from '../setup/blacklist'
@@ -14,6 +16,7 @@ const complexBlacklistedKeys = [
   { key: 'address', retainStructure: true },
   'iban',
   'cardNumber',
+  'wallet',
   'ein',
   'ssn',
   { key: 'name', fuzzyKeyMatch: true, caseSensitiveKeyMatch: false },
@@ -22,7 +25,6 @@ const complexBlacklistedKeys = [
 const fastRedactBlacklistedKeys = [
   'firstName',
   'lastName',
-  'surname',
   'maidenName',
   'email',
   'phone',
@@ -39,6 +41,7 @@ const fastRedactBlacklistedKeys = [
   'address.coordinates.lng',
   'bank.cardNumber',
   'bank.iban',
+  'wallet',
   'company.address.street',
   'company.address.city',
   'company.address.state',
@@ -51,6 +54,24 @@ const fastRedactBlacklistedKeys = [
 ]
 
 const fastRedactArrayBlacklistedKeys = fastRedactBlacklistedKeys.map((key) => `*.${key}`)
+
+const ObGlobPatterns = [
+  '**/!(*user*)*[nN]ame*',
+  '**/email',
+  '**/phone',
+  '**/password',
+  '**/birthDate',
+  '**/ip',
+  '**/macAddress',
+  '**/address/**',
+  '**/cardNumber',
+  '**/iban',
+  '**/wallet',
+  '**/ein',
+  '**/ssn',
+]
+
+const pattern = /"(email|phone|password|birthDate|ip|macAddress|address.*?city|state|postalCode|country|iban|cardNumber|wallet|ein|ssn|firstName|lastName|maidenName|username)":"[^"]*"/gi
 
 describe('Redaction benchmark', () => {
   bench('JSON.stringify, large object', async () => {
@@ -79,10 +100,36 @@ describe('Redaction benchmark', () => {
     })
   })
 
+  bench('ObGlob, large object', async () => {
+    await new Promise((resolve) => {
+      resolve(obglob(dummyUser, { patterns: ObGlobPatterns, includeUnmatched: true, callback: () => '[REDACTED]' }))
+    })
+  })
+
+  bench('Regex replace, large object', async () => {
+    await new Promise((resolve) => {
+      const redacted = superjson.stringify(dummyUser).replace(pattern, '"$1":"[REDACTED]"')
+      resolve(redacted)
+    })
+  })
+
   bench('DeepRedact, default config, large object', async () => {
     await new Promise((resolve) => {
       const redaction = new DeepRedact({ blacklistedKeys })
       resolve(redaction.redact(dummyUser))
+    })
+  })
+
+  bench('ObGlob, 1000 large objects', async () => {
+    await new Promise((resolve) => {
+      resolve(obglob(Array(1000).fill(dummyUser), { patterns: ObGlobPatterns, includeUnmatched: true, callback: () => '[REDACTED]' }))
+    })
+  })
+
+  bench('Regex replace, 1000 large objects', async () => {
+    await new Promise((resolve) => {
+      const redacted = superjson.stringify(Array(1000).fill(dummyUser)).replace(pattern, '"$1":"[REDACTED]"')
+      resolve(redacted)
     })
   })
 
