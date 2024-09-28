@@ -9,6 +9,21 @@
   "types": "./dist/types/index.d.ts",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.mjs",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.mjs",
+      "require": "./dist/cjs/index.js",
+      "types": "./dist/types/index.d.ts"
+    },
+    "./utils/redactorUtils": {
+      "import": "./dist/esm/utils/redactorUtils.mjs",
+      "require": "./dist/cjs/utils/redactorUtils.js",
+      "types": "./dist/types/utils/redactorUtils.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "keywords": [
     "redact",
     "redaction",
