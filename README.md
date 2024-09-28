@@ -14,6 +14,8 @@ possible while still being configurable.
 Supporting both CommonJS and ESM, with named and default exports, Deep Redact is designed to be versatile and easy to
 use in any modern JavaScript or TypeScript project in Node or the browser.
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/hackylabs)
+
 ## Installation
 
 ```bash
@@ -85,31 +87,45 @@ redaction.redact(obj)
 | retainStructure | boolean | Main options `retainStructure` | N |
 
 ### Benchmark
-Comparisons are made against JSON.stringify and Fast Redact as well as different configurations of Deep Redact, using
-[this test object](./test/setup/dummyUser.ts). Fast Redact was configured to redact the same keys on the same object as
-Deep Redact without using wildcards.
+Comparisons are made against JSON.stringify, Regex.replace, Fast Redact &
+(one of my other creations, [@hackylabs/obglob](https://npmjs.com/package/@hackylabs/obglob)) as well as different
+configurations of Deep Redact, using [this test object](./test/setup/dummyUser.ts). Fast Redact was configured to redact
+the same keys on the same object as Deep Redact without using wildcards.
 
-The benchmark is run on a 2021 iMac with an M1 chip with 16GB memory running Sonoma 14.5.
+The benchmark is run on a 2021 iMac with an M1 chip with 16GB memory running macOS Sequoia 15.0.0.
 
-JSON.stringify is included as a benchmark because it is the fastest way to deeply iterate over an object although it
-doesn't redact any sensitive information. Fast-redact is included as a benchmark because it's the next fastest redaction
-library available. Neither JSON.stringify nor Fast Redact offer the same level of configurability as deep-redact.
+JSON.stringify is included as a benchmark because it is the fastest way to deeply iterate over an object, although it
+doesn't redact any sensitive information.
+
+Regex.replace is included as a benchmark because it is the fastest way to redact sensitive information from a string.
+However, a regex pattern for all keys to be redacted is much harder to configure than a dedicated redaction library,
+especially when dealing with multiple types of values. It also doesn't handle circular references or other unsupported
+values as gracefully as deep-redact unless a third-party library is used to stringify the object beforehand.
+
+Fast-redact is included as a benchmark because it's the next fastest library available specifically for redaction.
+
+Neither JSON.stringify, Regex.replace nor Fast Redact offer the same level of configurability as deep-redact. Both Fast
+Redact and Obglob are slower and rely on dependencies.
 
 ![Benchmark](./benchmark.png)
 
 | scenario | ops / sec | op duration (ms) | margin of error | sample count |
 | --- | --- | --- | --- | --- |
-| JSON.stringify, large object | 295500.62 | 0.0033840876 | 0.00002 | 147751 |
-| DeepRedact, remove item, single object | 36272.4 | 0.0275691709 | 0.00016 | 18137 |
-| DeepRedact, custom replacer function, single object | 30314.59 | 0.0329874115 | 0.00028 | 15158 |
-| DeepRedact, default config, large object | 30028.19 | 0.0333020395 | 0.0002 | 15015 |
-| DeepRedact, replace string by length, single object | 28756.9 | 0.0347742688 | 0.00028 | 14379 |
-| DeepRedact, retain structure, single object | 24803.01 | 0.0403176903 | 0.00032 | 12402 |
-| DeepRedact, fuzzy matching, single object | 22243.3 | 0.0449573621 | 0.00038 | 11122 |
-| DeepRedact, config per key, single object | 21603.85 | 0.0462880355 | 0.0013 | 10802 |
-| fast redact, large object | 9529.2 | 0.1049406557 | 0.00064 | 4765 |
-| DeepRedact, case insensitive matching, single object | 6503.72 | 0.1537581959 | 0.00105 | 3252 |
-| DeepRedact, default config, 1000 large objects | 5915.05 | 0.1690602382 | 0.00296 | 2958 |
-| DeepRedact, fuzzy and case insensitive matching, single object | 5591.96 | 0.1788283015 | 0.00184 | 2796 |
-| JSON.stringify, 1000 large objects | 394.41 | 2.5354059248 | 0.01001 | 198 |
-| fast redact, 1000 large objects | 172.23 | 5.8060829174 | 0.06886 | 87 |
+| JSON.stringify, large object | 294280.99 | 0.0033981128 | 0.00002 | 147141 |
+| Regex replace, large object | 39437.77 | 0.0253564002 | 0.00017 | 19719 |
+| DeepRedact, remove item, single object | 35945.15 | 0.0278201619 | 0.0002 | 17973 |
+| DeepRedact, default config, large object | 33433.78 | 0.0299098683 | 0.00018 | 16717 |
+| DeepRedact, custom replacer function, single object | 30871.31 | 0.0323925304 | 0.00038 | 15436 |
+| DeepRedact, replace string by length, single object | 30833.83 | 0.0324319084 | 0.00023 | 15417 |
+| DeepRedact, config per key, single object | 26110.65 | 0.0382985554 | 0.0002 | 13056 |
+| DeepRedact, retain structure, single object | 25817.61 | 0.0387332591 | 0.00022 | 12909 |
+| DeepRedact, fuzzy matching, single object | 24185.61 | 0.0413469075 | 0.0002 | 12093 |
+| DeepRedact, default config, 1000 large objects | 12226.44 | 0.0817899519 | 0.00056 | 6114 |
+| ObGlob, large object | 10049.47 | 0.0995076915 | 0.00344 | 5025 |
+| fast redact, large object | 9727.29 | 0.1028035551 | 0.00054 | 4864 |
+| DeepRedact, case insensitive matching, single object | 6706.49 | 0.1491092755 | 0.00098 | 3354 |
+| DeepRedact, fuzzy and case insensitive matching, single object | 6356.64 | 0.1573158405 | 0.00076 | 3179 |
+| JSON.stringify, 1000 large objects | 422.87 | 2.3647726179 | 0.01071 | 212 |
+| ObGlob, 1000 large objects | 373.06 | 2.6805612781 | 0.02052 | 187 |
+| Regex replace, 1000 large objects | 191.9 | 5.2110316562 | 0.06703 | 96 |
+| fast redact, 1000 large objects | 191.54 | 5.2207982083 | 0.02064 | 96 |
