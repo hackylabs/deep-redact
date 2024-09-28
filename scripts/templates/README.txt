@@ -14,6 +14,8 @@ possible while still being configurable.
 Supporting both CommonJS and ESM, with named and default exports, Deep Redact is designed to be versatile and easy to
 use in any modern JavaScript or TypeScript project in Node or the browser.
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/hackylabs)
+
 ## Installation
 
 ```bash
