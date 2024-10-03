@@ -141,21 +141,19 @@ class RedactorUtils {
     if (!value) return value
     const { stringTests }: BaseDeepRedactConfig = this.config
     if (!shouldRedact) {
-      const replaced = stringTests?.map((test) => {
+      return stringTests?.map((test) => {
         if (test instanceof RegExp) {
-          const patternMatches = value.match(test)
-          if (!patternMatches) return value
+          if (!test.test(value)) return value
           if (remove) return undefined
           if (typeof replacement === 'function') return replacement(value)
           if (this.config.replaceStringByLength) return replacement.repeat(value.length)
           return replacement
         }
 
-        if (remove) return undefined
+        if (remove && test.pattern.test(value)) return undefined
+
         return test.replacement(value, test.pattern)
       }).filter(Boolean)[0]
-
-      return replaced || value
     }
     if (remove) return undefined
     if (typeof replacement === 'function') return replacement(value)
