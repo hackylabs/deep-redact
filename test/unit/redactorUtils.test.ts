@@ -584,29 +584,33 @@ describe('RedactorUtils', () => {
       })
 
       describe('when the value matches a stringTest', () => {
-        describe('when the replacement is a string', () => {
-          it('should return the replacement string', () => {
-            expect(utils.redactString('Hello, world!', '[REDACTED]', false, false)).toBe('[REDACTED]')
-          })
-        })
+        describe.todo('when the test has its own replacement function', () => {})
 
-        describe('when the replacement is a function', () => {
-          it('should return the replacement string', () => {
-            expect(utils.redactString('Hello, world!', (value) => `[REDACTED ${typeof value}]`, false, false)).toBe('[REDACTED string]')
-          })
-        })
-
-        describe('when replaceStringByLength is true', () => {
-          beforeEach(() => {
-            utils = new RedactorUtils({
-              stringTests: [/^Hello/],
-              replaceStringByLength: true,
+        describe('when the test does not have its own replacement function', () => {
+          describe('when the replacement is a string', () => {
+            it('should return the replacement string', () => {
+              expect(utils.redactString('Hello, world!', '[REDACTED]', false, false)).toBe('[REDACTED]')
             })
           })
 
-          it('should return the replacement string repeated the length of the value', () => {
-            const value = 'Hello, world!'
-            expect(utils.redactString(value, '*', false, false)).toBe('*'.repeat(value.length))
+          describe('when the replacement is a function', () => {
+            it('should return the replacement string', () => {
+              expect(utils.redactString('Hello, world!', (value) => `[REDACTED ${typeof value}]`, false, false)).toBe('[REDACTED string]')
+            })
+          })
+
+          describe('when replaceStringByLength is true', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                stringTests: [/^Hello/],
+                replaceStringByLength: true,
+              })
+            })
+
+            it('should return the replacement string repeated the length of the value', () => {
+              const value = 'Hello, world!'
+              expect(utils.redactString(value, '*', false, false)).toBe('*'.repeat(value.length))
+            })
           })
         })
       })
