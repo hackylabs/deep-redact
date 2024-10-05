@@ -181,6 +181,17 @@ describe('DeepRedact', () => {
           })
         })
 
+        it('should transform a map', () => {
+          const map = new Map([['a', 1], ['b', 2], ['c', 3]])
+
+          expect(DeepRedact.unsupportedTransformer(map)).toEqual({
+            __unsupported: {
+              type: 'map',
+              entries: Object.fromEntries(map.entries()),
+            },
+          })
+        })
+
         it('should transform a url', () => {
           const url = new URL('https://example.com')
 
