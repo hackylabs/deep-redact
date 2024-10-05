@@ -46,9 +46,7 @@ class DeepRedact {
    * @param {unknown} value The value that is not supported by JSON.stringify.
    * @returns {unknown} The value in a format that is supported by JSON.stringify.
    */
-  protected unsupportedTransformer = (value: unknown): unknown => {
-    if (!this.config.serialise) return value
-
+  protected static unsupportedTransformer = (value: unknown): unknown => {
     if (typeof value === 'bigint') {
       return {
         __unsupported: {
@@ -96,7 +94,7 @@ class DeepRedact {
    * @returns {unknown} The rewritten value.
    */
   protected rewriteUnsupported = (value: unknown, path?: string): unknown => {
-    const safeValue = this.unsupportedTransformer(value)
+    const safeValue = DeepRedact.unsupportedTransformer(value)
     if (!(safeValue instanceof Object)) return safeValue
     if (this.circularReference === null) this.circularReference = new WeakSet()
     if (Array.isArray(safeValue)) {
