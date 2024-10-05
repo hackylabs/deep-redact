@@ -173,7 +173,7 @@ describe('DeepRedact', () => {
         it('should transform a set', () => {
           const set = new Set([1, 2, 3])
 
-          expect(DeepRedact.unsupportedTransformer(set)).toEqual({
+          expect(deepRedact.unsupportedTransformer(set)).toEqual({
             __unsupported: {
               type: 'set',
               values: Array.from(set),
@@ -184,7 +184,7 @@ describe('DeepRedact', () => {
         it('should transform a map', () => {
           const map = new Map([['a', 1], ['b', 2], ['c', 3]])
 
-          expect(DeepRedact.unsupportedTransformer(map)).toEqual({
+          expect(deepRedact.unsupportedTransformer(map)).toEqual({
             __unsupported: {
               type: 'map',
               entries: Object.fromEntries(map.entries()),
@@ -195,13 +195,62 @@ describe('DeepRedact', () => {
         it('should transform a url', () => {
           const url = new URL('https://example.com')
 
-          expect(DeepRedact.unsupportedTransformer(url)).toBe(url.toString())
+          expect(deepRedact.unsupportedTransformer(url)).toBe(url.toString())
         })
 
         it('should transform a date', () => {
           const date = new Date()
 
           expect(deepRedact.unsupportedTransformer(date)).toBe(date.toISOString())
+        })
+      })
+
+      describe('custom unsupportedTransformer', () => {
+        let deepRedact: DeepRedact
+
+        beforeEach(() => {
+          class ExtendedDeepRedact extends DeepRedact {
+            protected unsupportedTransformer = (value: unknown): unknown => {
+              if (typeof value === 'bigint') return value.toString()
+              if (value instanceof Error) return value.message
+              if (value instanceof RegExp) return value.source
+              if (value instanceof Set) return Array.from(value)
+              if (value instanceof Map) return Object.fromEntries(value.entries())
+              if (value instanceof URL) return value.toString()
+              if (value instanceof Date) return value.toISOString()
+              return value
+            }
+          }
+
+          deepRedact = new ExtendedDeepRedact({ blacklistedKeys })
+        })
+
+        it('should transform a custom value', () => {
+          expect(deepRedact.redact({
+            password: 'password',
+            bigint: BigInt(1234567890),
+            error: new Error('error message'),
+            regexp: /regexp/,
+            set: new Set([1, 2, 3]),
+            map: new Map([['a', 1], ['b', 2], ['c', 3]]),
+            url: new URL('https://example.com'),
+            date: new Date(),
+            nested: {
+              foo: 'bar',
+            },
+          })).toStrictEqual({
+            password: '[REDACTED]',
+            bigint: '1234567890',
+            error: 'error message',
+            regexp: 'regexp',
+            set: [1, 2, 3],
+            map: { a: 1, b: 2, c: 3 },
+            url: 'https://example.com/',
+            date: expect.any(String),
+            nested: {
+              foo: 'bar',
+            },
+          })
         })
       })
     })
