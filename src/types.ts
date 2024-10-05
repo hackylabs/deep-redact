@@ -68,7 +68,7 @@ export interface BaseDeepRedactConfig {
    *   /^[\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}$/,  // redact any string that looks like an IP address.
    * ]
    */
-  stringTests?: Array<RegExp | { pattern: RegExp, replacement: (value: string, pattern: RegExp) => string }>
+  stringTests?: Array<RegExp | { pattern: RegExp, replacer: (value: string, pattern: RegExp) => string }>
 
   /**
    * Perform a fuzzy match on the key. This will match any key that contains the string, rather than a case-sensitive match.
