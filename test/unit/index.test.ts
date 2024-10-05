@@ -116,7 +116,7 @@ describe('DeepRedact', () => {
         })
 
         it('should return the value', () => {
-          expect(deepRedact.unsupportedTransformer(10)).toBe(10)
+          expect(DeepRedact.unsupportedTransformer(10)).toBe(10)
         })
       })
 
@@ -126,7 +126,7 @@ describe('DeepRedact', () => {
         })
 
         it('should transform a huge bigint', () => {
-          expect(deepRedact.unsupportedTransformer(BigInt(Number.MAX_SAFE_INTEGER + 1))).toEqual({
+          expect(DeepRedact.unsupportedTransformer(BigInt(Number.MAX_SAFE_INTEGER + 1))).toEqual({
             __unsupported: {
               type: 'bigint',
               value: '9007199254740992',
@@ -136,7 +136,7 @@ describe('DeepRedact', () => {
         })
 
         it('should transform a huge (negative) bigint', () => {
-          expect(deepRedact.unsupportedTransformer(BigInt(Number.MIN_SAFE_INTEGER - 1))).toEqual({
+          expect(DeepRedact.unsupportedTransformer(BigInt(Number.MIN_SAFE_INTEGER - 1))).toEqual({
             __unsupported: {
               type: 'bigint',
               value: '-9007199254740992',
@@ -148,7 +148,7 @@ describe('DeepRedact', () => {
         it('should transform an error', () => {
           const error = new Error('Test Error')
 
-          expect(deepRedact.unsupportedTransformer(error)).toEqual({
+          expect(DeepRedact.unsupportedTransformer(error)).toEqual({
             __unsupported: {
               type: 'error',
               name: error.name,
@@ -161,7 +161,7 @@ describe('DeepRedact', () => {
         it('should transform a regexp', () => {
           const regexp = new RegExp('test', 'g')
 
-          expect(deepRedact.unsupportedTransformer(regexp)).toEqual({
+          expect(DeepRedact.unsupportedTransformer(regexp)).toEqual({
             __unsupported: {
               type: 'regexp',
               source: regexp.source,
@@ -173,7 +173,7 @@ describe('DeepRedact', () => {
         it('should transform a date', () => {
           const date = new Date()
 
-          expect(deepRedact.unsupportedTransformer(date)).toBe(date.toISOString())
+          expect(DeepRedact.unsupportedTransformer(date)).toBe(date.toISOString())
         })
       })
     })
