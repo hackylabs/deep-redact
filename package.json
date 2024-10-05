@@ -25,6 +25,10 @@
     "dist"
   ],
   "keywords": [
+    "json",
+    "xml",
+    "document",
+    "fast",
     "redact",
     "redaction",
     "redactor",
