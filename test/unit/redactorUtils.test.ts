@@ -558,58 +558,270 @@ describe('RedactorUtils', () => {
   })
 
   describe('redactString', () => {
-    beforeEach(() => {
-      utils = new RedactorUtils({
-        stringTests: [/^Hello/],
-      })
-    })
-
-    describe('when the value is an empty string', () => {
-      it('should return the value', () => {
-        expect(utils.redactString('', '[REDACTED]', false, false)).toBe('')
-      })
-    })
-
-    describe('when the value is not a string', () => {
-      it('should return the value', () => {
-        expect(utils.redactString(123, '[REDACTED]', false, false)).toBe(123)
-      })
-    })
-
-    describe('when the value is a string', () => {
-      describe('when the value does not match any stringTests', () => {
-        it('should return the value', () => {
-          expect(utils.redactString('World', '[REDACTED]', false, false)).toBe('World')
+    describe('when shouldRedact from parent is false', () => {
+      describe('when the test is a simple RegExp', () => {
+        beforeEach(() => {
+          utils = new RedactorUtils({
+            stringTests: [/^Hello/],
+          })
         })
-      })
 
-      describe('when the value matches a stringTest', () => {
-        describe.todo('when the test has its own replacement function', () => {})
+        describe('when the value is an empty string', () => {
+          it('should return the value', () => {
+            expect(utils.redactString('', '[REDACTED]', false, false)).toBe('')
+          })
+        })
 
-        describe('when the test does not have its own replacement function', () => {
-          describe('when the replacement is a string', () => {
-            it('should return the replacement string', () => {
-              expect(utils.redactString('Hello, world!', '[REDACTED]', false, false)).toBe('[REDACTED]')
+        describe('when the value is not a string', () => {
+          it('should return the value', () => {
+            expect(utils.redactString(123, '[REDACTED]', false, false)).toBe(123)
+          })
+        })
+
+        describe('when the value is a string', () => {
+          describe('when the value does not match any stringTests', () => {
+            it('should return the value', () => {
+              expect(utils.redactString('World', '[REDACTED]', true, false)).toBe('World')
             })
           })
 
-          describe('when the replacement is a function', () => {
-            it('should return the replacement string', () => {
-              expect(utils.redactString('Hello, world!', (value) => `[REDACTED ${typeof value}]`, false, false)).toBe('[REDACTED string]')
-            })
-          })
-
-          describe('when replaceStringByLength is true', () => {
-            beforeEach(() => {
-              utils = new RedactorUtils({
-                stringTests: [/^Hello/],
-                replaceStringByLength: true,
+          describe('when the value matches a stringTest', () => {
+            describe('when the replacement is a string', () => {
+              it('should return the replacement string', () => {
+                expect(utils.redactString('Hello, world!', '[REDACTED]', false, false)).toBe('[REDACTED]')
               })
             })
 
-            it('should return the replacement string repeated the length of the value', () => {
-              const value = 'Hello, world!'
-              expect(utils.redactString(value, '*', false, false)).toBe('*'.repeat(value.length))
+            describe('when the replacement is a function', () => {
+              it('should return the replacement string', () => {
+                expect(utils.redactString('Hello, world!', (value) => `[REDACTED ${typeof value}]`, false, false)).toBe('[REDACTED string]')
+              })
+            })
+
+            describe('when replaceStringByLength is true', () => {
+              beforeEach(() => {
+                utils = new RedactorUtils({
+                  stringTests: [/^Hello/],
+                  replaceStringByLength: true,
+                })
+              })
+
+              it('should return the replacement string repeated the length of the value', () => {
+                const value = 'Hello, world!'
+                expect(utils.redactString(value, '*', false, false)).toBe('*'.repeat(value.length))
+              })
+            })
+          })
+        })
+      })
+
+      describe('when the test has its own replacer function', () => {
+        let replacer
+
+        beforeEach(() => {
+          replacer = vi.fn((value: string, pattern: RegExp) => value.replace(pattern, '<$1>[REDACTED]</$1>'))
+
+          utils = new RedactorUtils({
+            stringTests: [{ pattern: /<(email|password)>.+<\/\1>/gi, replacer }],
+          })
+        })
+
+        describe('when the value is an empty string', () => {
+          it('should return the value', () => {
+            expect(utils.redactString('', '[REDACTED]', false, false)).toBe('')
+          })
+
+          it('should not call the replacer', () => {
+            expect(replacer).not.toHaveBeenCalled()
+          })
+        })
+
+        describe('when the value is not a string', () => {
+          it('should return the value', () => {
+            expect(utils.redactString(123, '[REDACTED]', false, false)).toBe(123)
+          })
+
+          it('should not call the replacer', () => {
+            expect(replacer).not.toHaveBeenCalled()
+          })
+        })
+
+        describe('when the value is a string', () => {
+          describe('when the value does not match any stringTests', () => {
+            it('should return the value', () => {
+              expect(utils.redactString('Hello', '[REDACTED]', false, false)).toBe('Hello')
+            })
+
+            it('should not call the replacer', () => {
+              expect(replacer).not.toHaveBeenCalled()
+            })
+          })
+
+          describe('when the value matches a stringTest', () => {
+            const value = '<email>someone@somewhere.com</email><foo>bar</foo><password>secret</password>'
+            let result: unknown
+
+            describe('when not removing the value', () => {
+              beforeEach(() => {
+                result = utils.redactString(value, '[REDACTED]', false, false)
+              })
+
+              it('should call the replacer with the value and the pattern', () => {
+                expect(replacer).toHaveBeenCalledWith(value, /<(email|password)>.+<\/\1>/gi)
+              })
+
+              it('should return the replacement string', () => {
+                expect(result).toBe('<email>[REDACTED]</email><foo>bar</foo><password>[REDACTED]</password>')
+              })
+            })
+
+            describe('when removing the value', () => {
+              beforeEach(() => {
+                result = utils.redactString(value, '[REDACTED]', true, false)
+              })
+
+              it('should not call the replacer', () => {
+                expect(replacer).not.toHaveBeenCalled()
+              })
+
+              it('should return undefined', () => {
+                expect(result).toBeUndefined()
+              })
+            })
+          })
+        })
+      })
+    })
+
+    describe('when shouldRedact from parent is true', () => {
+      describe('when the test is a simple RegExp', () => {
+        beforeEach(() => {
+          utils = new RedactorUtils({
+            stringTests: [/^Hello/],
+          })
+        })
+
+        describe('when the value is an empty string', () => {
+          it('should return the value', () => {
+            expect(utils.redactString('', '[REDACTED]', false, true)).toBe('')
+          })
+        })
+
+        describe('when the value is not a string', () => {
+          it('should return the value', () => {
+            expect(utils.redactString(123, '[REDACTED]', false, true)).toBe(123)
+          })
+        })
+
+        describe('when the value is a string', () => {
+          describe('when the value does not match any stringTests', () => {
+            it('should return the value', () => {
+              expect(utils.redactString('World', '[REDACTED]', true, true)).toBeUndefined()
+            })
+          })
+
+          describe('when the value matches a stringTest', () => {
+            describe('when the replacement is a string', () => {
+              it('should return the replacement string', () => {
+                expect(utils.redactString('Hello, world!', '[REDACTED]', false, true)).toBe('[REDACTED]')
+              })
+            })
+
+            describe('when the replacement is a function', () => {
+              it('should return the replacement string', () => {
+                expect(utils.redactString('Hello, world!', (value) => `[REDACTED ${typeof value}]`, false, true)).toBe('[REDACTED string]')
+              })
+            })
+
+            describe('when replaceStringByLength is true', () => {
+              beforeEach(() => {
+                utils = new RedactorUtils({
+                  stringTests: [/^Hello/],
+                  replaceStringByLength: true,
+                })
+              })
+
+              it('should return the replacement string repeated the length of the value', () => {
+                const value = 'Hello, world!'
+                expect(utils.redactString(value, '*', false, true)).toBe('*'.repeat(value.length))
+              })
+            })
+          })
+        })
+      })
+
+      describe('when the test has its own replacer function', () => {
+        let replacer
+
+        beforeEach(() => {
+          replacer = vi.fn((value: string, pattern: RegExp) => value.replace(pattern, '<$1>[REDACTED]</$1>'))
+
+          utils = new RedactorUtils({
+            stringTests: [{ pattern: /<(email|password)>.+<\/\1>/gi, replacer }],
+          })
+        })
+
+        describe('when the value is an empty string', () => {
+          it('should return the value', () => {
+            expect(utils.redactString('', '[REDACTED]', false, false)).toBe('')
+          })
+
+          it('should not call the replacer', () => {
+            expect(replacer).not.toHaveBeenCalled()
+          })
+        })
+
+        describe('when the value is not a string', () => {
+          it('should return the value', () => {
+            expect(utils.redactString(123, '[REDACTED]', false, false)).toBe(123)
+          })
+
+          it('should not call the replacer', () => {
+            expect(replacer).not.toHaveBeenCalled()
+          })
+        })
+
+        describe('when the value is a string', () => {
+          describe('when the value does not match any stringTests', () => {
+            it('should return the value', () => {
+              expect(utils.redactString('Hello', '[REDACTED]', false, false)).toBe('Hello')
+            })
+
+            it('should not call the replacer', () => {
+              expect(replacer).not.toHaveBeenCalled()
+            })
+          })
+
+          describe('when the value matches a stringTest', () => {
+            const value = '<email>someone@somewhere.com</email><foo>bar</foo><password>secret</password>'
+            let result: unknown
+
+            describe('when not removing the value', () => {
+              beforeEach(() => {
+                result = utils.redactString(value, '[REDACTED]', false, false)
+              })
+
+              it('should call the replacer with the value and the pattern', () => {
+                expect(replacer).toHaveBeenCalledWith(value, /<(email|password)>.+<\/\1>/gi)
+              })
+
+              it('should return the replacement string', () => {
+                expect(result).toBe('<email>[REDACTED]</email><foo>bar</foo><password>[REDACTED]</password>')
+              })
+            })
+
+            describe('when removing the value', () => {
+              beforeEach(() => {
+                result = utils.redactString(value, '[REDACTED]', true, false)
+              })
+
+              it('should not call the replacer', () => {
+                expect(replacer).not.toHaveBeenCalled()
+              })
+
+              it('should return undefined', () => {
+                expect(result).toBeUndefined()
+              })
             })
           })
         })
