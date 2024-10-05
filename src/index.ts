@@ -78,6 +78,15 @@ class DeepRedact {
       }
     }
 
+    if (value instanceof Set) {
+      return {
+        __unsupported: {
+          type: 'set',
+          values: Array.from(value),
+        },
+      }
+    }
+
     if (value instanceof URL) return value.toString()
     if (value instanceof Date) return value.toISOString()
     return value
