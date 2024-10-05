@@ -80,11 +80,32 @@ class RedactorUtils {
          * @param shouldRedact
          */
         this.redactString = (value, replacement, remove, shouldRedact) => {
-            if (!value)
+            if (!value || typeof value !== 'string')
                 return value;
             const { stringTests } = this.config;
-            if (!shouldRedact && !(stringTests === null || stringTests === void 0 ? void 0 : stringTests.some((pattern) => pattern.test(value))))
+            if (!shouldRedact) {
+                const result = stringTests === null || stringTests === void 0 ? void 0 : stringTests.map((test) => {
+                    if (test instanceof RegExp) {
+                        if (!test.test(value))
+                            return value;
+                        if (remove)
+                            return undefined;
+                        if (typeof replacement === 'function')
+                            return replacement(value);
+                        if (this.config.replaceStringByLength)
+                            return replacement.repeat(value.length);
+                        return replacement;
+                    }
+                    if (remove && test.pattern.test(value))
+                        return undefined;
+                    return test.replacer(value, test.pattern);
+                }).filter(Boolean)[0];
+                if (result)
+                    return result;
+                if (remove)
+                    return undefined;
                 return value;
+            }
             if (remove)
                 return undefined;
             if (typeof replacement === 'function')
