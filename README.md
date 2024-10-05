@@ -3,13 +3,13 @@
 [![npm version](https://badge.fury.io/js/@hackylabs%2Fdeep-redact.svg)](https://badge.fury.io/js/@hackylabs%2Fdeep-redact)
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/hackylabs/deep-redact/blob/main/LICENSE)
 
-Faster than Fast Redact <sup>1</sup> as well as being safer and more configurable than many other redaction libraries,
+Faster than Fast Redact <sup>1</sup> as well as being safer and more configurable than many other redaction solutions,
 Deep Redact is a zero-dependency tool that redacts sensitive information from strings and objects. It is designed to be
 used in a production environment where sensitive information needs to be redacted from logs, error messages, files,
 and other outputs.
 
 Circular references and other unsupported values are handled gracefully, and the library is designed to be as fast as
-possible while still being configurable.
+possible while still being easy to use and configure.
 
 Supporting both CommonJS and ESM, with named and default exports, Deep Redact is designed to be versatile and easy to
 use in any modern JavaScript or TypeScript project in Node or the browser.
@@ -31,9 +31,8 @@ library outside of your global logging/error-reporting libraries.</h4>
 // ./src/example.ts
 import {DeepRedact} from '@hackylabs/deep-redact'; // If you're using CommonJS, import with require('@hackylabs/deep-redact') instead. Both CommonJS and ESM support named and default imports.
 
-const redaction = new DeepRedact({
+const objRedaction = new DeepRedact({
   blacklistedKeys: ['sensitive', 'password', /name/i],
-  serialise: false,
 })
 
 const obj = {
@@ -46,7 +45,8 @@ const obj = {
   }
 }
 
-redaction.redact(obj)
+// Recursively redact sensitive information from an object
+objRedaction.redact(obj)
 // {
 //  keepThis: 'This is fine',
 //  sensitive: '[REDACTED]',
@@ -56,6 +56,19 @@ redaction.redact(obj)
 //    firstName: '[REDACTED]'
 //  }
 // }
+
+const strRedaction = new DeepRedact({
+  stringTests: [
+    {
+      pattern: /<(email|password)>([^<]+)<\/\1>/gi,
+      replacer: (value: string, pattern: RegExp) => value.replace(pattern, '<$1>[REDACTED]</$1>'),
+    },
+  ],
+})
+
+// Partially redact sensitive information from a string
+strRedaction.redact('<email>someone@somewhere.com</email><keepThis>This is fine</keepThis><password>secret</password>')
+// '<email>[REDACTED]</email><keepThis>This is fine</keepThis><password>[REDACTED]</password>'
 ```
 
 ## Configuration
@@ -65,7 +78,7 @@ redaction.redact(obj)
 | key | description | type | options | default | required |
 | --- | --- | --- | --- | --- | --- |
 | blacklistedKeys | Deeply compare names of these keys against the keys in your object. | array | Array<string￨RegExp￨BlacklistKeyConfig> | [] | N |
-| stringTests | Array of regular expressions to perform against string values, whether that value is a flat string or nested within an object. | array | RegExp[] | [] | N |
+| stringTests | Array of regular expressions to perform against string values, whether that value is a flat string or nested within an object. | array | Array<RegExp￨StringTestConfig> | [] | N |
 | fuzzyKeyMatch | Loosely compare key names by checking if the key name of your unredacted object is included anywhere within the name of your blacklisted key. For example, is "pass" (your key) included in "password" (from config). | boolean |  | false | N |
 | caseSensitiveKeyMatch | Loosely compare key names by normalising the strings. This involves removing non-word characters and transforms the string to lowercase. This means you never have to worry having to list duplicate keys in different formats such as snake_case, camelCase, PascalCase or any other case. | boolean |  | true | N |
 | remove | Determines whether or not to remove the key from the object when it is redacted. | boolean |  | false | N |
@@ -85,6 +98,13 @@ redaction.redact(obj)
 | caseSensitiveKeyMatch | boolean | Main options `caseSensitiveKeyMatch` | N |
 | remove | boolean | Main options `remove` | N |
 | retainStructure | boolean | Main options `retainStructure` | N |
+
+### StringTestConfig
+
+| key | description | type | required |
+| --- | --- | --- | --- |
+| pattern | A regular expression to perform against a string value, whether that value is a flat string or nested within an object. | RegExp | Y |
+| replacer | A function that will be called with the value of the string that matched the pattern and the pattern itself. This function should return the new (redacted) value to replace the original value. | function | Y |
 
 ### Benchmark
 Comparisons are made against JSON.stringify, Regex.replace, Fast Redact &
@@ -111,21 +131,22 @@ Redact and Obglob are slower and rely on dependencies.
 
 | scenario | ops / sec | op duration (ms) | margin of error | sample count |
 | --- | --- | --- | --- | --- |
-| JSON.stringify, large object | 294280.99 | 0.0033981128 | 0.00002 | 147141 |
-| Regex replace, large object | 39437.77 | 0.0253564002 | 0.00017 | 19719 |
-| DeepRedact, remove item, single object | 35945.15 | 0.0278201619 | 0.0002 | 17973 |
-| DeepRedact, default config, large object | 33433.78 | 0.0299098683 | 0.00018 | 16717 |
-| DeepRedact, custom replacer function, single object | 30871.31 | 0.0323925304 | 0.00038 | 15436 |
-| DeepRedact, replace string by length, single object | 30833.83 | 0.0324319084 | 0.00023 | 15417 |
-| DeepRedact, config per key, single object | 26110.65 | 0.0382985554 | 0.0002 | 13056 |
-| DeepRedact, retain structure, single object | 25817.61 | 0.0387332591 | 0.00022 | 12909 |
-| DeepRedact, fuzzy matching, single object | 24185.61 | 0.0413469075 | 0.0002 | 12093 |
-| DeepRedact, default config, 1000 large objects | 12226.44 | 0.0817899519 | 0.00056 | 6114 |
-| ObGlob, large object | 10049.47 | 0.0995076915 | 0.00344 | 5025 |
-| fast redact, large object | 9727.29 | 0.1028035551 | 0.00054 | 4864 |
-| DeepRedact, case insensitive matching, single object | 6706.49 | 0.1491092755 | 0.00098 | 3354 |
-| DeepRedact, fuzzy and case insensitive matching, single object | 6356.64 | 0.1573158405 | 0.00076 | 3179 |
-| JSON.stringify, 1000 large objects | 422.87 | 2.3647726179 | 0.01071 | 212 |
-| ObGlob, 1000 large objects | 373.06 | 2.6805612781 | 0.02052 | 187 |
-| Regex replace, 1000 large objects | 191.9 | 5.2110316562 | 0.06703 | 96 |
-| fast redact, 1000 large objects | 191.54 | 5.2207982083 | 0.02064 | 96 |
+| DeepRedact, XML | 301243.86 | 0.0033195698 | 0.00002 | 150651 |
+| JSON.stringify, large object | 296000.41 | 0.0033783737 | 0.00002 | 148001 |
+| Regex replace, large object | 37754.33 | 0.0264870288 | 0.0002 | 18878 |
+| DeepRedact, remove item, single object | 36466.23 | 0.0274226354 | 0.0002 | 18234 |
+| DeepRedact, default config, large object | 33495.44 | 0.0298548126 | 0.00021 | 16748 |
+| DeepRedact, custom replacer function, single object | 33073.36 | 0.0302358122 | 0.00026 | 16537 |
+| DeepRedact, replace string by length, single object | 31588.37 | 0.0316572222 | 0.00037 | 15795 |
+| DeepRedact, config per key, single object | 26854.17 | 0.0372381658 | 0.00019 | 13428 |
+| DeepRedact, retain structure, single object | 26795.46 | 0.0373197603 | 0.00024 | 13398 |
+| DeepRedact, fuzzy matching, single object | 25312.78 | 0.0395057357 | 0.0002 | 12657 |
+| DeepRedact, default config, 1000 large objects | 11199.42 | 0.089290317 | 0.00093 | 5600 |
+| ObGlob, large object | 10030.03 | 0.0997005772 | 0.00337 | 5019 |
+| fast redact, large object | 9739.37 | 0.1026760575 | 0.00052 | 4870 |
+| DeepRedact, case insensitive matching, single object | 6786.51 | 0.1473510937 | 0.00089 | 3394 |
+| DeepRedact, fuzzy and case insensitive matching, single object | 6373.85 | 0.1568909511 | 0.00077 | 3187 |
+| JSON.stringify, 1000 large objects | 423.01 | 2.364012316 | 0.00932 | 212 |
+| ObGlob, 1000 large objects | 377.17 | 2.651312164 | 0.02009 | 189 |
+| fast redact, 1000 large objects | 192.1 | 5.205695433 | 0.01615 | 97 |
+| Regex replace, 1000 large objects | 184.46 | 5.4211415914 | 0.10708 | 93 |
