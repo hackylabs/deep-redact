@@ -137,11 +137,11 @@ class RedactorUtils {
    * @param remove
    * @param shouldRedact
    */
-  private redactString = (value: string, replacement: Transformer | string, remove: boolean, shouldRedact: boolean): unknown => {
-    if (!value) return value
+  private redactString = (value: unknown, replacement: Transformer | string, remove: boolean, shouldRedact: boolean): unknown => {
+    if (!value || typeof value !== 'string') return value
     const { stringTests }: BaseDeepRedactConfig = this.config
     if (!shouldRedact) {
-      return stringTests?.map((test) => {
+      const result = stringTests?.map((test) => {
         if (test instanceof RegExp) {
           if (!test.test(value)) return value
           if (remove) return undefined
@@ -154,6 +154,9 @@ class RedactorUtils {
 
         return test.replacer(value, test.pattern)
       }).filter(Boolean)[0]
+      if (result) return result
+      if (remove) return undefined
+      return value
     }
     if (remove) return undefined
     if (typeof replacement === 'function') return replacement(value)
