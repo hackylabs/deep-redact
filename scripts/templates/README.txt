@@ -3,13 +3,13 @@
 [![npm version](https://badge.fury.io/js/@hackylabs%2Fdeep-redact.svg)](https://badge.fury.io/js/@hackylabs%2Fdeep-redact)
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/hackylabs/deep-redact/blob/main/LICENSE)
 
-Faster than Fast Redact <sup>1</sup> as well as being safer and more configurable than many other redaction libraries,
+Faster than Fast Redact <sup>1</sup> as well as being safer and more configurable than many other redaction solutions,
 Deep Redact is a zero-dependency tool that redacts sensitive information from strings and objects. It is designed to be
 used in a production environment where sensitive information needs to be redacted from logs, error messages, files,
 and other outputs.
 
 Circular references and other unsupported values are handled gracefully, and the library is designed to be as fast as
-possible while still being configurable.
+possible while still being easy to use and configure.
 
 Supporting both CommonJS and ESM, with named and default exports, Deep Redact is designed to be versatile and easy to
 use in any modern JavaScript or TypeScript project in Node or the browser.
@@ -31,9 +31,8 @@ library outside of your global logging/error-reporting libraries.</h4>
 // ./src/example.ts
 import {DeepRedact} from '@hackylabs/deep-redact'; // If you're using CommonJS, import with require('@hackylabs/deep-redact') instead. Both CommonJS and ESM support named and default imports.
 
-const redaction = new DeepRedact({
+const objRedaction = new DeepRedact({
   blacklistedKeys: ['sensitive', 'password', /name/i],
-  serialise: false,
 })
 
 const obj = {
@@ -46,7 +45,8 @@ const obj = {
   }
 }
 
-redaction.redact(obj)
+// Recursively redact sensitive information from an object
+objRedaction.redact(obj)
 // {
 //  keepThis: 'This is fine',
 //  sensitive: '[REDACTED]',
@@ -56,6 +56,19 @@ redaction.redact(obj)
 //    firstName: '[REDACTED]'
 //  }
 // }
+
+const strRedaction = new DeepRedact({
+  stringTests: [
+    {
+      pattern: /<(email|password)>([^<]+)<\/\1>/gi,
+      replacer: (value: string, pattern: RegExp) => value.replace(pattern, '<$1>[REDACTED]</$1>'),
+    },
+  ],
+})
+
+// Partially redact sensitive information from a string
+strRedaction.redact('<email>someone@somewhere.com</email><keepThis>This is fine</keepThis><password>secret</password>')
+// '<email>[REDACTED]</email><keepThis>This is fine</keepThis><password>[REDACTED]</password>'
 ```
 
 ## Configuration
@@ -67,6 +80,10 @@ redaction.redact(obj)
 ### BlacklistKeyConfig
 
 <--BLACKLIST_KEY_CONFIG-->
+
+### StringTestConfig
+
+<--STRING_TEST_CONFIG-->
 
 ### Benchmark
 Comparisons are made against JSON.stringify, Regex.replace, Fast Redact &

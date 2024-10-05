@@ -13,7 +13,7 @@ const tableData: TableData = [
     key: 'stringTests',
     description: 'Array of regular expressions to perform against string values, whether that value is a flat string or nested within an object.',
     type: 'array',
-    options: 'RegExp[]',
+    options: 'Array<RegExp￨StringTestConfig>',
     default: '[]',
     required: 'N',
   },
