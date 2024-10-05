@@ -152,7 +152,7 @@ class RedactorUtils {
 
         if (remove && test.pattern.test(value)) return undefined
 
-        return test.replacement(value, test.pattern)
+        return test.replacer(value, test.pattern)
       }).filter(Boolean)[0]
     }
     if (remove) return undefined
