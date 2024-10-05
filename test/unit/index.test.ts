@@ -170,6 +170,17 @@ describe('DeepRedact', () => {
           })
         })
 
+        it('should transform a set', () => {
+          const set = new Set([1, 2, 3])
+
+          expect(DeepRedact.unsupportedTransformer(set)).toEqual({
+            __unsupported: {
+              type: 'set',
+              values: Array.from(set),
+            },
+          })
+        })
+
         it('should transform a url', () => {
           const url = new URL('https://example.com')
 
