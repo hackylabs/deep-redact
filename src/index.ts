@@ -78,8 +78,8 @@ class DeepRedact {
       }
     }
 
+    if (value instanceof URL) return value.toString()
     if (value instanceof Date) return value.toISOString()
-
     return value
   }
 

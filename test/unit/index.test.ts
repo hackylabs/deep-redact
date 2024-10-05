@@ -170,6 +170,12 @@ describe('DeepRedact', () => {
           })
         })
 
+        it('should transform a url', () => {
+          const url = new URL('https://example.com')
+
+          expect(DeepRedact.unsupportedTransformer(url)).toBe(url.toString())
+        })
+
         it('should transform a date', () => {
           const date = new Date()
 
