@@ -3,7 +3,7 @@ import fastRedact from 'fast-redact'
 import superjson from 'superjson'
 import { obglob } from '@hackylabs/obglob'
 import { DeepRedact } from '../../src'
-import { dummyUser } from '../setup/dummyUser'
+import { dummyUser, dummyUserXml } from '../setup/dummyUser'
 import { blacklistedKeys } from '../setup/blacklist'
 
 const complexBlacklistedKeys = [
@@ -71,7 +71,9 @@ const ObGlobPatterns = [
   '**/ssn',
 ]
 
-const pattern = /"(email|phone|password|birthDate|ip|macAddress|address.*?city|state|postalCode|country|iban|cardNumber|wallet|ein|ssn|firstName|lastName|maidenName|username)":"[^"]*"/gi
+const stringPattern = /"(email|phone|password|birthDate|ip|macAddress|address.*?city|state|postalCode|country|iban|cardNumber|wallet|ein|ssn|firstName|lastName|maidenName|username)":"[^"]*"/gi
+
+const xmlPattern = /<(email|phone|password|birthDate|ip|macAddress|address.*?city|state|postalCode|country|iban|cardNumber|wallet|ein|ssn|firstName|lastName|maidenName|username)>([^<]+)<\/\1>/gi
 
 describe('Redaction benchmark', () => {
   bench('JSON.stringify, large object', async () => {
@@ -108,7 +110,7 @@ describe('Redaction benchmark', () => {
 
   bench('Regex replace, large object', async () => {
     await new Promise((resolve) => {
-      const redacted = superjson.stringify(dummyUser).replace(pattern, '"$1":"[REDACTED]"')
+      const redacted = superjson.stringify(dummyUser).replace(stringPattern, '"$1":"[REDACTED]"')
       resolve(redacted)
     })
   })
@@ -128,7 +130,7 @@ describe('Redaction benchmark', () => {
 
   bench('Regex replace, 1000 large objects', async () => {
     await new Promise((resolve) => {
-      const redacted = superjson.stringify(Array(1000).fill(dummyUser)).replace(pattern, '"$1":"[REDACTED]"')
+      const redacted = superjson.stringify(Array(1000).fill(dummyUser)).replace(stringPattern, '"$1":"[REDACTED]"')
       resolve(redacted)
     })
   })
@@ -193,6 +195,20 @@ describe('Redaction benchmark', () => {
     await new Promise((resolve) => {
       const redaction = new DeepRedact({ blacklistedKeys, remove: true })
       resolve(redaction.redact(dummyUser))
+    })
+  })
+
+  bench('DeepRedact, XML', async () => {
+    await new Promise((resolve) => {
+      const redaction = new DeepRedact({
+        stringTests: [
+          {
+            pattern: xmlPattern,
+            replacer: (value: string, pattern: RegExp) => value.replace(pattern, '<$1>[REDACTED]</$1>'),
+          },
+        ],
+      })
+      resolve(redaction.redact(dummyUserXml))
     })
   })
 })
