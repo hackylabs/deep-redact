@@ -53,7 +53,7 @@ class DeepRedact {
                 return {
                     __unsupported: {
                         type: 'bigint',
-                        value: value.toString(),
+                        value: value.toString(10),
                         radix: 10,
                     },
                 };
@@ -148,7 +148,10 @@ class DeepRedact {
          */
         this.maybeSerialise = (value) => {
             this.circularReference = null;
-            return this.config.serialise ? JSON.stringify(value) : value;
+            const result = this.redactorUtils.partialStringRedact(value);
+            if (!this.config.serialise)
+                return result;
+            return typeof result === 'string' ? result : JSON.stringify(result);
         };
         /**
          * Redact the provided value. The value will be stripped of any circular references and other unsupported data types, before being redacted according to the configuration and finally serialised if required.
