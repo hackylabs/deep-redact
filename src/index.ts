@@ -1,3 +1,4 @@
+import * as console from 'node:console'
 import { DeepRedactConfig } from './types'
 import RedactorUtils from './utils/redactorUtils'
 
@@ -53,7 +54,7 @@ class DeepRedact {
       return {
         __unsupported: {
           type: 'bigint',
-          value: value.toString(),
+          value: value.toString(10),
           radix: 10,
         },
       }
@@ -146,7 +147,9 @@ class DeepRedact {
    */
   private maybeSerialise = (value: unknown): unknown => {
     this.circularReference = null
-    return this.config.serialise ? JSON.stringify(value) : value
+    const result = this.redactorUtils.partialStringRedact(value)
+    if (!this.config.serialise) return result
+    return typeof result === 'string' ? result : JSON.stringify(result)
   }
 
   /**

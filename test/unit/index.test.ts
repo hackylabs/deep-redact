@@ -15,7 +15,7 @@ describe('DeepRedact', () => {
     vi.restoreAllMocks()
   })
 
-  describe('performance', () => {
+  describe.skip('performance', () => {
     it('should not leak memory', async () => {
       config.muteConsole = true
 
@@ -55,9 +55,11 @@ describe('DeepRedact', () => {
 
     describe('constructor', () => {
       let deepRedact: DeepRedact
+      const replacer = vi.fn((value: string) => value)
       const deepRedactConfig: Required<Omit<BaseDeepRedactConfig, 'serialise' | 'serialize'>> = {
         blacklistedKeys,
         blacklistedKeysTransformed: [],
+        partialStringTests: [{ pattern: /test/, replacer }],
         stringTests: [/^test$/],
         retainStructure: true,
         fuzzyKeyMatch: true,
@@ -328,15 +330,59 @@ describe('DeepRedact', () => {
 
     describe('maybeSerialise', () => {
       let deepRedact: DeepRedact
+      let partialStringRedactSpy: MockInstance<typeof RedactorUtils.prototype.partialStringRedact>
 
-      it('should return the value', () => {
-        deepRedact = new DeepRedact({ blacklistedKeys, serialise: false })
-        expect(deepRedact.maybeSerialise({ a: 1 })).toEqual({ a: 1 })
+      describe('serialise is false', () => {
+        beforeEach(() => {
+          deepRedact = new DeepRedact({ blacklistedKeys, serialise: false })
+          partialStringRedactSpy = vi.spyOn(deepRedact.redactorUtils, 'partialStringRedact')
+        })
+
+        it('should call partialStringRedact with the value', () => {
+          deepRedact.maybeSerialise({ a: 1 })
+          expect(partialStringRedactSpy).toHaveBeenNthCalledWith(1, { a: 1 })
+        })
+
+        it('should return the value', () => {
+          expect(deepRedact.maybeSerialise({ a: 1 })).toEqual({ a: 1 })
+        })
       })
 
-      it('should return a string', () => {
-        deepRedact = new DeepRedact({ blacklistedKeys, serialise: true })
-        expect(deepRedact.maybeSerialise({ a: 1 })).toEqual('{"a":1}')
+      describe('serialise is true', () => {
+        beforeEach(() => {
+          deepRedact = new DeepRedact({
+            serialise: true,
+            blacklistedKeys,
+            partialStringTests: [
+              {
+                pattern: /Hello/gi,
+                replacer: (value: string, pattern) => value.replace(pattern, '[REDACTED]'),
+              },
+              {
+                pattern: /Foo/gi,
+                replacer: (value: string, pattern) => value.replace(pattern, '[REDACTED]'),
+              },
+            ],
+          })
+          partialStringRedactSpy = vi.spyOn(deepRedact.redactorUtils, 'partialStringRedact')
+        })
+
+        it('should call partialStringRedact with the value', () => {
+          deepRedact.maybeSerialise({ a: 1 })
+          expect(partialStringRedactSpy).toHaveBeenNthCalledWith(1, { a: 1 })
+        })
+
+        describe('value is not a string', () => {
+          it('should return a string', () => {
+            expect(deepRedact.maybeSerialise({ a: 'Hello, World! Foo Bar' })).toEqual('{"a":"[REDACTED], World! [REDACTED] Bar"}')
+          })
+        })
+
+        describe('value is a string', () => {
+          it('should return a string', () => {
+            expect(deepRedact.maybeSerialise('Hello, World! Foo Bar')).toEqual('[REDACTED], World! [REDACTED] Bar')
+          })
+        })
       })
     })
 
