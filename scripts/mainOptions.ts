@@ -11,9 +11,17 @@ const tableData: TableData = [
   },
   {
     key: 'stringTests',
-    description: 'Array of regular expressions to perform against string values, whether that value is a flat string or nested within an object.',
+    description: 'Array of regular expressions to perform against string values, whether that value is a flat string or nested within an object. Will redact whole string values. If you want to redact only part of the string, use `partialStringTests` instead. If a replacer function is provided in the config for the associated test, it will be used to redact the value.',
     type: 'array',
     options: 'Array<RegExp￨StringTestConfig>',
+    default: '[]',
+    required: 'N',
+  },
+  {
+    key: 'partialStringTests',
+    description: 'Array of regular expressions to perform against string values, whether that value is a flat string or nested within an object. Will redact only the matched part of the string using the replacer function provided in the config for the associated test.',
+    type: 'array',
+    options: 'StringTestConfig[]',
     default: '[]',
     required: 'N',
   },
