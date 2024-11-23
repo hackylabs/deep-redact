@@ -2,6 +2,7 @@ import {
   describe, it, expect, beforeEach, vi, MockInstance,
 } from 'vitest'
 import RedactorUtils from '../../src/utils/redactorUtils'
+import type { ComplexStringTest } from '../../src/types'
 
 describe('RedactorUtils', () => {
   let utils: RedactorUtils
@@ -22,6 +23,7 @@ describe('RedactorUtils', () => {
         expect(utils.config).toEqual({
           blacklistedKeys: [],
           blacklistedKeysTransformed: [],
+          partialStringTests: [],
           stringTests: [],
           fuzzyKeyMatch: false,
           caseSensitiveKeyMatch: true,
@@ -35,9 +37,13 @@ describe('RedactorUtils', () => {
     })
 
     describe(' when a full custom config is provided', () => {
+      let replacer: MockInstance<ComplexStringTest['replacer']>
+
       beforeEach(() => {
+        replacer = vi.fn((value: string, pattern: RegExp) => value.replace(pattern, '[REDACTED]'))
         utils = new RedactorUtils({
           blacklistedKeys: ['a', /b/],
+          partialStringTests: [{ pattern: /Foo/gi, replacer }],
           stringTests: [/^Hello/],
           fuzzyKeyMatch: true,
           caseSensitiveKeyMatch: false,
@@ -68,6 +74,12 @@ describe('RedactorUtils', () => {
               fuzzyKeyMatch: true,
               caseSensitiveKeyMatch: false,
               retainStructure: true,
+            },
+          ],
+          partialStringTests: [
+            {
+              pattern: /Foo/gi,
+              replacer,
             },
           ],
           stringTests: [/^Hello/],
@@ -1677,6 +1689,58 @@ describe('RedactorUtils', () => {
             expect(result).toEqual({
               a: '[REDACTED object]',
             })
+          })
+        })
+      })
+    })
+  })
+
+  describe('partialStringRedactor', () => {
+    beforeEach(() => {
+      utils = new RedactorUtils({
+        partialStringTests: [
+          {
+            pattern: /Hello/gi,
+            replacer: (value: string, pattern) => value.replace(pattern, '[REDACTED]'),
+          },
+          {
+            pattern: /Foo/gi,
+            replacer: (value: string, pattern) => value.replace(pattern, '[REDACTED]'),
+          },
+        ],
+      })
+    })
+
+    describe('when the value is not a string', () => {
+      it('should return the value', () => {
+        expect(utils.partialStringRedact(1)).toBe(1)
+      })
+
+      describe('when it fails to stringify the value', () => {
+        it('should throw an error', () => {
+          const value = { bigint: BigInt(1) }
+          expect(() => utils.partialStringRedact(value)).toThrowErrorMatchingSnapshot()
+        })
+      })
+    })
+
+    describe('when the value is a string', () => {
+      describe('when the value does not match any partialStringTests', () => {
+        it('should return the value', () => {
+          expect(utils.partialStringRedact('Bar')).toBe('Bar')
+        })
+      })
+
+      describe('when the value matches a partialStringTest', () => {
+        describe('when it matches only one partialStringTest', () => {
+          it('should return the redacted string', () => {
+            expect(utils.partialStringRedact('Hello, world!')).toBe('[REDACTED], world!')
+          })
+        })
+
+        describe('when it matches multiple partialStringTests', () => {
+          it('should return the redacted string', () => {
+            expect(utils.partialStringRedact('Hello, Foo, world!')).toBe('[REDACTED], [REDACTED], world!')
           })
         })
       })

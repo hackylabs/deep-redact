@@ -1,3 +1,4 @@
+import * as console from 'node:console'
 import {
   BaseDeepRedactConfig, BlacklistKeyConfig, RedactorUtilsConfig, Transformer,
 } from '../types'
@@ -5,6 +6,7 @@ import {
 const defaultConfig: Required<RedactorUtilsConfig> = {
   stringTests: [],
   blacklistedKeys: [],
+  partialStringTests: [],
   blacklistedKeysTransformed: [],
   fuzzyKeyMatch: false,
   caseSensitiveKeyMatch: true,
@@ -26,6 +28,7 @@ class RedactorUtils {
     this.config = {
       ...defaultConfig,
       ...customConfig,
+      partialStringTests: customConfig.partialStringTests ?? [],
       blacklistedKeys: customConfig.blacklistedKeys ?? [],
       blacklistedKeysTransformed: customConfig.blacklistedKeys?.map((key) => {
         const isObject = !(typeof key === 'string' || key instanceof RegExp)
@@ -62,7 +65,7 @@ class RedactorUtils {
    * @param str The string to normalise.
    * @returns {string} The normalised string.
    */
-  private static normaliseString = (str: string): string => str.toLowerCase().replace(/\W/g, '')
+  private static normaliseString = (str: string): string => str.toLowerCase().replaceAll(/\W/g, '')
 
   /**
    * Determine if a key matches a given blacklistedKeyConfig. This will check the key against the blacklisted keys,
@@ -207,6 +210,29 @@ class RedactorUtils {
 
       return [prop, this.recurse(val, key ?? prop, shouldRedact)]
     }).filter(([prop]) => prop !== undefined))
+  }
+
+  partialStringRedact = (value: unknown): unknown => {
+    const { partialStringTests }: BaseDeepRedactConfig = this.config
+    if (partialStringTests.length === 0) return value
+
+    let result: string
+    if (typeof value === 'string') {
+      result = value
+    } else {
+      try {
+        result = JSON.stringify(value)
+      } catch (error) {
+        // It should never reach this point, but if it does, it will throw an error that must not contain sensitive data.
+        throw new Error('Failed to stringify value for partialStringRedact. Did you replace the rewriteUnsupported method with something that returns non-serialisable data?')
+      }
+    }
+
+    partialStringTests.forEach((test) => {
+      result = test.replacer(result, test.pattern)
+    })
+
+    return typeof value === 'string' ? result : JSON.parse(result)
   }
 
   /**

@@ -50,6 +50,11 @@ export interface BlacklistKeyConfig {
   key: string | RegExp
 }
 
+export interface ComplexStringTest {
+  pattern: RegExp,
+  replacer: (value: string, pattern: RegExp) => string
+}
+
 export interface BaseDeepRedactConfig {
   /**
    * Keys that should be redacted. Can be a string, or an object with additional configuration options.
@@ -68,7 +73,9 @@ export interface BaseDeepRedactConfig {
    *   /^[\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}$/,  // redact any string that looks like an IP address.
    * ]
    */
-  stringTests?: Array<RegExp | { pattern: RegExp, replacer: (value: string, pattern: RegExp) => string }>
+  stringTests?: Array<RegExp | ComplexStringTest>
+
+  partialStringTests?: Array<ComplexStringTest>
 
   /**
    * Perform a fuzzy match on the key. This will match any key that contains the string, rather than a case-sensitive match.
@@ -139,8 +146,20 @@ export interface BaseDeepRedactConfig {
 }
 
 export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, 'blacklistedKeysTransformed' | 'blacklistedKeys' | 'stringTests'>> & ({
+  partialStringTests: BaseDeepRedactConfig['partialStringTests']
   blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys']
   stringTests: BaseDeepRedactConfig['stringTests']
+} | {
+  partialStringTests: BaseDeepRedactConfig['partialStringTests']
+  blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys']
+} | {
+  blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys']
+  stringTests: BaseDeepRedactConfig['stringTests']
+} | {
+  partialStringTests: BaseDeepRedactConfig['partialStringTests']
+  stringTests: BaseDeepRedactConfig['stringTests']
+} | {
+  partialStringTests: BaseDeepRedactConfig['partialStringTests']
 } | {
   blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys']
 } | {
