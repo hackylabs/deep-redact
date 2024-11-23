@@ -198,10 +198,10 @@ describe('Redaction benchmark', () => {
     })
   })
 
-  bench('DeepRedact, XML', async () => {
+  bench('DeepRedact, partial redaction', async () => {
     await new Promise((resolve) => {
       const redaction = new DeepRedact({
-        stringTests: [
+        partialStringTests: [
           {
             pattern: xmlPattern,
             replacer: (value: string, pattern: RegExp) => value.replace(pattern, '<$1>[REDACTED]</$1>'),
@@ -209,6 +209,20 @@ describe('Redaction benchmark', () => {
         ],
       })
       resolve(redaction.redact(dummyUserXml))
+    })
+  })
+
+  bench('DeepRedact, partial redaction large string', async () => {
+    await new Promise((resolve) => {
+      const redaction = new DeepRedact({
+        partialStringTests: [
+          {
+            pattern: xmlPattern,
+            replacer: (value: string, pattern: RegExp) => value.replace(pattern, '<$1>[REDACTED]</$1>'),
+          },
+        ],
+      })
+      resolve(redaction.redact(dummyUserXml.repeat(1000)))
     })
   })
 })

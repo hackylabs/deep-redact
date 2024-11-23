@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const defaultConfig = {
     stringTests: [],
     blacklistedKeys: [],
+    partialStringTests: [],
     blacklistedKeysTransformed: [],
     fuzzyKeyMatch: false,
     caseSensitiveKeyMatch: true,
@@ -14,7 +15,7 @@ const defaultConfig = {
 };
 class RedactorUtils {
     constructor(customConfig) {
-        var _a, _b, _c;
+        var _a, _b, _c, _d;
         /**
          * The configuration for the redaction.
          * @private
@@ -160,6 +161,28 @@ class RedactorUtils {
                 return [prop, this.recurse(val, key !== null && key !== void 0 ? key : prop, shouldRedact)];
             }).filter(([prop]) => prop !== undefined));
         };
+        this.partialStringRedact = (value) => {
+            const { partialStringTests } = this.config;
+            if (partialStringTests.length === 0)
+                return value;
+            let result;
+            if (typeof value === 'string') {
+                result = value;
+            }
+            else {
+                try {
+                    result = JSON.stringify(value);
+                }
+                catch (error) {
+                    // It should never reach this point, but if it does, it will throw an error that must not contain sensitive data.
+                    throw new Error('Failed to stringify value for partialStringRedact. Did you replace the rewriteUnsupported method with something that returns non-serialisable data?');
+                }
+            }
+            partialStringTests.forEach((test) => {
+                result = test.replacer(result, test.pattern);
+            });
+            return typeof value === 'string' ? result : JSON.parse(result);
+        };
         /**
          * Redact a value. If the value is an object or array, the redaction will be performed recursively, otherwise the value will be redacted if it is a supported type using the `replace` method.
          * @private
@@ -185,7 +208,7 @@ class RedactorUtils {
                 return this.redactArray(value);
             return this.redactObject(value, key, parentShouldRedact);
         };
-        this.config = Object.assign(Object.assign(Object.assign({}, defaultConfig), customConfig), { blacklistedKeys: (_a = customConfig.blacklistedKeys) !== null && _a !== void 0 ? _a : [], blacklistedKeysTransformed: (_c = (_b = customConfig.blacklistedKeys) === null || _b === void 0 ? void 0 : _b.map((key) => {
+        this.config = Object.assign(Object.assign(Object.assign({}, defaultConfig), customConfig), { partialStringTests: (_a = customConfig.partialStringTests) !== null && _a !== void 0 ? _a : [], blacklistedKeys: (_b = customConfig.blacklistedKeys) !== null && _b !== void 0 ? _b : [], blacklistedKeysTransformed: (_d = (_c = customConfig.blacklistedKeys) === null || _c === void 0 ? void 0 : _c.map((key) => {
                 var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
                 const isObject = !(typeof key === 'string' || key instanceof RegExp);
                 const setKey = isObject ? key.key : key;
@@ -208,7 +231,7 @@ class RedactorUtils {
                     };
                 }
                 return fallback;
-            })) !== null && _c !== void 0 ? _c : [] });
+            })) !== null && _d !== void 0 ? _d : [] });
     }
 }
 /**
@@ -217,7 +240,7 @@ class RedactorUtils {
  * @param str The string to normalise.
  * @returns {string} The normalised string.
  */
-RedactorUtils.normaliseString = (str) => str.toLowerCase().replace(/\W/g, '');
+RedactorUtils.normaliseString = (str) => str.toLowerCase().replaceAll(/\W/g, '');
 /**
  * Determine if a key matches a given blacklistedKeyConfig. This will check the key against the blacklisted keys,
  * using the configuration option for the given key falling back to the default configuration.
