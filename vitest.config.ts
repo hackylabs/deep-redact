@@ -4,7 +4,6 @@ export default defineConfig({
   test: {
     testTimeout: 60000,
     reporters: ['json', 'default'],
-    outputFile: 'test-results.json',
     coverage: {
       enabled: true,
       provider: 'v8',
