@@ -51,6 +51,8 @@ declare class DeepRedact {
      * This is to ensure that the WeakSet doesn't cause memory leaks.
      * @private
      * @param value
+     * @returns {unknown} The value as a JSON string or as the provided value.
+     * @throws {Error} If the value cannot be serialised.
      */
     private maybeSerialise;
     /**

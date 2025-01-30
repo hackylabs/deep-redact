@@ -1,3 +1,0 @@
-// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
-
-exports[`RedactorUtils > partialStringRedactor > when the value is not a string > when it fails to stringify the value > should throw an error 1`] = `[Error: Failed to stringify value for partialStringRedact. Did you replace the rewriteUnsupported method with something that returns non-serialisable data?]`;

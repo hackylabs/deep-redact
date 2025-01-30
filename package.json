@@ -1,6 +1,6 @@
 {
   "name": "@hackylabs/deep-redact",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "A fast, safe and configurable zero-dependency library for redacting strings or deeply redacting arrays and objects.",
   "private": false,
   "license": "MIT",

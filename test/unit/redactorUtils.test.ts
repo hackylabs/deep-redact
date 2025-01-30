@@ -1711,19 +1711,6 @@ describe('RedactorUtils', () => {
       })
     })
 
-    describe('when the value is not a string', () => {
-      it('should return the value', () => {
-        expect(utils.partialStringRedact(1)).toBe(1)
-      })
-
-      describe('when it fails to stringify the value', () => {
-        it('should throw an error', () => {
-          const value = { bigint: BigInt(1) }
-          expect(() => utils.partialStringRedact(value)).toThrowErrorMatchingSnapshot()
-        })
-      })
-    })
-
     describe('when the value is a string', () => {
       describe('when the value does not match any partialStringTests', () => {
         it('should return the value', () => {

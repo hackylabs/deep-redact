@@ -77,7 +77,7 @@ declare class RedactorUtils {
      * @param {boolean} parentShouldRedact Whether the item should be redacted based on the key within the parent object.
      */
     private redactObject;
-    partialStringRedact: (value: unknown) => unknown;
+    partialStringRedact: (value: string) => string;
     /**
      * Redact a value. If the value is an object or array, the redaction will be performed recursively, otherwise the value will be redacted if it is a supported type using the `replace` method.
      * @private

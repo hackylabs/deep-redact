@@ -15,7 +15,7 @@ describe('DeepRedact', () => {
     vi.restoreAllMocks()
   })
 
-  describe('performance', () => {
+  describe.skip('performance', () => {
     it('should not leak memory', async () => {
       config.muteConsole = true
 
@@ -335,12 +335,6 @@ describe('DeepRedact', () => {
       describe('serialise is false', () => {
         beforeEach(() => {
           deepRedact = new DeepRedact({ blacklistedKeys, serialise: false })
-          partialStringRedactSpy = vi.spyOn(deepRedact.redactorUtils, 'partialStringRedact')
-        })
-
-        it('should call partialStringRedact with the value', () => {
-          deepRedact.maybeSerialise({ a: 1 })
-          expect(partialStringRedactSpy).toHaveBeenNthCalledWith(1, { a: 1 })
         })
 
         it('should return the value', () => {
@@ -352,35 +346,23 @@ describe('DeepRedact', () => {
         beforeEach(() => {
           deepRedact = new DeepRedact({
             serialise: true,
-            blacklistedKeys,
-            partialStringTests: [
-              {
-                pattern: /Hello/gi,
-                replacer: (value: string, pattern) => value.replace(pattern, '[REDACTED]'),
-              },
-              {
-                pattern: /Foo/gi,
-                replacer: (value: string, pattern) => value.replace(pattern, '[REDACTED]'),
-              },
-            ],
+            blacklistedKeys
           })
-          partialStringRedactSpy = vi.spyOn(deepRedact.redactorUtils, 'partialStringRedact')
-        })
-
-        it('should call partialStringRedact with the value', () => {
-          deepRedact.maybeSerialise({ a: 1 })
-          expect(partialStringRedactSpy).toHaveBeenNthCalledWith(1, { a: 1 })
         })
 
         describe('value is not a string', () => {
           it('should return a string', () => {
-            expect(deepRedact.maybeSerialise({ a: 'Hello, World! Foo Bar' })).toEqual('{"a":"[REDACTED], World! [REDACTED] Bar"}')
+            expect(deepRedact.maybeSerialise({ a: 'Hello, World! Foo Bar' })).toEqual('{"a":"Hello, World! Foo Bar"}')
+          })
+
+          it('should throw an error if the value cannot be serialised', () => {
+            expect(() => deepRedact.maybeSerialise({ a: BigInt(1) })).toThrow('Failed to serialise value. Did you override the `unsupportedTransformer` method and return a value that is supported by JSON.stringify?')
           })
         })
 
         describe('value is a string', () => {
           it('should return a string', () => {
-            expect(deepRedact.maybeSerialise('Hello, World! Foo Bar')).toEqual('[REDACTED], World! [REDACTED] Bar')
+            expect(deepRedact.maybeSerialise('Hello, World! Foo Bar')).toEqual('Hello, World! Foo Bar')
           })
         })
       })

@@ -1,4 +1,3 @@
-import * as console from 'node:console'
 import { DeepRedactConfig } from './types'
 import RedactorUtils from './utils/redactorUtils'
 
@@ -48,8 +47,6 @@ class DeepRedact {
    * @returns {unknown} The value in a format that is supported by JSON.stringify.
    */
   protected unsupportedTransformer = (value: unknown): unknown => {
-    if (!this.config.serialise) return value
-
     if (typeof value === 'bigint') {
       return {
         __unsupported: {
@@ -101,6 +98,7 @@ class DeepRedact {
 
     if (value instanceof URL) return value.toString()
     if (value instanceof Date) return value.toISOString()
+
     return value
   }
 
@@ -144,12 +142,18 @@ class DeepRedact {
    * This is to ensure that the WeakSet doesn't cause memory leaks.
    * @private
    * @param value
+   * @returns {unknown} The value as a JSON string or as the provided value.
+   * @throws {Error} If the value cannot be serialised.
    */
   private maybeSerialise = (value: unknown): unknown => {
     this.circularReference = null
-    const result = this.redactorUtils.partialStringRedact(value)
-    if (!this.config.serialise) return result
-    return typeof result === 'string' ? result : JSON.stringify(result)
+    if (!this.config.serialise) return value
+    if (typeof value === 'string') return value
+    try {
+      return JSON.stringify(value)
+    } catch (error) {
+      throw new Error('Failed to serialise value. Did you override the `unsupportedTransformer` method and return a value that is supported by JSON.stringify?')
+    }
   }
 
   /**
