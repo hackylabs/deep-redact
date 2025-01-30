@@ -152,7 +152,7 @@ class DeepRedact {
     try {
       return JSON.stringify(value)
     } catch (error) {
-      throw new Error('Failed to serialise value. Did you override the `unsupportedTransformer` method and return a value that is supported by JSON.stringify?')
+      throw new Error('Failed to serialise value. Did you override the `unsupportedTransformer` method and return a value that is not supported by JSON.stringify?')
     }
   }
 
