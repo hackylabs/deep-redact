@@ -356,7 +356,7 @@ describe('DeepRedact', () => {
           })
 
           it('should throw an error if the value cannot be serialised', () => {
-            expect(() => deepRedact.maybeSerialise({ a: BigInt(1) })).toThrow('Failed to serialise value. Did you override the `unsupportedTransformer` method and return a value that is supported by JSON.stringify?')
+            expect(() => deepRedact.maybeSerialise({ a: BigInt(1) })).toThrow('Failed to serialise value. Did you override the `unsupportedTransformer` method and return a value that is not supported by JSON.stringify?')
           })
         })
 
