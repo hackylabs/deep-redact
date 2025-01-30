@@ -59,6 +59,7 @@ declare class DeepRedact {
      * Redact the provided value. The value will be stripped of any circular references and other unsupported data types, before being redacted according to the configuration and finally serialised if required.
      * @param {unknown} value The value to redact.
      * @returns {unknown} The redacted value.
+     * @throws {Error} If the value cannot be serialised.
      */
     redact: (value: unknown) => unknown;
 }
