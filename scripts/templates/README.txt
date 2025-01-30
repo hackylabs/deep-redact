@@ -73,6 +73,30 @@ strRedaction.redact('<email>someone@somewhere.com</email><keepThis>This is fine<
 // '<email>[REDACTED]</email><keepThis>This is fine</keepThis><password>[REDACTED]</password>'
 ```
 
+// Override the `unsupportedTransformer` method to handle unsupported values
+
+```typescript
+class CustomRedaction extends DeepRedact {
+  constructor(options) {
+    super(options)
+    this.rewriteUnsupported = (value) => {
+      if (value instanceof BigInt) return value.toString()
+
+      // Add more conditional statements for unsupported value types here (e.g. Error, Date, Map, Set, etc.)
+
+      // If the value is supported, return it
+      return value
+    }
+  }
+}
+
+const customRedaction = new CustomRedaction({
+  blacklistedKeys: ['sensitive', 'password', /name/i],
+})
+
+customRedaction.redact({ a: BigInt(1) })
+```
+
 ## Configuration
 
 ### Main Options
