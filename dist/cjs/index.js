@@ -156,13 +156,14 @@ class DeepRedact {
                 return JSON.stringify(value);
             }
             catch (error) {
-                throw new Error('Failed to serialise value. Did you override the `unsupportedTransformer` method and return a value that is supported by JSON.stringify?');
+                throw new Error('Failed to serialise value. Did you override the `unsupportedTransformer` method and return a value that is not supported by JSON.stringify?');
             }
         };
         /**
          * Redact the provided value. The value will be stripped of any circular references and other unsupported data types, before being redacted according to the configuration and finally serialised if required.
          * @param {unknown} value The value to redact.
          * @returns {unknown} The redacted value.
+         * @throws {Error} If the value cannot be serialised.
          */
         this.redact = (value) => {
             return this.maybeSerialise(this.redactorUtils.recurse(this.rewriteUnsupported(value)));
