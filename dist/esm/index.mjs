@@ -42,8 +42,6 @@ class DeepRedact {
      * @returns {unknown} The value in a format that is supported by JSON.stringify.
      */
     unsupportedTransformer = (value) => {
-        if (!this.config.serialise)
-            return value;
         if (typeof value === 'bigint') {
             return {
                 __unsupported: {
@@ -138,13 +136,21 @@ class DeepRedact {
      * This is to ensure that the WeakSet doesn't cause memory leaks.
      * @private
      * @param value
+     * @returns {unknown} The value as a JSON string or as the provided value.
+     * @throws {Error} If the value cannot be serialised.
      */
     maybeSerialise = (value) => {
         this.circularReference = null;
-        const result = this.redactorUtils.partialStringRedact(value);
         if (!this.config.serialise)
-            return result;
-        return typeof result === 'string' ? result : JSON.stringify(result);
+            return value;
+        if (typeof value === 'string')
+            return value;
+        try {
+            return JSON.stringify(value);
+        }
+        catch (error) {
+            throw new Error('Failed to serialise value. Did you override the `unsupportedTransformer` method and return a value that is supported by JSON.stringify?');
+        }
     };
     /**
      * Redact the provided value. The value will be stripped of any circular references and other unsupported data types, before being redacted according to the configuration and finally serialised if required.

@@ -142,28 +142,29 @@ class RedactorUtils {
    */
   private redactString = (value: unknown, replacement: Transformer | string, remove: boolean, shouldRedact: boolean): unknown => {
     if (!value || typeof value !== 'string') return value
+    const maybePartiallyRedacted = this.partialStringRedact(value)
     const { stringTests }: BaseDeepRedactConfig = this.config
     if (!shouldRedact) {
       const result = stringTests?.map((test) => {
         if (test instanceof RegExp) {
-          if (!test.test(value)) return value
+          if (!test.test(maybePartiallyRedacted)) return maybePartiallyRedacted
           if (remove) return undefined
-          if (typeof replacement === 'function') return replacement(value)
-          if (this.config.replaceStringByLength) return replacement.repeat(value.length)
+          if (typeof replacement === 'function') return replacement(maybePartiallyRedacted)
+          if (this.config.replaceStringByLength) return replacement.repeat(maybePartiallyRedacted.length)
           return replacement
         }
 
-        if (remove && test.pattern.test(value)) return undefined
+        if (remove && test.pattern.test(maybePartiallyRedacted)) return undefined
 
-        return test.replacer(value, test.pattern)
+        return test.replacer(maybePartiallyRedacted, test.pattern)
       }).filter(Boolean)[0]
       if (result) return result
       if (remove) return undefined
-      return value
+      return maybePartiallyRedacted
     }
     if (remove) return undefined
-    if (typeof replacement === 'function') return replacement(value)
-    if (this.config.replaceStringByLength) return replacement.repeat(value.length)
+    if (typeof replacement === 'function') return replacement(maybePartiallyRedacted)
+    if (this.config.replaceStringByLength) return replacement.repeat(maybePartiallyRedacted.length)
     return replacement
   }
 
@@ -212,27 +213,16 @@ class RedactorUtils {
     }).filter(([prop]) => prop !== undefined))
   }
 
-  partialStringRedact = (value: unknown): unknown => {
+  partialStringRedact = (value: string): string => {
     const { partialStringTests }: BaseDeepRedactConfig = this.config
     if (partialStringTests.length === 0) return value
 
-    let result: string
-    if (typeof value === 'string') {
-      result = value
-    } else {
-      try {
-        result = JSON.stringify(value)
-      } catch (error) {
-        // It should never reach this point, but if it does, it will throw an error that must not contain sensitive data.
-        throw new Error('Failed to stringify value for partialStringRedact. Did you replace the rewriteUnsupported method with something that returns non-serialisable data?')
-      }
-    }
-
+    let result = value
     partialStringTests.forEach((test) => {
       result = test.replacer(result, test.pattern)
     })
 
-    return typeof value === 'string' ? result : JSON.parse(result)
+    return result
   }
 
   /**

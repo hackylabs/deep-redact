@@ -134,23 +134,23 @@ Redact and Obglob are slower and rely on dependencies.
 
 | scenario | ops / sec | op duration (ms) | margin of error | sample count |
 | --- | --- | --- | --- | --- |
-| DeepRedact, partial redaction | 307851.3 | 0.0032483215 | 0.00001 | 153926 |
-| JSON.stringify, large object | 294966.19 | 0.0033902191 | 0.00001 | 147484 |
-| Regex replace, large object | 37035.62 | 0.0270010305 | 0.00023 | 18518 |
-| DeepRedact, remove item, single object | 35476.81 | 0.0281874296 | 0.00032 | 17739 |
-| DeepRedact, default config, large object | 33548.25 | 0.029807817 | 0.00018 | 16775 |
-| DeepRedact, custom replacer function, single object | 30869.22 | 0.032394726 | 0.00033 | 15435 |
-| DeepRedact, replace string by length, single object | 30762.28 | 0.0325073409 | 0.00022 | 15382 |
-| DeepRedact, retain structure, single object | 25910.97 | 0.0385936964 | 0.0002 | 12956 |
-| DeepRedact, fuzzy matching, single object | 24193.8 | 0.0413329044 | 0.00027 | 12097 |
-| DeepRedact, config per key, single object | 23995.93 | 0.0416737295 | 0.00021 | 11998 |
-| DeepRedact, default config, 1000 large objects | 11634.16 | 0.085953776 | 0.00067 | 5818 |
-| ObGlob, large object | 10174.32 | 0.0982866555 | 0.00331 | 5088 |
-| fast redact, large object | 9721.55 | 0.1028642047 | 0.00053 | 4861 |
-| DeepRedact, case insensitive matching, single object | 4684.17 | 0.2134850482 | 0.00221 | 2343 |
-| DeepRedact, fuzzy and case insensitive matching, single object | 4629.28 | 0.2160161006 | 0.00103 | 2315 |
-| JSON.stringify, 1000 large objects | 425.59 | 2.3497002958 | 0.00848 | 213 |
-| ObGlob, 1000 large objects | 382.13 | 2.6169001615 | 0.0166 | 192 |
-| DeepRedact, partial redaction large string | 287.08 | 3.4834021667 | 0.06046 | 144 |
-| fast redact, 1000 large objects | 190.73 | 5.243073375 | 0.03269 | 96 |
-| Regex replace, 1000 large objects | 187.59 | 5.3307987447 | 0.09335 | 94 |
+| DeepRedact, partial redaction | 352248.69 | 0.0028389034 | 0.00001 | 176125 |
+| JSON.stringify, large object | 344519.5 | 0.0029025933 | 0.00001 | 172260 |
+| DeepRedact, remove item, single object | 46899.55 | 0.0213221673 | 0.0001 | 23450 |
+| Regex replace, large object | 45437.7 | 0.0220081552 | 0.00012 | 22719 |
+| DeepRedact, default config, large object | 43587.44 | 0.0229423881 | 0.00011 | 21794 |
+| DeepRedact, custom replacer function, single object | 41610.76 | 0.0240322436 | 0.00015 | 20806 |
+| DeepRedact, replace string by length, single object | 41167.25 | 0.0242911555 | 0.00011 | 20584 |
+| DeepRedact, retain structure, single object | 33581.72 | 0.0297781075 | 0.00008 | 16791 |
+| DeepRedact, fuzzy matching, single object | 31215.8 | 0.032035062 | 0.00014 | 15608 |
+| DeepRedact, config per key, single object | 30238.48 | 0.033070443 | 0.0001 | 15120 |
+| DeepRedact, default config, 1000 large objects | 14840.7 | 0.0673822448 | 0.00036 | 7421 |
+| ObGlob, large object | 13117.93 | 0.0762315321 | 0.00246 | 6559 |
+| fast redact, large object | 12317.4 | 0.0811859886 | 0.00026 | 6159 |
+| DeepRedact, case insensitive matching, single object | 6056.62 | 0.1651086467 | 0.00056 | 3029 |
+| DeepRedact, fuzzy and case insensitive matching, single object | 5775.99 | 0.173130537 | 0.00063 | 2888 |
+| JSON.stringify, 1000 large objects | 506.85 | 1.9729667638 | 0.00924 | 254 |
+| ObGlob, 1000 large objects | 435.74 | 2.2949569541 | 0.17038 | 218 |
+| DeepRedact, partial redaction large string | 348.38 | 2.8704112457 | 0.04527 | 175 |
+| fast redact, 1000 large objects | 237.04 | 4.2186327647 | 0.01947 | 119 |
+| Regex replace, 1000 large objects | 229.34 | 4.3604152087 | 0.04568 | 115 |
