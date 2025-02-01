@@ -162,4 +162,4 @@ class DeepRedact {
         return this.maybeSerialise(this.redactorUtils.recurse(this.rewriteUnsupported(value)));
     };
 }
-export { DeepRedact as default, DeepRedact };
+export { DeepRedact as default, DeepRedact, };
