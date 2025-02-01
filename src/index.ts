@@ -1,4 +1,4 @@
-import { DeepRedactConfig } from './types'
+import { DeepRedactConfig, RedactorUtilsConfig, BlacklistKeyConfig, Types, Transformer, ComplexStringTest, BaseDeepRedactConfig } from './types'
 import RedactorUtils from './utils/redactorUtils'
 
 class DeepRedact {
@@ -167,4 +167,13 @@ class DeepRedact {
   }
 }
 
-export { DeepRedact as default, DeepRedact }
+export {
+  DeepRedact as default,
+  DeepRedact,
+  type BaseDeepRedactConfig,
+  type RedactorUtilsConfig,
+  type BlacklistKeyConfig,
+  type ComplexStringTest,
+  type Transformer,
+  type Types,
+}
