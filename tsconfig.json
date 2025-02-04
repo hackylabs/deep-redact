@@ -3,6 +3,7 @@
     "lib": [
       "esnext"
     ],
+    "target": "ES2015",
     "declaration": true,
     "declarationDir": "./dist/types",
     "strict": true,
