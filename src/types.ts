@@ -1,6 +1,6 @@
 export type Types = 'string' | 'number' | 'bigint' | 'boolean' | 'object' | 'function' | 'symbol' | 'undefined'
 
-export type Transformer = (value: unknown) => unknown
+export type Transformer = (value: unknown, key?: string | number | null, reference?: WeakMap<object, unknown>) => unknown
 
 export interface BlacklistKeyConfig {
   /**
@@ -143,6 +143,33 @@ export interface BaseDeepRedactConfig {
    * Alias of `serialise` for International-English users.
    */
   serialize?: boolean
+
+  /**
+   * A list of transformers to apply when transforming unsupported values.
+   * Each transformer should conditionally transform the value, or return the value unchanged to be passed to the next transformer.
+   * Transformers will be run in the order they are provided recursively over the entire object.
+   * @default []
+   * @example [
+   *   // redact a key by name.
+   *   standardTransformers.redactByKey,
+   *   // convert a Date to an ISO string.
+   *   (value: unknown) => {
+   *     if (!(value instanceof Date)) return value
+   *     return value.toISOString()
+   *   },
+   *   // convert a BigInt to a string.
+   *   (value: unknown) => {
+   *     if (typeof value !== 'bigint') return value
+   *     return value.toString(10)
+   *   }
+   */
+  transformers?: Array<Transformer>
+
+  /**
+   * Enable logging of the redaction process.
+   * @default false
+   */
+  enableLogging?: boolean
 }
 
 export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, 'blacklistedKeysTransformed' | 'blacklistedKeys' | 'stringTests'>> & ({
@@ -167,3 +194,9 @@ export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, 'blacklistedKe
 })
 
 export type RedactorUtilsConfig = Omit<BaseDeepRedactConfig, 'serialise' | 'serialize'>
+
+export type JSONValue = string | number | boolean | bigint | symbol | undefined | null | Function | JSONValue[] | { [key: string]: JSONValue };
+
+export type StackReference = WeakMap<object, unknown>
+
+export type Stack = Array<{ parent: any, key: string | number | null, value: unknown, path: Array<string | number>, redactingParent: boolean }>

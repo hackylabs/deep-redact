@@ -112,7 +112,7 @@ const extendedDummyUser = {
   }],
 }
 
-extendedDummyUser.someCircular.obj = extendedDummyUser
+extendedDummyUser.someCircular.obj.someCircular = extendedDummyUser.someCircular.obj
 
 const dummyUserXml = `<dummyUser><id>1</id>
 <firstName>Emily</firstName>
