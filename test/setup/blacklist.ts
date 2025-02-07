@@ -25,16 +25,13 @@ export const blacklistedKeys = [
 ]
 
 export const complexBlacklistedKeys = [
-  'email',
   'phone',
   'password',
   'birthDate',
   'ip',
-  'iban',
-  'cardNumber',
-  'wallet',
   'ein',
   'ssn',
+  /iban|(payment)?cardNumber|wallet/i,
   { key: 'address', retainStructure: true, fuzzyKeyMatch: true, caseSensitiveKeyMatch: false },
   { key: 'name', fuzzyKeyMatch: true, caseSensitiveKeyMatch: false },
 ]
