@@ -4,7 +4,7 @@ const defaultConfig: Required<RedactorUtilsConfig> = {
   stringTests: [],
   blacklistedKeys: [],
   partialStringTests: [],
-  blacklistedKeysTransformed: [],
+  _blacklistedKeysTransformed: [],
   fuzzyKeyMatch: false,
   caseSensitiveKeyMatch: true,
   retainStructure: false,
@@ -23,11 +23,11 @@ class RedactorUtils {
    */
   private readonly config: Required<RedactorUtilsConfig> = defaultConfig
 
-  constructor(customConfig: Omit<RedactorUtilsConfig, 'blacklistedKeysTransformed'>) {
+  constructor(customConfig: Omit<RedactorUtilsConfig, '_blacklistedKeysTransformed'>) {
     this.config = {
       ...defaultConfig,
       ...customConfig,
-      blacklistedKeysTransformed: (customConfig.blacklistedKeys ?? []).map((key) => {
+      _blacklistedKeysTransformed: (customConfig.blacklistedKeys ?? []).map((key) => {
         // If key is string or RegExp, create a config object
         if (typeof key === 'string' || key instanceof RegExp) {
           return {
@@ -65,7 +65,7 @@ class RedactorUtils {
   }
 
   private shouldRedactKey = (key: string): boolean => {
-    return this.config.blacklistedKeysTransformed.some(config => {
+    return this.config._blacklistedKeysTransformed.some(config => {
       const pattern = config.key
       if (pattern instanceof RegExp) return pattern.test(key)
       
@@ -320,7 +320,7 @@ class RedactorUtils {
   }
 
   private findMatchingKeyConfig(key: string) {
-    return this.config.blacklistedKeysTransformed.find(config => {
+    return this.config._blacklistedKeysTransformed.find(config => {
       const pattern = config.key
       if (pattern instanceof RegExp) return pattern.test(key)
       
