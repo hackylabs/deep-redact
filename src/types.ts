@@ -65,11 +65,6 @@ export interface BaseDeepRedactConfig {
   blacklistedKeys?: Array<string | RegExp | BlacklistKeyConfig>
 
   /**
-   * Internal use only.
-   */
-  _blacklistedKeysTransformed: Array<Required<BlacklistKeyConfig>>
-
-  /**
    * Redact a string value that matches a test pattern.
    * @default []
    * @example [

@@ -1,10 +1,9 @@
-import type { BaseDeepRedactConfig, Logs, RedactorUtilsConfig, Stack } from '../types'
+import type { BaseDeepRedactConfig, Logs, RedactorUtilsConfig, Stack, BlacklistKeyConfig } from '../types'
 
 const defaultConfig: Required<RedactorUtilsConfig> = {
   stringTests: [],
   blacklistedKeys: [],
   partialStringTests: [],
-  _blacklistedKeysTransformed: [],
   fuzzyKeyMatch: false,
   caseSensitiveKeyMatch: true,
   retainStructure: false,
@@ -22,34 +21,39 @@ class RedactorUtils {
    * @private
    */
   private readonly config: Required<RedactorUtilsConfig> = defaultConfig
+  private readonly blacklistedKeysTransformed: Array<BlacklistKeyConfig> = []
+  private readonly computedRegex: RegExp | null = null
 
-  constructor(customConfig: Omit<RedactorUtilsConfig, '_blacklistedKeysTransformed'>) {
+  constructor(customConfig: RedactorUtilsConfig) {
     this.config = {
       ...defaultConfig,
       ...customConfig,
-      _blacklistedKeysTransformed: (customConfig.blacklistedKeys ?? []).map((key) => {
-        // If key is string or RegExp, create a config object
-        if (typeof key === 'string' || key instanceof RegExp) {
-          return {
-            key,
-            fuzzyKeyMatch: customConfig.fuzzyKeyMatch ?? defaultConfig.fuzzyKeyMatch,
-            caseSensitiveKeyMatch: customConfig.caseSensitiveKeyMatch ?? defaultConfig.caseSensitiveKeyMatch,
-            retainStructure: customConfig.retainStructure ?? defaultConfig.retainStructure,
-            replacement: customConfig.replacement ?? defaultConfig.replacement,
-            remove: customConfig.remove ?? defaultConfig.remove,
-          }
-        }
-        // If key is already a config object, merge with defaults
-        return {
-          fuzzyKeyMatch: key.fuzzyKeyMatch ?? customConfig.fuzzyKeyMatch ?? defaultConfig.fuzzyKeyMatch,
-          caseSensitiveKeyMatch: key.caseSensitiveKeyMatch ?? customConfig.caseSensitiveKeyMatch ?? defaultConfig.caseSensitiveKeyMatch,
-          retainStructure: key.retainStructure ?? customConfig.retainStructure ?? defaultConfig.retainStructure,
-          replacement: key.replacement ?? customConfig.replacement ?? defaultConfig.replacement,
-          remove: key.remove ?? customConfig.remove ?? defaultConfig.remove,
-          key: key.key,
-        }
-      })
     }
+
+    this.blacklistedKeysTransformed = (customConfig.blacklistedKeys ?? []).filter(key => typeof key !== 'string').map((key) => {
+      if (key instanceof RegExp) {
+        return {
+          key,
+          fuzzyKeyMatch: customConfig.fuzzyKeyMatch ?? defaultConfig.fuzzyKeyMatch,
+          caseSensitiveKeyMatch: customConfig.caseSensitiveKeyMatch ?? defaultConfig.caseSensitiveKeyMatch,
+          retainStructure: customConfig.retainStructure ?? defaultConfig.retainStructure,
+          replacement: customConfig.replacement ?? defaultConfig.replacement,
+          remove: customConfig.remove ?? defaultConfig.remove,
+        }
+      }
+      // If key is already a config object, merge with defaults
+      return {
+        fuzzyKeyMatch: key.fuzzyKeyMatch ?? customConfig.fuzzyKeyMatch ?? defaultConfig.fuzzyKeyMatch,
+        caseSensitiveKeyMatch: key.caseSensitiveKeyMatch ?? customConfig.caseSensitiveKeyMatch ?? defaultConfig.caseSensitiveKeyMatch,
+        retainStructure: key.retainStructure ?? customConfig.retainStructure ?? defaultConfig.retainStructure,
+        replacement: key.replacement ?? customConfig.replacement ?? defaultConfig.replacement,
+        remove: key.remove ?? customConfig.remove ?? defaultConfig.remove,
+        key: key.key,
+      }
+    })
+
+    const stringKeys = (customConfig.blacklistedKeys ?? []).filter(key => typeof key === 'string')
+    if (stringKeys.length > 0) this.computedRegex = new RegExp(stringKeys.join('|'))
   }
 
   partialStringRedact = (value: string): string => {
@@ -65,17 +69,21 @@ class RedactorUtils {
   }
 
   private shouldRedactKey = (key: string): boolean => {
-    return this.config._blacklistedKeysTransformed.some(config => {
-      const pattern = config.key
-      if (pattern instanceof RegExp) return pattern.test(key)
-      
-      if (config.fuzzyKeyMatch) {
-        const compareKey = config.caseSensitiveKeyMatch ? key : key.toLowerCase()
-        const comparePattern = config.caseSensitiveKeyMatch ? pattern : pattern.toLowerCase()
-        return compareKey.includes(comparePattern)
-      }
-      
-      return config.caseSensitiveKeyMatch ? key === pattern : key.toLowerCase() === pattern.toLowerCase()
+    // Check computedRegex first for string keys - this is O(1) with a single regex test
+    if (this.computedRegex?.test(key)) return true
+
+    // Then check the transformed blacklist configs
+    return this.blacklistedKeysTransformed.some(config => {
+        const pattern = config.key
+        if (pattern instanceof RegExp) return pattern.test(key)
+
+        if (config.fuzzyKeyMatch) {
+          const compareKey = config.caseSensitiveKeyMatch ? key : key.toLowerCase()
+          const comparePattern = config.caseSensitiveKeyMatch ? pattern : pattern.toLowerCase()
+          return compareKey.includes(comparePattern)
+        }
+
+        return config.caseSensitiveKeyMatch ? key === pattern : key.toLowerCase() === pattern.toLowerCase()
     })
   }
 
@@ -89,12 +97,12 @@ class RedactorUtils {
         return true
       }
     }
-    
+
     // For non-matching keys, only redact if type is in configured types
     if (typeof value !== 'object' || value === null) {
       return this.config.types.includes(typeof value)
     }
-    
+
     return false
   }
 
@@ -106,22 +114,22 @@ class RedactorUtils {
 
   private redactValue = (value: unknown, key: string | number | null): unknown => {
     const keyConfig = typeof key === 'string' ? this.findMatchingKeyConfig(key) : undefined
-    
+
     // Use key-specific config or fall back to global config
     const remove = keyConfig?.remove ?? this.config.remove
     const replacement = keyConfig?.replacement ?? this.config.replacement
     const replaceStringByLength = this.config.replaceStringByLength
-    
+
     // If remove is true, return undefined
     if (remove) return undefined
-    
+
     // If replacement is a function, call it
     if (typeof replacement === 'function') return replacement(value)
-    
+
     // If value is string and replaceStringByLength is true, repeat replacement
     if (typeof value === 'string' && replaceStringByLength) 
     return replacement.toString().repeat(value.length)
-    
+
     // Otherwise return the replacement value
     return replacement
   }
@@ -136,18 +144,13 @@ class RedactorUtils {
     // console.dir({ value, key, redactingParent, referenceMap }, { depth: null })
     // console.log('---')
 
-    // If redactingParent is true, we should redact regardless of the key
-    if (redactingParent) {
-      return this.redactValue(value, key)
-    }
-
     let transformed = value
 
+    // If redactingParent is true, we should redact regardless of the key
+    if (redactingParent) return this.redactValue(value, key)
+
     // Handle redaction by key
-    if (this.shouldRedact(value, key)) {
-      transformed = this.redactValue(value, key)
-      return transformed
-    }
+    if (this.shouldRedact(value, key)) return this.redactValue(value, key)
 
     // Handle string-specific transformations
     if (typeof value === 'string') {
@@ -155,10 +158,10 @@ class RedactorUtils {
       if (transformed !== value) return transformed
     }
 
-    // Apply general transformers
+    // Apply general transformers only if no previous transformation occurred
     for (const transformer of this.config.transformers) {
       transformed = transformer(value, key, referenceMap)
-      if (transformed !== value) break
+      if (transformed !== value) return transformed
     }
 
     return transformed
@@ -239,6 +242,33 @@ class RedactorUtils {
     return { transformed: newValue, stack }
   }
 
+  private findMatchingKeyConfig(key: string) {
+    // Check computedRegex first
+    if (this.computedRegex?.test(key)) {
+      return {
+        key,
+        fuzzyKeyMatch: this.config.fuzzyKeyMatch,
+        caseSensitiveKeyMatch: this.config.caseSensitiveKeyMatch,
+        retainStructure: this.config.retainStructure,
+        replacement: this.config.replacement,
+        remove: this.config.remove
+      }
+    }
+
+    return this.blacklistedKeysTransformed.find(config => {
+      const pattern = config.key
+      if (pattern instanceof RegExp) return pattern.test(key)
+
+      if (config.fuzzyKeyMatch) {
+        const compareKey = config.caseSensitiveKeyMatch ? key : key.toLowerCase()
+        const comparePattern = config.caseSensitiveKeyMatch ? pattern : pattern.toLowerCase()
+        return compareKey.includes(comparePattern)
+      }
+
+      return config.caseSensitiveKeyMatch ? key === pattern : key.toLowerCase() === pattern.toLowerCase()
+    })
+  }
+
   private initialiseTraversal(raw: unknown): { output: unknown; stack: Stack } {
     const output = Array.isArray(raw) ? [] : {}
     const stack: Stack = []
@@ -317,21 +347,6 @@ class RedactorUtils {
     }
 
     return output
-  }
-
-  private findMatchingKeyConfig(key: string) {
-    return this.config._blacklistedKeysTransformed.find(config => {
-      const pattern = config.key
-      if (pattern instanceof RegExp) return pattern.test(key)
-      
-      if (config.fuzzyKeyMatch) {
-        const compareKey = config.caseSensitiveKeyMatch ? key : key.toLowerCase()
-        const comparePattern = config.caseSensitiveKeyMatch ? pattern : pattern.toLowerCase()
-        return compareKey.includes(comparePattern)
-      }
-      
-      return config.caseSensitiveKeyMatch ? key === pattern : key.toLowerCase() === pattern.toLowerCase()
-    })
   }
 }
 
