@@ -21,8 +21,24 @@ class RedactorUtils {
    * @private
    */
   private readonly config: Required<RedactorUtilsConfig> = defaultConfig
-  private readonly blacklistedKeysTransformed: Array<BlacklistKeyConfig> = []
+
+  /**
+   * The computed regex pattern generated from sanitised blacklist keys of flat strings
+   * @private
+   */
   private readonly computedRegex: RegExp | null = null
+
+  /**
+   * Regex to sanitise strings for the computed regex
+   * @private
+   */
+  private readonly sanitiseRegex = /[^a-zA-Z0-9_\-\$]/g
+
+  /**
+   * The transformed blacklist keys of flat regex patterns and complex config objects
+   * @private
+   */
+  private readonly blacklistedKeysTransformed: Array<BlacklistKeyConfig> = []
 
   constructor(customConfig: RedactorUtilsConfig) {
     this.config = {
@@ -56,6 +72,12 @@ class RedactorUtils {
     if (stringKeys.length > 0) this.computedRegex = new RegExp(stringKeys.map(this.sanitiseStringForRegex).join('|'))
   }
 
+  /**
+   * Redacts partial strings based on the partialStringTests config
+   * @param value - The string to redact
+   * @returns The redacted string
+   * @private
+   */
   partialStringRedact = (value: string): string => {
     const { partialStringTests }: BaseDeepRedactConfig = this.config
     if (partialStringTests.length === 0) return value
@@ -100,6 +122,13 @@ class RedactorUtils {
     })
   }
 
+  /**
+   * Checks if a value should be redacted
+   * @param value - The value to check
+   * @param key - The key to check
+   * @returns Whether the value should be redacted
+   * @private
+   */
   private shouldRedactValue = (value: unknown, key: string | number | null): boolean => {
     // For objects, check the key-specific retainStructure config
     if (typeof key === 'string') {
@@ -119,12 +148,26 @@ class RedactorUtils {
     return false
   }
 
+  /**
+   * Checks if a value should be redacted
+   * @param value - The value to check
+   * @param key - The key to check
+   * @returns Whether the value should be redacted
+   * @private
+   */
   private shouldRedact = (value: unknown, key: string | number | null): boolean => {
     return typeof key === 'string' && 
       this.shouldRedactKey(key) &&
       this.shouldRedactValue(value, key)
   }
 
+  /**
+   * Redacts a value based on the key-specific config
+   * @param value - The value to redact
+   * @param key - The key to check
+   * @returns The redacted value
+   * @private
+   */
   private redactValue = (value: unknown, key: string | number | null): unknown => {
     const keyConfig = typeof key === 'string' ? this.findMatchingKeyConfig(key) : undefined
 
@@ -147,6 +190,15 @@ class RedactorUtils {
     return replacement
   }
 
+  /**
+   * Handles primitive values
+   * @param value - The value to handle
+   * @param key - The key to check
+   * @param redactingParent - Whether the parent is being redacted
+   * @param referenceMap - The reference map
+   * @returns The transformed value
+   * @private
+   */
   private handlePrimitiveValue(
     value: unknown,
     key: string | number | null,
@@ -180,6 +232,13 @@ class RedactorUtils {
     return transformed
   }
 
+  /**
+   * Applies string transformations
+   * @param value - The value to transform
+   * @param key - The key to check
+   * @returns The transformed value
+   * @private
+   */
   private applyStringTransformations(value: string, key: string | number | null): string {
     // Apply string tests
     for (const test of this.config.stringTests ?? []) {
@@ -200,6 +259,16 @@ class RedactorUtils {
     return transformed !== value ? transformed : value
   }
 
+  /**
+   * Handles object values
+   * @param value - The value to handle
+   * @param key - The key to check
+   * @param path - The path to the value
+   * @param redactingParent - Whether the parent is being redacted
+   * @param referenceMap - The reference map
+   * @returns The transformed value and stack
+   * @private
+   */
   private handleObjectValue(
     value: object,
     key: string | number | null,
@@ -220,6 +289,15 @@ class RedactorUtils {
     return this.handleRetainStructure(value, path, shouldRedact, [])
   }
 
+  /**
+   * Handles object values
+   * @param value - The value to handle
+   * @param path - The path to the value
+   * @param redactingParent - Whether the parent is being redacted
+   * @param stack - The stack
+   * @returns The transformed value and stack
+   * @private
+   */
   private handleRetainStructure(
     value: object,
     path: (string | number)[],
@@ -255,6 +333,12 @@ class RedactorUtils {
     return { transformed: newValue, stack }
   }
 
+  /**
+   * Finds the matching key config
+   * @param key - The key to find
+   * @returns The matching key config
+   * @private
+   */
   private findMatchingKeyConfig(key: string) {
     // Check computedRegex first
     if (this.computedRegex?.test(key)) {
@@ -282,6 +366,12 @@ class RedactorUtils {
     })
   }
 
+  /**
+   * Initialises the traversal
+   * @param raw - The raw value to traverse
+   * @returns The output and stack
+   * @private
+   */
   private initialiseTraversal(raw: unknown): { output: unknown; stack: Stack } {
     const output = Array.isArray(raw) ? [] : {}
     const stack: Stack = []
@@ -313,6 +403,11 @@ class RedactorUtils {
     return { output, stack }
   }
 
+  /**
+   * Traverses the raw value
+   * @param raw - The raw value to traverse
+   * @returns The transformed value
+   */
   traverse = (raw: unknown): unknown => {
     if (typeof raw === 'string') return this.partialStringRedact(raw)
     if (typeof raw !== 'object' || raw === null) return raw
