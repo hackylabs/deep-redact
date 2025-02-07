@@ -195,8 +195,8 @@ export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, 'blacklistedKe
 
 export type RedactorUtilsConfig = Omit<BaseDeepRedactConfig, 'serialise' | 'serialize'>
 
-export type JSONValue = string | number | boolean | bigint | symbol | undefined | null | Function | JSONValue[] | { [key: string]: JSONValue };
-
 export type StackReference = WeakMap<object, unknown>
 
 export type Stack = Array<{ parent: any, key: string | number | null, value: unknown, path: Array<string | number>, redactingParent: boolean }>
+
+export type Logs = Array<{ path: string, message: string, raw: unknown, transformed: unknown }> | null
