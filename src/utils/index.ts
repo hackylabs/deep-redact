@@ -69,7 +69,7 @@ class RedactorUtils {
     })
 
     const stringKeys = (customConfig.blacklistedKeys ?? []).filter(key => typeof key === 'string')
-    if (stringKeys.length > 0) this.computedRegex = new RegExp(stringKeys.map(this.sanitiseStringForRegex).join('|'))
+    if (stringKeys.length > 0) this.computedRegex = new RegExp(stringKeys.map(this.sanitiseStringForRegex).filter(Boolean).join('|'))
   }
 
   /**
