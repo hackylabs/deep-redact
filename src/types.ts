@@ -64,7 +64,10 @@ export interface BaseDeepRedactConfig {
    */
   blacklistedKeys?: Array<string | RegExp | BlacklistKeyConfig>
 
-  blacklistedKeysTransformed: Array<Required<BlacklistKeyConfig>>
+  /**
+   * Internal use only.
+   */
+  _blacklistedKeysTransformed: Array<Required<BlacklistKeyConfig>>
 
   /**
    * Redact a string value that matches a test pattern.
@@ -172,7 +175,7 @@ export interface BaseDeepRedactConfig {
   enableLogging?: boolean
 }
 
-export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, 'blacklistedKeysTransformed' | 'blacklistedKeys' | 'stringTests'>> & ({
+export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, '_blacklistedKeysTransformed' | 'blacklistedKeys' | 'stringTests'>> & ({
   partialStringTests: BaseDeepRedactConfig['partialStringTests']
   blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys']
   stringTests: BaseDeepRedactConfig['stringTests']
