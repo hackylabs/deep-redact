@@ -15,10 +15,10 @@
       "require": "./dist/cjs/index.js",
       "types": "./dist/types/index.d.ts"
     },
-    "./utils/redactorUtils": {
-      "import": "./dist/esm/utils/redactorUtils.mjs",
-      "require": "./dist/cjs/utils/redactorUtils.js",
-      "types": "./dist/types/utils/redactorUtils.d.ts"
+    "./utils": {
+      "import": "./dist/esm/utils/index.mjs",
+      "require": "./dist/cjs/utils/index.js",
+      "types": "./dist/types/utils/index.d.ts"
     }
   },
   "files": [

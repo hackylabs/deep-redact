@@ -1,6 +1,6 @@
 import type { DeepRedactConfig, RedactorUtilsConfig, BlacklistKeyConfig, Types, Transformer, ComplexStringTest, BaseDeepRedactConfig } from './types'
 import { standardTransformers } from './utils/standardTransformers'
-import RedactorUtils from './utils/redactorUtils'
+import RedactorUtils from './utils'
 
 class DeepRedact {
   /**
