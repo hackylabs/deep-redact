@@ -61,7 +61,8 @@
     "load": "npx vitest test/load/redact.test.ts --reporter=basic --coverage=false --no-watch",
     "load:dev": "npx vitest test/load/redact.test.ts --watch --coverage=false --reporter=basic",
     "update-readme": "npx ts-node ./scripts/update-readme.ts",
-    "update-license": "npx ts-node ./scripts/update-license.ts"
+    "update-license": "npx ts-node ./scripts/update-license.ts",
+    "debug-redaction": "npx ts-node scripts/debug.ts"
   },
   "//": [
     "fast-redact and obglob are installed only as benchmark comparisons and are not used in the library",
