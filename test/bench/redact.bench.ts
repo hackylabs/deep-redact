@@ -1,90 +1,23 @@
 import { bench, describe } from 'vitest'
 import fastRedact from 'fast-redact'
-import superjson from 'superjson'
 import { obglob } from '@hackylabs/obglob'
 import { DeepRedact } from '../../src'
 import { dummyUser, dummyUserXml } from '../setup/dummyUser'
-import { blacklistedKeys } from '../setup/blacklist'
+import { blacklistedKeys, complexBlacklistedKeys, fastRedactArrayBlacklistedKeys, fastRedactBlacklistedKeys, ObGlobPatterns, stringPattern, xmlPattern } from '../setup/blacklist'
 
-const complexBlacklistedKeys = [
-  'email',
-  'phone',
-  'password',
-  'birthDate',
-  'ip',
-  'macAddress',
-  { key: 'address', retainStructure: true },
-  'iban',
-  'cardNumber',
-  'wallet',
-  'ein',
-  'ssn',
-  { key: 'name', fuzzyKeyMatch: true, caseSensitiveKeyMatch: false },
-]
-
-const fastRedactBlacklistedKeys = [
-  'firstName',
-  'lastName',
-  'maidenName',
-  'email',
-  'phone',
-  'password',
-  'birthDate',
-  'ip',
-  'macAddress',
-  'address.street',
-  'address.city',
-  'address.state',
-  'address.postalCode',
-  'address.country',
-  'address.coordinates.lat',
-  'address.coordinates.lng',
-  'bank.cardNumber',
-  'bank.iban',
-  'wallet',
-  'company.address.street',
-  'company.address.city',
-  'company.address.state',
-  'company.address.postalCode',
-  'company.address.country',
-  'company.address.coordinates.lat',
-  'company.address.coordinates.lng',
-  'ein',
-  'ssn',
-]
-
-const fastRedactArrayBlacklistedKeys = fastRedactBlacklistedKeys.map((key) => `*.${key}`)
-
-const ObGlobPatterns = [
-  '**/!(*user*)*[nN]ame*',
-  '**/email',
-  '**/phone',
-  '**/password',
-  '**/birthDate',
-  '**/ip',
-  '**/macAddress',
-  '**/address/**',
-  '**/cardNumber',
-  '**/iban',
-  '**/wallet',
-  '**/ein',
-  '**/ssn',
-]
-
-const stringPattern = /"(email|phone|password|birthDate|ip|macAddress|address.*?city|state|postalCode|country|iban|cardNumber|wallet|ein|ssn|firstName|lastName|maidenName|username)":"[^"]*"/gi
-
-const xmlPattern = /<(email|phone|password|birthDate|ip|macAddress|address.*?city|state|postalCode|country|iban|cardNumber|wallet|ein|ssn|firstName|lastName|maidenName|username)>([^<]+)<\/\1>/gi
+const jsonStringifyLargeObject = JSON.stringify(dummyUser)
+const jsonStringify1000LargeObjects = JSON.stringify(Array(1000).fill(dummyUser))
 
 describe('Redaction benchmark', () => {
   bench('JSON.stringify, large object', async () => {
     await new Promise((resolve) => {
-      resolve(JSON.stringify(dummyUser))
+      resolve(jsonStringifyLargeObject)
     })
   })
 
   bench('JSON.stringify, 1000 large objects', async () => {
     await new Promise((resolve) => {
-      resolve(JSON.stringify(Array(1000).fill(dummyUser)))
+      resolve(jsonStringify1000LargeObjects)
     })
   })
 
@@ -108,9 +41,16 @@ describe('Redaction benchmark', () => {
     })
   })
 
+  bench('Regex replace, pre-serialised large object', async () => {
+    await new Promise((resolve) => {
+      const redacted = jsonStringifyLargeObject.replace(stringPattern, '"$1":"[REDACTED]"')
+      resolve(redacted)
+    })
+  })
+
   bench('Regex replace, large object', async () => {
     await new Promise((resolve) => {
-      const redacted = superjson.stringify(dummyUser).replace(stringPattern, '"$1":"[REDACTED]"')
+      const redacted = JSON.stringify(dummyUser).replace(stringPattern, '"$1":"[REDACTED]"')
       resolve(redacted)
     })
   })
@@ -128,9 +68,16 @@ describe('Redaction benchmark', () => {
     })
   })
 
+  bench('Regex replace, pre-serialised 1000 large objects', async () => {
+    await new Promise((resolve) => {
+      const redacted = jsonStringify1000LargeObjects.replace(stringPattern, '"$1":"[REDACTED]"')
+      resolve(redacted)
+    })
+  })
+
   bench('Regex replace, 1000 large objects', async () => {
     await new Promise((resolve) => {
-      const redacted = superjson.stringify(Array(1000).fill(dummyUser)).replace(stringPattern, '"$1":"[REDACTED]"')
+      const redacted = JSON.stringify(Array(1000).fill(dummyUser)).replace(stringPattern, '"$1":"[REDACTED]"')
       resolve(redacted)
     })
   })
