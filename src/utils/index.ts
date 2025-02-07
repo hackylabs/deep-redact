@@ -53,7 +53,7 @@ class RedactorUtils {
     })
 
     const stringKeys = (customConfig.blacklistedKeys ?? []).filter(key => typeof key === 'string')
-    if (stringKeys.length > 0) this.computedRegex = new RegExp(stringKeys.join('|'))
+    if (stringKeys.length > 0) this.computedRegex = new RegExp(stringKeys.map(this.sanitiseStringForRegex).join('|'))
   }
 
   partialStringRedact = (value: string): string => {
@@ -68,9 +68,22 @@ class RedactorUtils {
     return result
   }
 
+  /**
+   * Sanitises a string for the computed regex
+   * @param key - The string to sanitise
+   * @returns The sanitised string
+   * @private
+   */
+  private sanitiseStringForRegex = (key: string): string => key.replace(this.sanitiseRegex, '')
+
+  /**
+   * Checks if a key should be redacted
+   * @param key - The key to check
+   * @returns Whether the key should be redacted
+   * @private
+   */
   private shouldRedactKey = (key: string): boolean => {
-    // Check computedRegex first for string keys - this is O(1) with a single regex test
-    if (this.computedRegex?.test(key)) return true
+    if (this.computedRegex?.test(this.sanitiseStringForRegex(key))) return true
 
     // Then check the transformed blacklist configs
     return this.blacklistedKeysTransformed.some(config => {
