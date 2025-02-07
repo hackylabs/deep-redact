@@ -1,5 +1,4 @@
-import type { BaseDeepRedactConfig, RedactorUtilsConfig, Stack, Transformer } from '../types'
-import { standardTransformers } from './standardTransformers'
+import type { BaseDeepRedactConfig, Logs, RedactorUtilsConfig, Stack } from '../types'
 
 const defaultConfig: Required<RedactorUtilsConfig> = {
   stringTests: [],
@@ -13,7 +12,7 @@ const defaultConfig: Required<RedactorUtilsConfig> = {
   replaceStringByLength: false,
   replacement: '[REDACTED]',
   types: ['string'],
-  transformers: standardTransformers,
+  transformers: [],
   enableLogging: false,
 }
 
@@ -28,8 +27,6 @@ class RedactorUtils {
     this.config = {
       ...defaultConfig,
       ...customConfig,
-      partialStringTests: customConfig.partialStringTests ?? [],
-      blacklistedKeys: customConfig.blacklistedKeys ?? [],
       blacklistedKeysTransformed: (customConfig.blacklistedKeys ?? []).map((key) => {
         // If key is string or RegExp, create a config object
         if (typeof key === 'string' || key instanceof RegExp) {
@@ -70,9 +67,7 @@ class RedactorUtils {
   private shouldRedactKey = (key: string): boolean => {
     return this.config.blacklistedKeysTransformed.some(config => {
       const pattern = config.key
-      if (pattern instanceof RegExp) {
-        return pattern.test(key)
-      }
+      if (pattern instanceof RegExp) return pattern.test(key)
       
       if (config.fuzzyKeyMatch) {
         const compareKey = config.caseSensitiveKeyMatch ? key : key.toLowerCase()
@@ -84,21 +79,33 @@ class RedactorUtils {
     })
   }
 
-  private shouldRedactValue = (value: unknown): boolean => {
-    const type = typeof value
-    return this.config.types.includes(type)
+  private shouldRedactValue = (value: unknown, key: string | number | null): boolean => {
+    // For objects, check the key-specific retainStructure config
+    if (typeof key === 'string') {
+      const keyConfig = this.findMatchingKeyConfig(key)
+      if (keyConfig) {
+        // If we found a matching key config, we should redact the value
+        // retainStructure only determines HOW we redact, not IF we redact
+        return true
+      }
+    }
+    
+    // For non-matching keys, only redact if type is in configured types
+    if (typeof value !== 'object' || value === null) {
+      return this.config.types.includes(typeof value)
+    }
+    
+    return false
   }
 
   private shouldRedact = (value: unknown, key: string | number | null): boolean => {
     return typeof key === 'string' && 
-           this.shouldRedactKey(key) && 
-           this.shouldRedactValue(value)
+      this.shouldRedactKey(key) &&
+      this.shouldRedactValue(value, key)
   }
 
   private redactValue = (value: unknown, key: string | number | null): unknown => {
-    // Get the key-specific config if it exists
-    const keyConfig = this.config.blacklistedKeysTransformed.find(c => 
-      typeof key === 'string' && this.shouldRedactKey(key))
+    const keyConfig = typeof key === 'string' ? this.findMatchingKeyConfig(key) : undefined
     
     // Use key-specific config or fall back to global config
     const remove = keyConfig?.remove ?? this.config.remove
@@ -113,47 +120,165 @@ class RedactorUtils {
     
     // If value is string and replaceStringByLength is true, repeat replacement
     if (typeof value === 'string' && replaceStringByLength) 
-      return replacement.toString().repeat(value.length)
+    return replacement.toString().repeat(value.length)
     
     // Otherwise return the replacement value
     return replacement
+  }
+
+  private handlePrimitiveValue(
+    value: unknown,
+    key: string | number | null,
+    redactingParent: boolean,
+    referenceMap: WeakMap<object, string>
+  ): unknown {
+    // console.log('=== Handle Primitive Value ===')
+    // console.dir({ value, key, redactingParent, referenceMap }, { depth: null })
+    // console.log('---')
+
+    // If redactingParent is true, we should redact regardless of the key
+    if (redactingParent) {
+      return this.redactValue(value, key)
+    }
+
+    let transformed = value
+
+    // Handle redaction by key
+    if (this.shouldRedact(value, key)) {
+      transformed = this.redactValue(value, key)
+      return transformed
+    }
+
+    // Handle string-specific transformations
+    if (typeof value === 'string') {
+      transformed = this.applyStringTransformations(value, key)
+      if (transformed !== value) return transformed
+    }
+
+    // Apply general transformers
+    for (const transformer of this.config.transformers) {
+      transformed = transformer(value, key, referenceMap)
+      if (transformed !== value) break
+    }
+
+    return transformed
+  }
+
+  private applyStringTransformations(value: string, key: string | number | null): string {
+    // Apply string tests
+    for (const test of this.config.stringTests ?? []) {
+      if (test instanceof RegExp) {
+        if (test.test(value)) {
+          return this.redactValue(value, key) as string
+        }
+      } else {
+        const transformed = test.replacer(value, test.pattern)
+        if (transformed !== value) {
+          return transformed
+        }
+      }
+    }
+
+    // Apply partial string redaction if not already redacted
+    const transformed = this.partialStringRedact(value)
+    return transformed !== value ? transformed : value
+  }
+
+  private handleObjectValue(
+    value: object,
+    key: string | number | null,
+    path: (string | number)[],
+    redactingParent: boolean,
+    referenceMap: WeakMap<object, string>
+  ): { transformed: unknown; stack: Stack } {
+    const fullPath = path.join('.')
+    const shouldRedact = redactingParent || this.shouldRedact(value, key)
+    referenceMap.set(value, fullPath)
+
+    // If we're not retaining structure and should redact, return the redacted value
+    if (shouldRedact && !this.config.retainStructure) {
+      return { transformed: this.redactValue(value, key), stack: [] }
+    }
+
+    // Otherwise, create new structure and push children to stack
+    return this.handleRetainStructure(value, path, shouldRedact, [])
+  }
+
+  private handleRetainStructure(
+    value: object,
+    path: (string | number)[],
+    redactingParent: boolean,
+    stack: Stack
+  ): { transformed: unknown; stack: Stack } {
+    const newValue = Array.isArray(value) ? [] : {}
+
+    if (Array.isArray(value)) {
+      for (let i = value.length - 1; i >= 0; i--) {
+        stack.push({
+          parent: newValue,
+          key: i,
+          value: value[i],
+          path: [...path, i],
+          redactingParent
+        })
+        // logs?.push({ path: `[${i}]`, message: `Pushed root array element to stack`, raw: raw[i], transformed: raw[i] })
+      }
+    } else {
+      for (const [propKey, propValue] of Object.entries(value).reverse()) {
+        stack.push({
+          parent: newValue,
+          key: propKey,
+          value: propValue,
+          path: [...path, propKey],
+          redactingParent
+        })
+        // logs?.push({ path: propKey, message: `Pushed root object property to stack`, raw: propValue, transformed: propValue })
+      }
+    }
+
+    return { transformed: newValue, stack }
+  }
+
+  private initialiseTraversal(raw: unknown): { output: unknown; stack: Stack } {
+    const output = Array.isArray(raw) ? [] : {}
+    const stack: Stack = []
+
+    if (typeof raw === 'object' && raw !== null) {
+      if (Array.isArray(raw)) {
+        for (let i = raw.length - 1; i >= 0; i--) {
+          stack.push({
+            parent: output,
+            key: i,
+            value: raw[i],
+            path: [i],
+            redactingParent: false
+          })
+        }
+      } else {
+        for (const [propKey, propValue] of Object.entries(raw).reverse()) {
+          stack.push({
+            parent: output,
+            key: propKey,
+            value: propValue,
+            path: [propKey],
+            redactingParent: false
+          })
+        }
+      }
+    }
+
+    return { output, stack }
   }
 
   traverse = (raw: unknown): unknown => {
     if (typeof raw === 'string') return this.partialStringRedact(raw)
     if (typeof raw !== 'object' || raw === null) return raw
     
-    const logs: { path: string, message: string, raw: unknown, transformed: unknown }[] | null = this.config.enableLogging ? [] : null
+    const logs: Logs = this.config.enableLogging ? [] : null
     const referenceMap = new WeakMap<object, string>()
-    const output = Array.isArray(raw) ? [] : {}
-    const stack: Stack = []
-    
-    if (typeof raw === 'object' && raw !== null) referenceMap.set(raw, '')
+    const { output, stack } = this.initialiseTraversal(raw)
 
-    // For root object, push its properties with output as their parent
-    if (Array.isArray(raw)) {
-      for (let i = raw.length - 1; i >= 0; i--) {
-        stack.push({
-          parent: output,
-          key: i,
-          value: raw[i],
-          path: [i],
-          redactingParent: false
-        })
-        // logs?.push({ path: `[${i}]`, message: `Pushed root array element to stack`, raw: raw[i], transformed: raw[i] })
-      }
-    } else if (typeof raw === 'object' && raw !== null) {
-      for (const [propKey, propValue] of Object.entries(raw).reverse()) {
-        stack.push({
-          parent: output,
-          key: propKey,
-          value: propValue,
-          path: [propKey],
-          redactingParent: false
-        })
-        // logs?.push({ path: propKey, message: `Pushed root object property to stack`, raw: propValue, transformed: propValue })
-      }
-    }
+    if (typeof raw === 'object' && raw !== null) referenceMap.set(raw, '')
 
     while (stack.length > 0) {
       const { parent, key, value, path, redactingParent } = stack.pop()!
@@ -164,129 +289,15 @@ class RedactorUtils {
         logs?.push({ path: path.join('.'), message: `Handled circular reference`, raw: value, transformed })
       }
       else if (typeof value !== 'object' || value === null) {
-        // Check if key should be redacted
-        if (redactingParent || this.shouldRedact(value, key)) {
-          transformed = this.redactValue(value, key)
-          logs?.push({ path: path.join('.'), message: `Redacted by key`, raw: value, transformed })
-        }
-
-        // Apply string tests
-        if (typeof value === 'string') {
-          for (const test of this.config.stringTests ?? []) {
-            if (test instanceof RegExp) {
-              if (test.test(value)) {
-                transformed = this.redactValue(value, key)
-                logs?.push({ path: path.join('.'), message: `Redacted by pattern`, raw: value, transformed })
-                break
-              }
-            } else {
-              transformed = test.replacer(value, test.pattern)
-              if (transformed !== value) {
-                logs?.push({ path: path.join('.'), message: `Redacted by custom pattern`, raw: value, transformed })
-                break
-              }
-            }
-          }
-
-          // Apply partial string redaction if not already redacted
-          if (transformed === value) {
-            transformed = this.partialStringRedact(value)
-            if (transformed !== value) {
-              logs?.push({ path: path.join('.'), message: `Applied partial redaction`, raw: value, transformed })
-            }
-          }
-        }
-
-        // Apply transformers if not redacted
-        if (transformed === value) {
-          for (const transformer of this.config.transformers) {
-            transformed = transformer(transformed, key, referenceMap)
-            if (transformed !== value) {
-              logs?.push({ path: path.join('.'), message: `Applied transformer: ${transformer.name}`, raw: value, transformed })
-              break
-            }
-          }
-        }
+        transformed = this.handlePrimitiveValue(value, key, redactingParent, referenceMap)
+        if (typeof transformed === 'undefined') continue
       }
       else {
-        // Store the full path for this object
-        const fullPath = path.join('.')
-        const shouldRedact = redactingParent || this.shouldRedact(value, key)
-        referenceMap.set(value, fullPath)
-        
-        // Check if key should be redacted first
-        if (shouldRedact) {
-          if (this.config.retainStructure) {
-            // If retaining structure, create empty container but don't redact children
-            const newValue = Array.isArray(value) ? [] : {}
-            transformed = newValue
-            
-            if (Array.isArray(value)) {
-              for (let i = value.length - 1; i >= 0; i--) {
-                stack.push({
-                  parent: newValue,
-                  key: i,
-                  value: value[i], // Don't redact children - they'll be checked individually
-                  path: [...path, i],
-                  redactingParent: true
-                })
-              }
-            } else {
-              for (const [propKey, propValue] of Object.entries(value).reverse()) {
-                stack.push({
-                  parent: newValue,
-                  key: propKey,
-                  value: propValue, // Don't redact children - they'll be checked individually
-                  path: [...path, propKey],
-                  redactingParent: true
-                })
-              }
-            }
-          } else {
-            // If not retaining structure, redact the entire object
-            transformed = this.redactValue(value, key)
-          }
-          logs?.push({ path: path.join('.'), message: `Redacted object by key`, raw: value, transformed })
-        } else {
-          // Apply transformers first
-          let skipChildren = false
-          for (const transformer of this.config.transformers) {
-            const result = transformer(value, key, referenceMap)
-            if (result !== value) {
-              transformed = result
-              skipChildren = true
-              logs?.push({ path: path.join('.'), message: `Transformer modified object`, raw: value, transformed })
-              break
-            }
-          }
-          
-          // Only create new container and traverse children if no transformer modified the value
-          if (!skipChildren) {
-            const newValue = Array.isArray(value) ? [] : {}
-            transformed = newValue
-            
-            if (Array.isArray(value)) {
-              for (let i = value.length - 1; i >= 0; i--) {
-                stack.push({
-                  parent: newValue,
-                  key: i,
-                  value: value[i],
-                  path: [...path, i],
-                  redactingParent
-                })
-              }
-            } else {
-              for (const [propKey, propValue] of Object.entries(value).reverse()) {
-                stack.push({
-                  parent: newValue,
-                  key: propKey, 
-                  value: propValue,
-                  path: [...path, propKey],
-                  redactingParent
-                })
-              }
-            }
-          }
+        const result = this.handleObjectValue(value, key, path, redactingParent, referenceMap)
+        transformed = result.transformed
+        stack.push(...result.stack)
+        if (transformed !== value) {
+          logs?.push({ path: path.join('.'), message: 'Transformed object value', raw: value, transformed })
         }
       }
 
@@ -306,6 +317,21 @@ class RedactorUtils {
     }
 
     return output
+  }
+
+  private findMatchingKeyConfig(key: string) {
+    return this.config.blacklistedKeysTransformed.find(config => {
+      const pattern = config.key
+      if (pattern instanceof RegExp) return pattern.test(key)
+      
+      if (config.fuzzyKeyMatch) {
+        const compareKey = config.caseSensitiveKeyMatch ? key : key.toLowerCase()
+        const comparePattern = config.caseSensitiveKeyMatch ? pattern : pattern.toLowerCase()
+        return compareKey.includes(comparePattern)
+      }
+      
+      return config.caseSensitiveKeyMatch ? key === pattern : key.toLowerCase() === pattern.toLowerCase()
+    })
   }
 }
 
