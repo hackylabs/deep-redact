@@ -12,8 +12,82 @@ export const blacklistedKeys = [
   'macAddress',
   'wallet',
   'address',
+  'addressLine1',
+  'addressLine2',
+  'street',
+  'city',
+  'postalCode',
+  'coordinates',
   'iban',
   'cardNumber',
   'ein',
   'ssn',
 ]
+
+export const complexBlacklistedKeys = [
+  'email',
+  'phone',
+  'password',
+  'birthDate',
+  'ip',
+  'iban',
+  'cardNumber',
+  'wallet',
+  'ein',
+  'ssn',
+  { key: 'address', retainStructure: true, fuzzyKeyMatch: true, caseSensitiveKeyMatch: false },
+  { key: 'name', fuzzyKeyMatch: true, caseSensitiveKeyMatch: false },
+]
+
+export const fastRedactBlacklistedKeys = [
+  'firstName',
+  'lastName',
+  'maidenName',
+  'email',
+  'phone',
+  'password',
+  'birthDate',
+  'ip',
+  'macAddress',
+  'address.street',
+  'address.city',
+  'address.state',
+  'address.postalCode',
+  'address.country',
+  'address.coordinates.lat',
+  'address.coordinates.lng',
+  'bank.cardNumber',
+  'bank.iban',
+  'wallet',
+  'company.address.street',
+  'company.address.city',
+  'company.address.state',
+  'company.address.postalCode',
+  'company.address.country',
+  'company.address.coordinates.lat',
+  'company.address.coordinates.lng',
+  'ein',
+  'ssn',
+]
+
+export const fastRedactArrayBlacklistedKeys = fastRedactBlacklistedKeys.map((key) => `*.${key}`)
+
+export const ObGlobPatterns = [
+  '**/!(*user*)*[nN]ame*',
+  '**/email',
+  '**/phone',
+  '**/password',
+  '**/birthDate',
+  '**/ip',
+  '**/macAddress',
+  '**/address/**',
+  '**/cardNumber',
+  '**/iban',
+  '**/wallet',
+  '**/ein',
+  '**/ssn',
+]
+
+export const stringPattern = /"(email|phone|password|birthDate|ip|macAddress|address.*?city|state|postalCode|country|iban|cardNumber|wallet|ein|ssn|firstName|lastName|maidenName|username)":"[^"]*"/gi
+
+export const xmlPattern = /<(email|phone|password|birthDate|ip|macAddress|address.*?city|state|postalCode|country|iban|cardNumber|wallet|ein|ssn|firstName|lastName|maidenName|username)>([^<]+)<\/\1>/gi

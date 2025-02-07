@@ -2,3 +2,4 @@ node_modules
 .idea
 coverage
 benchmark.json
+load-test-results.json

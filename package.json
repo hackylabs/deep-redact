@@ -58,6 +58,8 @@
     "bench:dev": "npx vitest bench",
     "test:dev": "npx vitest",
     "test": "npx vitest run",
+    "load": "npx vitest test/load/redact.test.ts --reporter=basic --coverage=false --no-watch",
+    "load:dev": "npx vitest test/load/redact.test.ts --watch --coverage=false --reporter=basic",
     "update-readme": "npx ts-node ./scripts/update-readme.ts",
     "update-license": "npx ts-node ./scripts/update-license.ts"
   },
@@ -68,11 +70,13 @@
   "devDependencies": {
     "@hackylabs/obglob": "1.1.2",
     "@memlab/core": "1.1.34",
+    "@types/autocannon": "7.12.6",
     "@types/fast-redact": "3.0.4",
     "@types/node": "20.14.12",
     "@typescript-eslint/eslint-plugin": "7.14.1",
     "@typescript-eslint/parser": "7.14.1",
     "@vitest/coverage-v8": "2.0.4",
+    "autocannon": "8.0.0",
     "eslint": "8.57.0",
     "eslint-config-airbnb-base": "15.0.0",
     "eslint-config-airbnb-typescript": "18.0.0",
