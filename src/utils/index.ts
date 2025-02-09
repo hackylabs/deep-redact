@@ -105,16 +105,12 @@ class RedactorUtils {
     if (this.computedRegex?.test(this.sanitiseStringForRegex(key))) return true
 
     return this.blacklistedKeysTransformed.some(config => {
-        const pattern = config.key
-        if (pattern instanceof RegExp) return pattern.test(key)
-
-        if (config.fuzzyKeyMatch) {
-          const compareKey = config.caseSensitiveKeyMatch ? key : key.toLowerCase()
-          const comparePattern = config.caseSensitiveKeyMatch ? pattern : pattern.toLowerCase()
-          return compareKey.includes(comparePattern)
-        }
-
-        return config.caseSensitiveKeyMatch ? key === pattern : key.toLowerCase() === pattern.toLowerCase()
+      const pattern = config.key
+      if (pattern instanceof RegExp) return pattern.test(key)
+      if (!config.fuzzyKeyMatch && !config.caseSensitiveKeyMatch) return key.toLowerCase() === pattern.toLowerCase()
+      if (config.fuzzyKeyMatch && !config.caseSensitiveKeyMatch) return key.toLowerCase().includes(pattern.toLowerCase())
+      if (config.fuzzyKeyMatch && config.caseSensitiveKeyMatch) return key.includes(pattern)
+      if (!config.fuzzyKeyMatch && config.caseSensitiveKeyMatch) return key === pattern
     })
   }
 
@@ -125,7 +121,7 @@ class RedactorUtils {
    * @returns Whether the value should be redacted
    * @private
    */
-  private shouldRedactValue = (value: unknown, key: string | number | null): boolean => {
+  private shouldRedactValue = (value: unknown, key: string): boolean => {
     if (typeof key === 'string') {
       const keyConfig = this.findMatchingKeyConfig(key)
       if (keyConfig) return true
@@ -141,8 +137,8 @@ class RedactorUtils {
    * @returns Whether the value should be redacted
    * @private
    */
-  private shouldRedact = (value: unknown, key: string | number | null): boolean => {
-    return typeof key === 'string' && 
+  private shouldRedact = (value: unknown, key: string): boolean => {
+    return typeof key === 'string' &&
       this.shouldRedactKey(key) &&
       this.shouldRedactValue(value, key)
   }
@@ -154,7 +150,7 @@ class RedactorUtils {
    * @returns The redacted value
    * @private
    */
-  private redactValue = (value: unknown, key: string | number | null): unknown => {
+  private redactValue = (value: unknown, key: string): unknown => {
     const keyConfig = typeof key === 'string' ? this.findMatchingKeyConfig(key) : undefined
     const remove = keyConfig?.remove ?? this.config.remove
     const replacement = keyConfig?.replacement ?? this.config.replacement
@@ -178,7 +174,7 @@ class RedactorUtils {
    */
   private handlePrimitiveValue(
     value: unknown,
-    key: string | number | null,
+    key: string,
     redactingParent: boolean,
     referenceMap: WeakMap<object, string>
   ): unknown {
@@ -206,7 +202,7 @@ class RedactorUtils {
    * @returns The transformed value
    * @private
    */
-  private applyStringTransformations(value: string, key: string | number | null): string {
+  private applyStringTransformations(value: string, key: string): string {
     for (const test of this.config.stringTests ?? []) {
       if (test instanceof RegExp) {
         if (test.test(value)) {
@@ -236,7 +232,7 @@ class RedactorUtils {
    */
   private handleObjectValue(
     value: object,
-    key: string | number | null,
+    key: string,
     path: (string | number)[],
     redactingParent: boolean,
     referenceMap: WeakMap<object, string>
@@ -273,7 +269,7 @@ class RedactorUtils {
       for (let i = value.length - 1; i >= 0; i--) {
         stack.push({
           parent: newValue,
-          key: i,
+          key: i.toString(),
           value: value[i],
           path: [...path, i],
           redactingParent
@@ -341,7 +337,7 @@ class RedactorUtils {
         for (let i = raw.length - 1; i >= 0; i--) {
           stack.push({
             parent: output,
-            key: i,
+            key: i.toString(),
             value: raw[i],
             path: [i],
             redactingParent: false
@@ -371,7 +367,7 @@ class RedactorUtils {
   traverse = (raw: unknown): unknown => {
     if (typeof raw === 'string') return this.partialStringRedact(raw)
     if (typeof raw !== 'object' || raw === null) return raw
-    
+
     const referenceMap = new WeakMap<object, string>()
     const { output, stack } = this.initialiseTraversal(raw)
 
