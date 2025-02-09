@@ -1,6 +1,6 @@
 export type Types = 'string' | 'number' | 'bigint' | 'boolean' | 'object' | 'function' | 'symbol' | 'undefined'
 
-export type Transformer = (value: unknown, key?: string | number | null, reference?: WeakMap<object, unknown>) => unknown
+export type Transformer = (value: unknown, key?: string, reference?: WeakMap<object, unknown>) => unknown
 
 export interface BlacklistKeyConfig {
   /**
@@ -195,6 +195,12 @@ export type RedactorUtilsConfig = Omit<BaseDeepRedactConfig, 'serialise' | 'seri
 
 export type StackReference = WeakMap<object, unknown>
 
-export type Stack = Array<{ parent: any, key: string | number | null, value: unknown, path: Array<string | number>, redactingParent: boolean }>
+export type Stack = Array<{ 
+  parent: any, 
+  key: string, 
+  value: unknown, 
+  path: Array<string | number>, 
+  redactingParent: boolean 
+}>
 
 export type Logs = Array<{ path: string, message: string, raw: unknown, transformed: unknown }> | null
