@@ -1,12 +1,12 @@
 import { DeepRedact } from '../src/index'
 import { complexBlacklistedKeys } from '../test/setup/blacklist'
-import { extendedDummyUser } from '../test/setup/dummyUser'
+import { extendedDummyUser, dummyUser } from '../test/setup/dummyUser'
 
 const redactor = new DeepRedact({
     enableLogging: true,
     retainStructure: true,
     blacklistedKeys: complexBlacklistedKeys,
-    types: ['string', 'number', 'boolean'],
+    types: ['string', 'number'],
     partialStringTests: [
         {
         pattern: /([a-z\d\.]+)@([a-z\d\.]+)/i,
@@ -20,6 +20,6 @@ const redactor = new DeepRedact({
     ],
 })
 
-const result = redactor.redact(extendedDummyUser)
+const result = redactor.redact(dummyUser)
 console.log('=== Result ===')
 console.dir(result, { depth: null })

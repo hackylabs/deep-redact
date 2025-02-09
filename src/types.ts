@@ -1,6 +1,6 @@
 export type Types = 'string' | 'number' | 'bigint' | 'boolean' | 'object' | 'function' | 'symbol' | 'undefined'
 
-export type Transformer = (value: unknown, key?: string, reference?: WeakMap<object, unknown>) => unknown
+export type Transformer = (value: unknown, key?: string | RegExp | number | null) => unknown
 
 export interface BlacklistKeyConfig {
   /**
@@ -40,7 +40,15 @@ export interface BlacklistKeyConfig {
    * @example true // if `replacement` equals `*` then `joe.bloggs@example.com` becomes `**********************`
    * @example false // if `replacement` equals `*` then `joe.bloggs@example.com` becomes `*`
    */
-  replacement?: string | ((value: unknown) => unknown)
+  replacement?: unknown | ((value: unknown) => unknown)
+
+  /**
+   * Replace string values with a redacted string of the same length, using the `replacement` option. Ignored if `remove` is true, `replacement` is a function, or the value is not a string.
+   * @default false
+   * @example true // if `replacement` equals `*` then `joe.bloggs@example.com` becomes `**********************`
+   * @example false // if `replacement` equals `*` then `joe.bloggs@example.com` becomes `*`
+   */
+  replaceStringByLength?: boolean
 
   /**
    * The key to redact. Can be a string or a RegExp.
@@ -115,7 +123,7 @@ export interface BaseDeepRedactConfig {
    * @param value The original value that is being redacted.
    * @returns The redacted value or undefined to remove the value.
    */
-  replacement?: string | Transformer
+  replacement?: unknown | Transformer
 
   /**
    * Remove the redacted data instead of replacing it with the `replacement` value.
@@ -191,16 +199,28 @@ export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, '_blacklistedK
   stringTests: BaseDeepRedactConfig['stringTests']
 })
 
+export type DerivedBlacklistReplacer = (value: unknown, config: Omit<BlacklistKeyConfig, 'key'>) => unknown
+
+export interface DerivedBlacklistRegex {
+  pattern: RegExp, 
+  config: Omit<BlacklistKeyConfig, 'key'>
+  replacer: DerivedBlacklistReplacer
+}
+
 export type RedactorUtilsConfig = Omit<BaseDeepRedactConfig, 'serialise' | 'serialize'>
 
 export type StackReference = WeakMap<object, unknown>
 
-export type Stack = Array<{ 
-  parent: any, 
-  key: string, 
-  value: unknown, 
-  path: Array<string | number>, 
-  redactingParent: boolean 
-}>
+export type Stack = Array<{ parent: any, key: string, value: unknown, path: Array<string | number>, replacer?: { replacer: DerivedBlacklistReplacer, config: Omit<BlacklistKeyConfig, 'key'> } }>
 
 export type Logs = Array<{ path: string, message: string, raw: unknown, transformed: unknown }> | null
+
+export interface DerivedBlacklistConfig extends Omit<BlacklistKeyConfig, 'key'> {
+  fuzzyKeyMatch: boolean
+  caseSensitiveKeyMatch: boolean
+}
+
+export interface DerivedBlacklistStrings {
+  replacer: DerivedBlacklistReplacer
+  config: DerivedBlacklistConfig
+}

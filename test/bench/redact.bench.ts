@@ -44,7 +44,7 @@ describe('Redaction benchmark', () => {
     })
   })
 
-  bench('fast redact, large object', async () => {
+  bench.only('fast redact, large object', async () => {
     await new Promise((resolve) => {
       resolve(redactionConfigs.fastRedact(dummyUser))
     })
@@ -76,7 +76,7 @@ describe('Redaction benchmark', () => {
     })
   })
 
-  bench('DeepRedact, default config, large object', async () => {
+  bench.only('DeepRedact, default config, large object', async () => {
     await new Promise((resolve) => {
       resolve(redactionConfigs.deepRedactDefaultConfig.redact(dummyUser))
     })
