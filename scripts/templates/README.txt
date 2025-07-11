@@ -3,12 +3,12 @@
 [![npm version](https://badge.fury.io/js/@hackylabs%2Fdeep-redact.svg)](https://badge.fury.io/js/@hackylabs%2Fdeep-redact)
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/hackylabs/deep-redact/blob/main/LICENSE)
 
-Faster than Fast Redact <sup>1</sup> as well as being safer and more configurable than many other redaction solutions,
-Deep Redact is a zero-dependency tool that redacts sensitive information from strings and objects. It is designed to be
-used in a production environment where sensitive information needs to be redacted from logs, error messages, files,
-and other outputs. Supporting both strings and objects or a mix of both, Deep Redact can be used to redact sensitive
-information from more data structures than any other redaction library. Even partially redacting sensitive information
-from strings is supported, by way of custom regex patterns and replacers.
+Safer and more configurable than many other redaction solutions, Deep Redact is a zero-dependency tool that redacts
+sensitive information from strings and objects. It is designed to be used in a production environment where sensitive
+information needs to be redacted from logs, error messages, files, and other outputs. Supporting both strings and objects
+or a mix of both, Deep Redact can be used to redact sensitive information from more data structures than any other
+redaction library. Even partially redacting sensitive information from strings is supported, by way of custom regex
+patterns and replacers.
 
 Circular references and other unsupported values are handled gracefully, and the library is designed to be as fast as
 possible while still being easy to use and configure.
