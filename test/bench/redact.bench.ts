@@ -20,7 +20,7 @@ const redactionConfigs = {
   deepRedactRetainStructure: new DeepRedact({ blacklistedKeys, retainStructure: true }),
   deepRedactRemoveItem: new DeepRedact({ blacklistedKeys, remove: true }),
   deepRedactPartialRedaction: new DeepRedact({
-    partialStringTests: [
+    stringTests: [
       {
         pattern: xmlPattern,
         replacer: (value: string, pattern: RegExp) => value.replace(pattern, '<$1>[REDACTED]</$1>'),
