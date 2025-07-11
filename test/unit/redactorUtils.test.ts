@@ -562,7 +562,7 @@ describe('RedactorUtils', () => {
         utils = new RedactorUtils({
           blacklistedKeys: ['foo'],
         })
-        const circularReference = { a: { foo: { bar: 'baz' } } }
+        const circularReference = { a: { foo: { bar: 'baz' } }, b: new Date() }
         // @ts-expect-error - we're testing a circular reference
         circularReference.a.foo.circularReference = circularReference.a.foo
         result = utils.traverse(circularReference)
@@ -579,6 +579,10 @@ describe('RedactorUtils', () => {
                 value: 'a.foo',
               },
             },
+          },
+          b: {
+            _transformer: 'date',
+            datetime: expect.any(String),
           },
         })
       })
@@ -1108,10 +1112,9 @@ describe('RedactorUtils', () => {
   })
 
   describe('applyStringTransformations', () => {
-    let result: unknown
-    let stringTestStub: MockInstance
-    let applyStringTransformationsSpy: MockInstance<RedactorUtils['applyStringTransformations']>
     let redactValueSpy: MockInstance<RedactorUtils['redactValue']>
+    let stringTestStub: MockInstance
+    let result: unknown
     
     describe('when partialStringTests is empty', () => {
       describe('when stringTests contains a RegExp', () => {
@@ -1179,36 +1182,110 @@ describe('RedactorUtils', () => {
           expect(result).toEqual({ transformed: stringTestStub.mock.results[0]?.value, redactingParent: false })
         })
       })
+
+      describe('when stringTests is explicitly undefined', () => {
+        beforeEach(() => {
+          utils = new RedactorUtils({
+            stringTests: undefined,
+          })
+          // @ts-expect-error - redactValue is private but we're testing it
+          redactValueSpy = vi.spyOn(utils, 'redactValue')
+          // @ts-expect-error - applyStringTransformations is private but we're testing it
+          result = utils.applyStringTransformations('Hello, world!', false)
+        })
+
+        it('should return the value unchanged', () => {
+          expect(result).toEqual({ transformed: 'Hello, world!', redactingParent: false })
+        })
+
+        it('should not call redactValue', () => {
+          expect(redactValueSpy).not.toHaveBeenCalled()
+        })
+      })
+
+      describe('when both partialStringTests and stringTests are empty', () => {
+        beforeEach(() => {
+          utils = new RedactorUtils({
+            partialStringTests: [],
+            stringTests: [],
+          })
+          // @ts-expect-error - redactValue is private but we're testing it
+          redactValueSpy = vi.spyOn(utils, 'redactValue')
+          // @ts-expect-error - applyStringTransformations is private but we're testing it
+          result = utils.applyStringTransformations('Hello, world!', false)
+        })
+
+        it('should return the value unchanged', () => {
+          expect(result).toEqual({ transformed: 'Hello, world!', redactingParent: false })
+        })
+
+        it('should not call redactValue', () => {
+          expect(redactValueSpy).not.toHaveBeenCalled()
+        })
+      })
     })
 
     describe('when partialStringTests is not empty', () => {
-      let partialStringTestSpy: MockInstance<RedactorUtils['partialStringRedact']>
-      let redactValueSpy: MockInstance<RedactorUtils['redactValue']>
-      let result: unknown
+      describe('when the replacer changes the value', () => {
+        let partialStringTestSpy: MockInstance<RedactorUtils['partialStringRedact']>
+        let redactValueSpy: MockInstance<RedactorUtils['redactValue']>
+        let result: unknown
 
-      beforeEach(() => {
-        utils = new RedactorUtils({
-          stringTests: [/^hello/i],
-          partialStringTests: [{ pattern: /^hello/i, replacer: (_value: string) => '[PARTIALLY REDACTED]' }],
+        beforeEach(() => {
+          utils = new RedactorUtils({
+            // Only partialStringTests, no stringTests to avoid confusion
+            partialStringTests: [{ pattern: /^hello/i, replacer: (value: string) => value.replace(/hello/i, '[REDACTED]') }],
+          })
+          partialStringTestSpy = vi.spyOn(utils, 'partialStringRedact')
+          // @ts-expect-error - redactValue is private but we're testing it
+          redactValueSpy = vi.spyOn(utils, 'redactValue')
+          // @ts-expect-error - applyStringTransformations is private but we're testing it
+          result = utils.applyStringTransformations('Hello, world!', false)
         })
-        partialStringTestSpy = vi.spyOn(utils, 'partialStringRedact')
-        // @ts-expect-error - redactValue is private but we're testing it
-        redactValueSpy = vi.spyOn(utils, 'redactValue')
-        // @ts-expect-error - applyStringTransformations is private but we're testing it
-        result = utils.applyStringTransformations('Hello, world!', false)
+
+        it('should call partialStringRedact', () => {
+          expect(partialStringTestSpy).toHaveBeenCalledOnce()
+          expect(partialStringTestSpy).toHaveBeenNthCalledWith(1, 'Hello, world!')
+        })
+
+        it('should not call redactValue', () => {
+          expect(redactValueSpy).not.toHaveBeenCalled()
+        })
+
+        it('should return the result of partialStringRedact and redactingParent', () => {
+          expect(result).toEqual({ transformed: '[REDACTED], world!', redactingParent: false })
+        })
       })
 
-      it('should call partialStringRedact', () => {
-        expect(partialStringTestSpy).toHaveBeenCalledOnce()
-        expect(partialStringTestSpy).toHaveBeenNthCalledWith(1, 'Hello, world!')
-      })
+      describe('when the replacer does not change the value', () => {
+        let partialStringTestSpy: MockInstance<RedactorUtils['partialStringRedact']>
+        let redactValueSpy: MockInstance<RedactorUtils['redactValue']>
+        let result: unknown
 
-      it('should not call redactValue', () => {
-        expect(redactValueSpy).not.toHaveBeenCalled()
-      })
+        beforeEach(() => {
+          utils = new RedactorUtils({
+            // Pattern that won't match the test string
+            partialStringTests: [{ pattern: /notfound/i, replacer: (_value: string) => '[PARTIALLY REDACTED]' }],
+          })
+          partialStringTestSpy = vi.spyOn(utils, 'partialStringRedact')
+          // @ts-expect-error - redactValue is private but we're testing it
+          redactValueSpy = vi.spyOn(utils, 'redactValue')
+          // @ts-expect-error - applyStringTransformations is private but we're testing it
+          result = utils.applyStringTransformations('Hello, world!', false)
+        })
 
-      it('should return the result of partialStringRedact and redactingParent', () => {
-        expect(result).toEqual({ transformed: '[PARTIALLY REDACTED]', redactingParent: false })
+        it('should call partialStringRedact', () => {
+          expect(partialStringTestSpy).toHaveBeenCalledOnce()
+          expect(partialStringTestSpy).toHaveBeenNthCalledWith(1, 'Hello, world!')
+        })
+
+        it('should not call redactValue', () => {
+          expect(redactValueSpy).not.toHaveBeenCalled()
+        })
+
+        it('should return the value unchanged since no transformations occurred', () => {
+          expect(result).toEqual({ transformed: 'Hello, world!', redactingParent: false })
+        })
       })
     })
   })
@@ -1609,35 +1686,415 @@ describe('RedactorUtils', () => {
         })
       })
     })
+
+    describe('when caseSensitiveKeyMatch is false', () => {
+      beforeEach(() => {
+        utils = new RedactorUtils({
+          blacklistedKeys: [{ key: 'TEST', fuzzyKeyMatch: true, caseSensitiveKeyMatch: false }],
+        })
+        // @ts-expect-error - findMatchingKeyConfig is private but we're testing it
+        result = utils.findMatchingKeyConfig('test')
+      })
+
+      it('should match case insensitively', () => {
+        expect(result).toEqual({
+          key: 'TEST',
+          fuzzyKeyMatch: true,
+          caseSensitiveKeyMatch: false,
+          retainStructure: false,
+          replacement: '[REDACTED]',
+          replaceStringByLength: false,
+          remove: false,
+        })
+      })
+    })
+
+    describe('when fuzzyKeyMatch is false and caseSensitiveKeyMatch is false', () => {
+      beforeEach(() => {
+        utils = new RedactorUtils({
+          blacklistedKeys: [{ key: 'EXACT', fuzzyKeyMatch: false, caseSensitiveKeyMatch: false }],
+        })
+        // @ts-expect-error - findMatchingKeyConfig is private but we're testing it
+        result = utils.findMatchingKeyConfig('exact')
+      })
+
+      it('should match exactly case insensitively', () => {
+        expect(result).toEqual({
+          key: 'EXACT',
+          fuzzyKeyMatch: false,
+          caseSensitiveKeyMatch: false,
+          retainStructure: false,
+          replacement: '[REDACTED]',
+          replaceStringByLength: false,
+          remove: false,
+        })
+      })
+    })
+
+    describe('when fuzzyKeyMatch is false and caseSensitiveKeyMatch is true', () => {
+      beforeEach(() => {
+        utils = new RedactorUtils({
+          blacklistedKeys: [{ key: 'exact', fuzzyKeyMatch: false, caseSensitiveKeyMatch: true }],
+        })
+        // @ts-expect-error - findMatchingKeyConfig is private but we're testing it
+        result = utils.findMatchingKeyConfig('exact')
+      })
+
+      it('should match exactly case sensitively', () => {
+        expect(result).toEqual({
+          key: 'exact',
+          fuzzyKeyMatch: false,
+          caseSensitiveKeyMatch: true,
+          retainStructure: false,
+          replacement: '[REDACTED]',
+          replaceStringByLength: false,
+          remove: false,
+        })
+      })
+    })
   })
 
-  describe('removeCircularReferences', () => {
-    let applyTransformersSpy: MockInstance<RedactorUtils['applyTransformers']>
-    let initialiseTraversalSpy: MockInstance<RedactorUtils['initialiseTraversal']>
-    let initialValue = { foo: { bar: 'biz', baz: { qux: 'quux' }, arr: [{ some: 'object' }, {}] } }
-    // @ts-expect-error - we're testing a circular reference
-    initialValue.foo.baz.circularReference = initialValue.foo.baz
-    // @ts-expect-error - we're testing a circular reference
-    initialValue.foo.arr[1].circularReference = initialValue.foo.arr[1]
+  describe('replaceCircularReferences', () => {
     let result: unknown
 
     beforeEach(() => {
       utils = new RedactorUtils({})
-      // @ts-expect-error - applyTransformers is private but we're testing it
-      applyTransformersSpy = vi.spyOn(utils, 'applyTransformers')
-      // @ts-expect-error - removeCircularReferences is private but we're testing it
-      initialiseTraversalSpy = vi.spyOn(utils, 'initialiseTraversal')
-      // @ts-expect-error - removeCircularReferences is private but we're testing it
-      result = utils.removeCircularReferences(initialValue)
     })
 
-    it('should return the correct result with circular references transformed', () => {
-      expect(result).toEqual({
-        foo: {
-          bar: 'biz',
-          baz: { qux: 'quux', circularReference: { _transformer: 'circular', value: 'foo.baz', path: 'foo.baz.circularReference' } },
-          arr: [{some: 'object'}, { circularReference: { _transformer: 'circular', value: 'foo.arr.1', path: 'foo.arr.1.circularReference' } }],
-        },
+    describe('when the input is a primitive value', () => {
+      it('should return string unchanged', () => {
+        // @ts-expect-error - replaceCircularReferences is private but we're testing it
+        result = utils.replaceCircularReferences('hello')
+        expect(result).toBe('hello')
+      })
+
+      it('should return number unchanged', () => {
+        // @ts-expect-error - replaceCircularReferences is private but we're testing it
+        result = utils.replaceCircularReferences(42)
+        expect(result).toBe(42)
+      })
+
+      it('should return boolean unchanged', () => {
+        // @ts-expect-error - replaceCircularReferences is private but we're testing it
+        result = utils.replaceCircularReferences(true)
+        expect(result).toBe(true)
+      })
+
+      it('should return null unchanged', () => {
+        // @ts-expect-error - replaceCircularReferences is private but we're testing it
+        result = utils.replaceCircularReferences(null)
+        expect(result).toBe(null)
+      })
+
+      it('should return undefined unchanged', () => {
+        // @ts-expect-error - replaceCircularReferences is private but we're testing it
+        result = utils.replaceCircularReferences(undefined)
+        expect(result).toBe(undefined)
+      })
+    })
+
+    describe('when the input is an object without circular references', () => {
+      it('should return the same object for simple objects', () => {
+        const input = { a: 1, b: 'test' }
+        // @ts-expect-error - replaceCircularReferences is private but we're testing it
+        result = utils.replaceCircularReferences(input)
+        expect(result).toBe(input)
+      })
+
+      it('should return the same object for nested objects', () => {
+        const input = { a: { b: { c: 'deep' } }, d: 'shallow' }
+        // @ts-expect-error - replaceCircularReferences is private but we're testing it
+        result = utils.replaceCircularReferences(input)
+        expect(result).toBe(input)
+      })
+
+      it('should return the same object for objects with primitive values', () => {
+        const input = { str: 'hello', num: 42, bool: true, nil: null }
+        // @ts-expect-error - replaceCircularReferences is private but we're testing it
+        result = utils.replaceCircularReferences(input)
+        expect(result).toBe(input)
+      })
+    })
+
+    describe('when the input is an array without circular references', () => {
+      it('should return the same array for simple arrays', () => {
+        const input = [1, 2, 'test']
+        // @ts-expect-error - replaceCircularReferences is private but we're testing it
+        result = utils.replaceCircularReferences(input)
+        expect(result).toBe(input)
+      })
+
+      it('should return the same array for nested arrays', () => {
+        const input = [1, [2, [3, 'deep']], 'shallow']
+        // @ts-expect-error - replaceCircularReferences is private but we're testing it
+        result = utils.replaceCircularReferences(input)
+        expect(result).toBe(input)
+      })
+
+      it('should return the same array for arrays with objects', () => {
+        const input = [{ a: 1 }, { b: 2 }, 'test']
+        // @ts-expect-error - replaceCircularReferences is private but we're testing it
+        result = utils.replaceCircularReferences(input)
+        expect(result).toBe(input)
+      })
+    })
+
+    describe('when the input has circular references', () => {
+      describe('objects with self-reference', () => {
+        it('should replace direct self-reference', () => {
+          const input: any = { name: 'test' }
+          input.self = input
+          
+          // @ts-expect-error - replaceCircularReferences is private but we're testing it
+          result = utils.replaceCircularReferences(input)
+          
+          expect(result).not.toBe(input)
+          expect(result).toEqual({
+            name: 'test',
+            self: {
+              _transformer: 'circular',
+              value: '',
+              path: 'self'
+            }
+          })
+        })
+
+        it('should handle multiple self-references', () => {
+          const input: any = { name: 'test' }
+          input.ref1 = input
+          input.ref2 = input
+          
+          // @ts-expect-error - replaceCircularReferences is private but we're testing it
+          result = utils.replaceCircularReferences(input)
+          
+          expect(result).not.toBe(input)
+          expect(result).toEqual({
+            name: 'test',
+            ref1: {
+              _transformer: 'circular',
+              value: '',
+              path: 'ref1'
+            },
+            ref2: {
+              _transformer: 'circular',
+              value: '',
+              path: 'ref2'
+            }
+          })
+        })
+      })
+
+      describe('arrays with self-reference', () => {
+        it('should replace direct self-reference in arrays', () => {
+          const input: any = ['test', 'value']
+          input.push(input)
+          
+          // @ts-expect-error - replaceCircularReferences is private but we're testing it
+          result = utils.replaceCircularReferences(input)
+          
+          expect(result).not.toBe(input)
+          expect(result).toEqual([
+            'test',
+            'value',
+            {
+              _transformer: 'circular',
+              value: '',
+              path: '2'
+            }
+          ])
+        })
+
+        it('should handle multiple self-references in arrays', () => {
+          const input: any = ['test']
+          input.push(input, input)
+          
+          // @ts-expect-error - replaceCircularReferences is private but we're testing it
+          result = utils.replaceCircularReferences(input)
+          
+          expect(result).not.toBe(input)
+          expect(result).toEqual([
+            'test',
+            {
+              _transformer: 'circular',
+              value: '',
+              path: '1'
+            },
+            {
+              _transformer: 'circular',
+              value: '',
+              path: '2'
+            }
+          ])
+        })
+      })
+
+      describe('nested circular references', () => {
+        it('should handle circular reference in nested objects', () => {
+          const input: any = { 
+            level1: { 
+              level2: { 
+                data: 'deep' 
+              } 
+            } 
+          }
+          input.level1.level2.circular = input
+          
+          // @ts-expect-error - replaceCircularReferences is private but we're testing it
+          result = utils.replaceCircularReferences(input)
+          
+          expect(result).not.toBe(input)
+          expect(result).toEqual({
+            level1: {
+              level2: {
+                data: 'deep',
+                circular: {
+                  _transformer: 'circular',
+                  value: '',
+                  path: 'level1.level2.circular'
+                }
+              }
+            }
+          })
+        })
+
+        it('should handle circular reference in nested arrays', () => {
+          const input: any = [
+            'first', 
+            [
+              'second', 
+              ['third']
+            ]
+          ]
+          input[1][1].push(input)
+          
+          // @ts-expect-error - replaceCircularReferences is private but we're testing it
+          result = utils.replaceCircularReferences(input)
+          
+          expect(result).not.toBe(input)
+          expect(result).toEqual([
+            'first',
+            [
+              'second',
+              [
+                'third',
+                {
+                  _transformer: 'circular',
+                  value: '',
+                  path: '1.1.1'
+                }
+              ]
+            ]
+          ])
+        })
+      })
+
+      describe('mixed structures with circular references', () => {
+        it('should handle object containing array with circular reference', () => {
+          const input: any = {
+            data: 'test',
+            items: ['a', 'b']
+          }
+          input.items.push(input)
+          
+          // @ts-expect-error - replaceCircularReferences is private but we're testing it
+          result = utils.replaceCircularReferences(input)
+          
+          expect(result).not.toBe(input)
+          expect(result).toEqual({
+            data: 'test',
+            items: [
+              'a',
+              'b',
+              {
+                _transformer: 'circular',
+                value: '',
+                path: 'items.2'
+              }
+            ]
+          })
+        })
+
+        it('should handle array containing object with circular reference', () => {
+          const input: any = [
+            'start',
+            { name: 'test', value: 42 }
+          ]
+          input[1].parent = input
+          
+          // @ts-expect-error - replaceCircularReferences is private but we're testing it
+          result = utils.replaceCircularReferences(input)
+          
+          expect(result).not.toBe(input)
+          expect(result).toEqual([
+            'start',
+            {
+              name: 'test',
+              value: 42,
+              parent: {
+                _transformer: 'circular',
+                value: '',
+                path: '1.parent'
+              }
+            }
+          ])
+        })
+      })
+
+      describe('complex circular reference scenarios', () => {
+              it('should handle mutual circular references', () => {
+        const objA: any = { name: 'A' }
+        const objB: any = { name: 'B' }
+        objA.refToB = objB
+        objB.refToA = objA
+        
+        const input = { a: objA, b: objB }
+        
+        // @ts-expect-error - replaceCircularReferences is private but we're testing it
+        result = utils.replaceCircularReferences(input)
+        
+        expect(result).not.toBe(input)
+        expect(result).toEqual({
+          a: {
+            name: 'A',
+            refToB: {
+              name: 'B',
+              refToA: {
+                _transformer: 'circular',
+                value: 'a',
+                path: 'a.refToB.refToA'
+              }
+            }
+          },
+          b: {
+            name: 'B',
+            refToA: {
+              name: 'A',
+              refToB: {
+                _transformer: 'circular',
+                value: 'b',
+                path: 'b.refToA.refToB'
+              }
+            }
+          }
+        })
+      })
+
+        it('should handle empty object path correctly', () => {
+          const input: any = { root: true }
+          input.circular = input
+          
+          // @ts-expect-error - replaceCircularReferences is private but we're testing it
+          result = utils.replaceCircularReferences(input)
+          
+          expect(result).toEqual({
+            root: true,
+            circular: {
+              _transformer: 'circular',
+              value: '',
+              path: 'circular'
+            }
+          })
+        })
       })
     })
   })
