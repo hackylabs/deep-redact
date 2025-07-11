@@ -103,7 +103,7 @@
     "bench:dev": "npx vitest bench",
     "test:dev": "npx vitest",
     "test": "npx vitest run",
-    "load": "npx vitest test/load/redact.test.ts --reporter=basic --coverage=false",
+    "load": "npx vitest run test/load/redact.test.ts --reporter=basic --coverage=false",
     "load:dev": "npx vitest test/load/redact.test.ts --coverage=false --reporter=basic",
     "unit": "npx vitest run test/unit --reporter=verbose",
     "unit:dev": "npx vitest test/unit --coverage=false --reporter=verbose",
