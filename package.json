@@ -103,11 +103,12 @@
     "bench:dev": "npx vitest bench",
     "test:dev": "npx vitest",
     "test": "npx vitest run",
-    "load": "npx vitest test/load/redact.test.ts --reporter=basic --coverage=false --no-watch",
-    "load:dev": "npx vitest test/load/redact.test.ts --watch --coverage=false --reporter=basic",
+    "load": "npx vitest test/load/redact.test.ts --reporter=basic --coverage=false",
+    "load:dev": "npx vitest test/load/redact.test.ts --coverage=false --reporter=basic",
+    "unit": "npx vitest run test/unit --reporter=verbose",
+    "unit:dev": "npx vitest test/unit --coverage=false --reporter=verbose",
     "update-readme": "npx ts-node ./scripts/update-readme.ts",
     "update-license": "npx ts-node ./scripts/update-license.ts",
-    "debug-redaction": "npx ts-node scripts/debug.ts",
     "update-exports": "npx ts-node ./scripts/update-exports.ts"
   },
   "//": [

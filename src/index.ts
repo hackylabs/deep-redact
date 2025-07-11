@@ -24,14 +24,10 @@ class DeepRedact {
    * @param {DeepRedactConfig} config. The configuration for the redaction.
    */
   constructor(config: DeepRedactConfig) {
-    const { serialise, serialize, transformers, ...rest } = config
+    const { serialise, serialize, ...rest } = config
     const englishSerialise = serialise ?? serialize
     if (typeof englishSerialise === 'boolean') this.config.serialise = englishSerialise
-
-    this.redactorUtils = new RedactorUtils({
-      transformers: transformers ?? (englishSerialise ? standardTransformers : []),
-      ...rest,
-    })
+    this.redactorUtils = new RedactorUtils({ ...rest })
   }
 
   /**

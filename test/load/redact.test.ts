@@ -140,16 +140,6 @@ describe('Redaction Load Tests', () => {
         min: result.latency?.min ?? 0,
       },
     });
-
-    console.log(`
-    ${title}:
-      Avg Latency: ${result.latency?.average ?? 0} ms
-      Max Latency: ${result.latency?.max ?? 0} ms
-      Min Latency: ${result.latency?.min ?? 0} ms
-      Total Requests: ${result.requests?.total ?? 0}
-      Timeouts: ${result.timeouts}
-      Errors: ${result.errors}
-    `)
   }
 
   it('should handle fast-redact single object load', async () => {
