@@ -1,5 +1,5 @@
 export type Types = 'string' | 'number' | 'bigint' | 'boolean' | 'object' | 'function' | 'symbol' | 'undefined';
-export type Transformer = (value: unknown) => unknown;
+export type Transformer = (value: unknown, key?: string, reference?: WeakMap<object, unknown>) => unknown;
 export interface BlacklistKeyConfig {
     /**
      * Perform a fuzzy match on the key. This will match any key that contains the string, rather than a case-sensitive match.
@@ -29,12 +29,22 @@ export interface BlacklistKeyConfig {
      */
     remove?: boolean;
     /**
+     * The replacement value for redacted data. Can be a string, or a function that takes the original value and returns any value.
+     * @default '[REDACTED]'
+     * @example '*' // if `replacement` equals `*` then `joe.bloggs@example.com` becomes `**********************`
+     * @example (value) => `REDACTED: ${typeof value}` // redact the value with a prefix of 'REDACTED: ' and the type of the value.
+     * @example (value) => return typeof value === 'string' ? '*'.repeat(value.length) : '[REDACTED]' // redact the value with a string of the same length.
+     * @param value The original value that is being redacted.
+     * @returns The redacted value or undefined to remove the value.
+     */
+    replacement?: string | ((value: unknown) => unknown);
+    /**
      * Replace string values with a redacted string of the same length, using the `replacement` option. Ignored if `remove` is true, `replacement` is a function, or the value is not a string.
      * @default false
      * @example true // if `replacement` equals `*` then `joe.bloggs@example.com` becomes `**********************`
      * @example false // if `replacement` equals `*` then `joe.bloggs@example.com` becomes `*`
      */
-    replacement?: string | ((value: unknown) => unknown);
+    replaceStringByLength?: boolean;
     /**
      * The key to redact. Can be a string or a RegExp.
      * @example 'address' // redact any key that is 'address'.
@@ -54,7 +64,6 @@ export interface BaseDeepRedactConfig {
      * @example [{ key: 'address', fuzzyKeyMatch: true, caseSensitiveKeyMatch: false }] // redact any key that contains 'address' regardless of case.
      */
     blacklistedKeys?: Array<string | RegExp | BlacklistKeyConfig>;
-    blacklistedKeysTransformed: Array<Required<BlacklistKeyConfig>>;
     /**
      * Redact a string value that matches a test pattern.
      * @default []
@@ -63,7 +72,6 @@ export interface BaseDeepRedactConfig {
      * ]
      */
     stringTests?: Array<RegExp | ComplexStringTest>;
-    partialStringTests?: Array<ComplexStringTest>;
     /**
      * Perform a fuzzy match on the key. This will match any key that contains the string, rather than a case-sensitive match.
      * @default false
@@ -122,25 +130,48 @@ export interface BaseDeepRedactConfig {
      * Alias of `serialise` for International-English users.
      */
     serialize?: boolean;
+    /**
+     * A list of transformers to apply when transforming unsupported values.
+     * Each transformer should conditionally transform the value, or return the value unchanged to be passed to the next transformer.
+     * Transformers will be run in the order they are provided recursively over the entire object.
+     * @default []
+     * @example [
+     *   // redact a key by name.
+     *   standardTransformers.redactByKey,
+     *   // convert a Date to an ISO string.
+     *   (value: unknown) => {
+     *     if (!(value instanceof Date)) return value
+     *     return value.toISOString()
+     *   },
+     *   // convert a BigInt to a string.
+     *   (value: unknown) => {
+     *     if (typeof value !== 'bigint') return value
+     *     return value.toString(10)
+     *   }
+     */
+    transformers?: Array<Transformer>;
 }
-export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, 'blacklistedKeysTransformed' | 'blacklistedKeys' | 'stringTests'>> & ({
-    partialStringTests: BaseDeepRedactConfig['partialStringTests'];
+export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, '_blacklistedKeysTransformed' | 'blacklistedKeys' | 'stringTests'>> & ({
     blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys'];
     stringTests: BaseDeepRedactConfig['stringTests'];
-} | {
-    partialStringTests: BaseDeepRedactConfig['partialStringTests'];
-    blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys'];
-} | {
-    blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys'];
-    stringTests: BaseDeepRedactConfig['stringTests'];
-} | {
-    partialStringTests: BaseDeepRedactConfig['partialStringTests'];
-    stringTests: BaseDeepRedactConfig['stringTests'];
-} | {
-    partialStringTests: BaseDeepRedactConfig['partialStringTests'];
 } | {
     blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys'];
 } | {
     stringTests: BaseDeepRedactConfig['stringTests'];
 });
 export type RedactorUtilsConfig = Omit<BaseDeepRedactConfig, 'serialise' | 'serialize'>;
+export type StackReference = WeakMap<object, unknown>;
+export type Stack = Array<{
+    parent: any;
+    key: string;
+    value: unknown;
+    path: Array<string | number>;
+    redactingParent: boolean;
+    keyConfig: BlacklistKeyConfig | undefined;
+}>;
+export type Logs = Array<{
+    path: string;
+    message: string;
+    raw: unknown;
+    transformed: unknown;
+}> | null;
