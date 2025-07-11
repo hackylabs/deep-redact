@@ -41,84 +41,84 @@ describe('Redaction benchmark', () => {
   })
 
   bench('fast redact, large object', () => {
-    redactionConfigs.fastRedact(dummyUser)
+    redactionConfigs.fastRedact({ dummyUser })
   })
 
   bench('fast redact, 1000 large objects', () => {
     for (let i = 0; i < 1000; i++) {
-      redactionConfigs.fastRedact(dummyUser)
+      redactionConfigs.fastRedact({ dummyUser })
     }
   })
 
   bench('ObGlob, large object', () => {
-    redactionConfigs.obglob(dummyUser)
+    redactionConfigs.obglob({ dummyUser })
   })
 
   bench('Regex replace, large object', () => {
-    JSON.stringify(dummyUser).replace(stringPattern, '"$1":"[REDACTED]"')
+    JSON.stringify({ dummyUser }).replace(stringPattern, '"$1":"[REDACTED]"')
   })
 
   bench('DeepRedact, default config, large object', () => {
-    redactionConfigs.deepRedactDefaultConfig.redact(dummyUser)
+    redactionConfigs.deepRedactDefaultConfig.redact({ dummyUser })
   })
 
   bench('ObGlob, 1000 large objects', () => {
     for (let i = 0; i < 1000; i++) {
-      redactionConfigs.obglob(dummyUser)
+      redactionConfigs.obglob({ dummyUser })
     }
   })
 
   bench('Regex replace, 1000 large objects', () => {
     for (let i = 0; i < 1000; i++) {
-      JSON.stringify(dummyUser).replace(stringPattern, '"$1":"[REDACTED]"')
+      JSON.stringify({ dummyUser }).replace(stringPattern, '"$1":"[REDACTED]"')
     }
   })
 
   bench('DeepRedact, default config, 1000 large objects', () => {
     for (let i = 0; i < 1000; i++) {
-      redactionConfigs.deepRedactDefaultConfig.redact(dummyUser)
+      redactionConfigs.deepRedactDefaultConfig.redact({ dummyUser })
     }
   })
 
   bench('DeepRedact, config per key, single object', () => {
-    redactionConfigs.deepRedactConfigPerKey.redact(dummyUser)
+    redactionConfigs.deepRedactConfigPerKey.redact({ dummyUser })
   })
 
   bench('DeepRedact, fuzzy matching, single object', () => {
-    redactionConfigs.deepRedactFuzzyMatching.redact(dummyUser)
+    redactionConfigs.deepRedactFuzzyMatching.redact({ dummyUser })
   })
 
   bench('DeepRedact, case insensitive matching, single object', () => {
-    redactionConfigs.deepRedactCaseInsensitiveMatching.redact(dummyUser)
+    redactionConfigs.deepRedactCaseInsensitiveMatching.redact({ dummyUser })
   })
 
   bench('DeepRedact, fuzzy and case insensitive matching, single object', () => {
-    redactionConfigs.deepRedactFuzzyAndCaseInsensitiveMatching.redact(dummyUser)
+    redactionConfigs.deepRedactFuzzyAndCaseInsensitiveMatching.redact({ dummyUser })
   })
 
   bench('DeepRedact, replace string by length, single object', () => {
-    redactionConfigs.deepRedactReplaceStringByLength.redact(dummyUser)
+    redactionConfigs.deepRedactReplaceStringByLength.redact({ dummyUser })
   })
 
   bench('DeepRedact, custom replacer function, single object', () => {
-    redactionConfigs.deepRedactCustomReplacerFunction.redact(dummyUser)
+    redactionConfigs.deepRedactCustomReplacerFunction.redact({ dummyUser })
   })
 
   bench('DeepRedact, retain structure, single object', () => {
-    redactionConfigs.deepRedactRetainStructure.redact(dummyUser)
+    redactionConfigs.deepRedactRetainStructure.redact({ dummyUser })
   })
 
   bench('DeepRedact, remove item, single object', () => {
-    redactionConfigs.deepRedactRemoveItem.redact(dummyUser)
+    redactionConfigs.deepRedactRemoveItem.redact({ dummyUser })
   })
 
   bench('DeepRedact, partial redaction', () => {
-    redactionConfigs.deepRedactPartialRedaction.redact(dummyUser)
+    redactionConfigs.deepRedactPartialRedaction.redact({ dummyUser })
   })
 
   bench('DeepRedact, partial redaction large string', () => {
     for (let i = 0; i < 1000; i++) {
-      redactionConfigs.deepRedactPartialRedaction.redact(dummyUserXml)
+      redactionConfigs.deepRedactPartialRedaction.redact({ dummyUserXml })
     }
   })
 })
