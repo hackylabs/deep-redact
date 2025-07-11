@@ -12,9 +12,9 @@ let server: http.Server
 const PORT = 3456
 
 const handlers = {
-  deepRedact: new DeepRedact({ blacklistedKeys, serialise: true }),
-  deepRedactComplex: new DeepRedact({ blacklistedKeys: complexBlacklistedKeys, serialise: true }),
-  deepRedactRemove: new DeepRedact({ blacklistedKeys: blacklistedKeys, remove: true, serialise: true }),
+  deepRedact: new DeepRedact({ blacklistedKeys }),
+  deepRedactComplex: new DeepRedact({ blacklistedKeys: complexBlacklistedKeys }),
+  deepRedactRemove: new DeepRedact({ blacklistedKeys: blacklistedKeys, remove: true }),
   regexReplace: (data: any) => JSON.stringify(data).replace(stringPattern, '"$1":"[REDACTED]"'),
   jsonStringify: (data: any) => JSON.stringify(data),
   fastRedact: fastRedact({ paths: fastRedactBlacklistedKeys }),
@@ -73,26 +73,26 @@ describe('Redaction Load Tests', () => {
             break
           case 'obglob':
           case 'obglob-bulk':
-            result = handlers.obglob(data)
+            result = handlers.obglob({ data })
             break
           case 'deepRedact':
           case 'deepRedact-bulk':
-            result = handlers.deepRedact.redact(data)
+            result = handlers.deepRedact.redact({ data })
             break
           case 'deepRedactComplex':
-            result = handlers.deepRedactComplex.redact(data)
+            result = handlers.deepRedactComplex.redact({ data })
             break
           case 'deepRedactRemove':
           case 'deepRedactRemove-bulk':
-            result = handlers.deepRedactRemove.redact(data)
+            result = handlers.deepRedactRemove.redact({ data })
             break
           case 'regexReplace':
           case 'regexReplace-bulk':
-            result = handlers.regexReplace(data)
+            result = handlers.regexReplace({ data })
             break
           case 'jsonStringify':
           case 'jsonStringify-bulk':
-            result = handlers.jsonStringify(data)
+            result = handlers.jsonStringify({ data })
             break
           default:
             res.writeHead(404)
