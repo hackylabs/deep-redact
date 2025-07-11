@@ -112,7 +112,7 @@
     "update-exports": "npx ts-node ./scripts/update-exports.ts"
   },
   "//": [
-    "fast-redact and obglob are installed only as benchmark comparisons and are not used in the library",
+    "autocannon, fast-redact and obglob are installed only as internal benchmark comparisons and are not used in the library",
     "all dependencies are for development purposes only"
   ],
   "devDependencies": {
