@@ -67,8 +67,6 @@ export const fastRedactBlacklistedKeys = [
   'ssn',
 ]
 
-export const fastRedactArrayBlacklistedKeys = fastRedactBlacklistedKeys.map((key) => `*.${key}`)
-
 export const ObGlobPatterns = [
   '**/!(*user*)*[nN]ame*',
   '**/email',
