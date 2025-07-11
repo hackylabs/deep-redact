@@ -4,7 +4,6 @@ import { standardTransformers } from './standardTransformers'
 const defaultConfig: Required<RedactorUtilsConfig> = {
   stringTests: [],
   blacklistedKeys: [],
-  partialStringTests: [],
   fuzzyKeyMatch: false,
   caseSensitiveKeyMatch: true,
   retainStructure: false,
@@ -50,25 +49,6 @@ class RedactorUtils {
 
     const stringKeys = (customConfig.blacklistedKeys ?? []).filter(key => typeof key === 'string')
     if (stringKeys.length > 0) this.computedRegex = new RegExp(stringKeys.map(this.sanitiseStringForRegex).filter(Boolean).join('|'))
-  }
-
-  /**
-   * Redacts partial strings based on the partialStringTests config
-   * @param value - The string to redact
-   * @returns The redacted string
-   * @private
-   */
-  partialStringRedact = (value: string): string => {
-    const { partialStringTests }: BaseDeepRedactConfig = this.config
-    if (partialStringTests.length === 0) return value
-
-    let transformed = value
-    partialStringTests.forEach((test) => {
-      if (test.pattern.test(value)) transformed = test.replacer(transformed, test.pattern)
-    })
-
-    if (transformed === value) return value
-    return transformed
   }
 
   private createTransformedBlacklistedKey = (key: RegExp | BlacklistKeyConfig, customConfig: RedactorUtilsConfig): BlacklistKeyConfig => {
@@ -188,19 +168,19 @@ class RedactorUtils {
    * @private
    */
   private applyStringTransformations(value: string, amRedactingParent: boolean, keyConfig?: BlacklistKeyConfig): { transformed: string, redactingParent: boolean } {
-    const transformed = this.partialStringRedact(value)
+    if ((this.config.stringTests ?? []).length === 0) return { transformed: value, redactingParent: amRedactingParent }
 
-    if (transformed !== value) return { transformed, redactingParent: amRedactingParent }
-
-    for (const test of this.config.stringTests ?? []) {
+    for (const test of this.config.stringTests) {
       if (test instanceof RegExp) {
         if (test.test(value)) {
           const { transformed, redactingParent } = this.redactValue(value, amRedactingParent, keyConfig)
           return { transformed: transformed as string, redactingParent }
         }
       } else {
-        const transformed = test.replacer(value, test.pattern)
-        return { transformed, redactingParent: amRedactingParent }
+        if (test.pattern.test(value)) {
+          const transformed = test.replacer(value, test.pattern)
+          return { transformed, redactingParent: amRedactingParent }
+        }
       }
     }
 

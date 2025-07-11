@@ -84,8 +84,6 @@ export interface BaseDeepRedactConfig {
    */
   stringTests?: Array<RegExp | ComplexStringTest>
 
-  partialStringTests?: Array<ComplexStringTest>
-
   /**
    * Perform a fuzzy match on the key. This will match any key that contains the string, rather than a case-sensitive match.
    * @default false
@@ -176,20 +174,8 @@ export interface BaseDeepRedactConfig {
 }
 
 export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, '_blacklistedKeysTransformed' | 'blacklistedKeys' | 'stringTests'>> & ({
-  partialStringTests: BaseDeepRedactConfig['partialStringTests']
   blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys']
   stringTests: BaseDeepRedactConfig['stringTests']
-} | {
-  partialStringTests: BaseDeepRedactConfig['partialStringTests']
-  blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys']
-} | {
-  blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys']
-  stringTests: BaseDeepRedactConfig['stringTests']
-} | {
-  partialStringTests: BaseDeepRedactConfig['partialStringTests']
-  stringTests: BaseDeepRedactConfig['stringTests']
-} | {
-  partialStringTests: BaseDeepRedactConfig['partialStringTests']
 } | {
   blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys']
 } | {
