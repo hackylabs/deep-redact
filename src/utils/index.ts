@@ -63,7 +63,9 @@ class RedactorUtils {
     if (partialStringTests.length === 0) return value
 
     let transformed = value
-    partialStringTests.forEach((test) => transformed = test.replacer(transformed, test.pattern))
+    partialStringTests.forEach((test) => {
+      if (test.pattern.test(value)) transformed = test.replacer(transformed, test.pattern)
+    })
 
     if (transformed === value) return value
     return transformed
@@ -102,7 +104,7 @@ class RedactorUtils {
    */
   private applyTransformers = (value: unknown, key: string, referenceMap: WeakMap<object, string>): unknown => {
     if (typeof value === 'string') return value
-    
+
     let transformed = value
     for (const transformer of this.config.transformers) {
       transformed = transformer(transformed, key, referenceMap)
@@ -127,7 +129,7 @@ class RedactorUtils {
    */
   private shouldRedactKey = (key: string): boolean => {
     if (this.computedRegex?.test(this.sanitiseStringForRegex(key))) return true
-    
+
     return this.blacklistedKeysTransformed.some(config => {
       const pattern = config.key
       if (pattern instanceof RegExp) return pattern.test(key)
@@ -202,7 +204,7 @@ class RedactorUtils {
       }
     }
 
-    return { transformed: transformed !== value ? transformed : value, redactingParent: amRedactingParent }
+    return { transformed: value, redactingParent: amRedactingParent }
   }
 
   /**
@@ -274,7 +276,6 @@ class RedactorUtils {
    * @param value - The value to handle
    * @param path - The path to the value
    * @param redactingParent - Whether the parent is being redacted
-   * @param stack - The stack
    * @returns The transformed value and stack
    * @private
    */
@@ -385,66 +386,61 @@ class RedactorUtils {
     return { output, stack }
   }
 
-  private removeCircularReferences(initialValue: unknown): unknown {
-    if (typeof initialValue !== 'object' || initialValue === null) return initialValue
-    
-    const { output, stack } = this.initialiseTraversal(initialValue)
-    const referenceMap = new WeakMap<object, string>()
-    
-    if (typeof initialValue === 'object' && initialValue !== null) {
-      referenceMap.set(initialValue, '')
-    }
+  /**
+   * Pre-processes the input to replace circular references with transformer objects
+   * @param raw - The raw value to process
+   * @returns The processed value with circular references replaced
+   * @private
+   */
+  private replaceCircularReferences(raw: unknown): unknown {
+    if (typeof raw !== 'object' || raw === null) return raw
 
-    while (stack.length > 0) {
-      const { parent, key, value, path } = stack.pop()!
-      
-      if (typeof value !== 'object' || value === null) {
-        if (parent !== null && key !== null) parent[key] = value
-        continue
-      }
-      
-      if (referenceMap.has(value)) {
-        if (parent !== null && key !== null) {
-          parent[key] = {
-            _transformer: 'circular',
-            value: referenceMap.get(value),
-            path: path.join('.'),
-          }
+    const visiting = new WeakSet<object>()
+    const pathMap = new WeakMap<object, string>()
+
+    const processValue = (value: unknown, path: string): unknown => {
+      if (typeof value !== 'object' || value === null) return value
+
+      if (visiting.has(value)) {
+        const originalPath = pathMap.get(value) || ''
+        return {
+          _transformer: 'circular',
+          value: originalPath,
+          path: path
         }
-        continue
       }
-      
-      referenceMap.set(value, path.join('.'))
-      
-      const newValue = Array.isArray(value) ? [] : {}
-      if (parent !== null && key !== null) parent[key] = newValue
-      
+
+      visiting.add(value)
+      pathMap.set(value, path)
+
+      let result: unknown
+
       if (Array.isArray(value)) {
-        for (let i = value.length - 1; i >= 0; i--) {
-          stack.push({
-            parent: newValue,
-            key: i.toString(),
-            value: this.applyTransformers(value[i], i.toString(), referenceMap),
-            path: [...path, i],
-            redactingParent: false,
-            keyConfig: undefined
-          })
-        }
+        let hasCircular = false
+        const newArray = value.map((item, index) => {
+          const itemPath = path ? `${path}.${index}` : index.toString()
+          const processed = processValue(item, itemPath)
+          if (processed !== item) hasCircular = true
+          return processed
+        })
+        result = hasCircular ? newArray : value
       } else {
-        for (const [propKey, propValue] of Object.entries(value).reverse()) {
-          stack.push({
-            parent: newValue,
-            key: propKey,
-            value: this.applyTransformers(propValue, propKey, referenceMap),
-            path: [...path, propKey],
-            redactingParent: false,
-            keyConfig: undefined
-          })
+        let hasCircular = false
+        const newObj: Record<string, unknown> = {}
+        for (const [key, val] of Object.entries(value)) {
+          const valuePath = path ? `${path}.${key}` : key
+          const processed = processValue(val, valuePath)
+          newObj[key] = processed
+          if (processed !== val) hasCircular = true
         }
+        result = hasCircular ? newObj : value
       }
+
+      visiting.delete(value)
+      return result
     }
 
-    return output
+    return processValue(raw, '')
   }
 
   /**
@@ -460,17 +456,17 @@ class RedactorUtils {
 
     if (typeof raw !== 'object' || raw === null) return raw
 
-    const cleanedInput = this.removeCircularReferences(raw)    
     const referenceMap = new WeakMap<object, string>()
+    const cleanedInput = this.replaceCircularReferences(raw)
     const { output, stack } = this.initialiseTraversal(cleanedInput)
 
     if (typeof cleanedInput === 'object' && cleanedInput !== null) referenceMap.set(cleanedInput, '')
 
     while (stack.length > 0) {
       const { parent, key, value, path, redactingParent: amRedactingParent, keyConfig } = stack.pop()!
-      
+
+      let transformed = this.applyTransformers(value, key, referenceMap)
       let redactingParent = amRedactingParent
-      let transformed = value
 
       if (typeof transformed !== 'object' || transformed === null) {
         const primitiveResult = this.handlePrimitiveValue(transformed, key, amRedactingParent, keyConfig)
