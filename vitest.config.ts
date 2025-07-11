@@ -3,7 +3,7 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     testTimeout: 60000,
-    reporters: ['json', 'default'],
+    reporters: ['json', 'default', 'verbose'],
     coverage: {
       enabled: true,
       provider: 'v8',

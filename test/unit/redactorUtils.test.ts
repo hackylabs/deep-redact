@@ -1,16 +1,17 @@
 import {
   describe, it, expect, beforeEach, vi, MockInstance,
+  afterEach,
 } from 'vitest'
-import RedactorUtils from '../../src/utils/redactorUtils'
-import type { ComplexStringTest } from '../../src/types'
+import RedactorUtils from '../../src/utils/'
+import type { BaseDeepRedactConfig, BlacklistKeyConfig, ComplexStringTest, Transformer } from '../../src/types'
+import { standardTransformers } from '../../src/utils/standardTransformers'
 
 describe('RedactorUtils', () => {
   let utils: RedactorUtils
+  let result: unknown
 
-  beforeEach(() => {
-    utils = new RedactorUtils({
-      blacklistedKeys: ['a'],
-    })
+  afterEach(() => {
+    vi.clearAllMocks()
   })
 
   describe('config', () => {
@@ -20,9 +21,9 @@ describe('RedactorUtils', () => {
       })
 
       it('should use the default config', () => {
+        // @ts-expect-error - config is private but we're testing it
         expect(utils.config).toEqual({
           blacklistedKeys: [],
-          blacklistedKeysTransformed: [],
           partialStringTests: [],
           stringTests: [],
           fuzzyKeyMatch: false,
@@ -32,18 +33,19 @@ describe('RedactorUtils', () => {
           replaceStringByLength: false,
           replacement: '[REDACTED]',
           types: ['string'],
+          transformers: standardTransformers,
         })
       })
     })
 
-    describe(' when a full custom config is provided', () => {
+    describe('when a full custom config is provided', () => {
       let replacer: MockInstance<ComplexStringTest['replacer']>
 
       beforeEach(() => {
         replacer = vi.fn((value: string, pattern: RegExp) => value.replace(pattern, '[REDACTED]'))
         utils = new RedactorUtils({
           blacklistedKeys: ['a', /b/],
-          partialStringTests: [{ pattern: /Foo/gi, replacer }],
+          partialStringTests: [{ pattern: /Foo/gi, replacer: replacer as unknown as ComplexStringTest['replacer'] }],
           stringTests: [/^Hello/],
           fuzzyKeyMatch: true,
           caseSensitiveKeyMatch: false,
@@ -56,26 +58,9 @@ describe('RedactorUtils', () => {
       })
 
       it('should use the custom config', () => {
+        // @ts-expect-error - config is private but we're testing it
         expect(utils.config).toEqual({
           blacklistedKeys: ['a', /b/],
-          blacklistedKeysTransformed: [
-            {
-              key: 'a',
-              remove: true,
-              replacement: '[SECRET]',
-              fuzzyKeyMatch: true,
-              caseSensitiveKeyMatch: false,
-              retainStructure: true,
-            },
-            {
-              key: /b/,
-              remove: true,
-              replacement: '[SECRET]',
-              fuzzyKeyMatch: true,
-              caseSensitiveKeyMatch: false,
-              retainStructure: true,
-            },
-          ],
           partialStringTests: [
             {
               pattern: /Foo/gi,
@@ -90,1605 +75,603 @@ describe('RedactorUtils', () => {
           remove: true,
           replaceStringByLength: true,
           types: ['string', 'number'],
-        })
-      })
-    })
-
-    describe('when blacklistedKeys are provided as objects', () => {
-      describe('when only a key is provided but has other root config', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            fuzzyKeyMatch: true,
-            caseSensitiveKeyMatch: false,
-            retainStructure: true,
-            replacement: '[SECRET]',
-            remove: true,
-            blacklistedKeys: [
-              {
-                key: 'a',
-              },
-            ],
-          })
-        })
-
-        it('should inherit the root config', () => {
-          expect(utils.config.blacklistedKeysTransformed).toEqual([
-            {
-              fuzzyKeyMatch: true,
-              caseSensitiveKeyMatch: false,
-              retainStructure: true,
-              replacement: '[SECRET]',
-              remove: true,
-              key: 'a',
-            },
-          ])
-        })
-      })
-
-      describe('when only a key is provided and no other root config', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: [
-              {
-                key: 'a',
-              },
-            ],
-          })
-        })
-
-        it('should use the default root config', () => {
-          expect(utils.config.blacklistedKeysTransformed).toEqual([
-            {
-              fuzzyKeyMatch: false,
-              caseSensitiveKeyMatch: true,
-              retainStructure: false,
-              replacement: '[REDACTED]',
-              remove: false,
-              key: 'a',
-            },
-          ])
-        })
-      })
-
-      describe('when a full object is provided', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: [
-              {
-                key: 'a',
-                fuzzyKeyMatch: true,
-                caseSensitiveKeyMatch: false,
-                retainStructure: true,
-                replacement: '[SECRET]',
-                remove: true,
-              },
-            ],
-          })
-        })
-
-        it('should use the default root config', () => {
-          expect(utils.config.blacklistedKeys).toEqual([
-            {
-              key: 'a',
-              fuzzyKeyMatch: true,
-              caseSensitiveKeyMatch: false,
-              retainStructure: true,
-              replacement: '[SECRET]',
-              remove: true,
-            },
-          ])
+          transformers: standardTransformers,
         })
       })
     })
   })
 
-  describe('normaliseString', () => {
-    describe('when the string is uppercase', () => {
-      it('should return the string in lowercase', () => {
-        expect(RedactorUtils.normaliseString('HELLO')).toBe('hello')
-      })
-    })
-
-    describe('when the string is lowercase', () => {
-      it('should return the string in lowercase', () => {
-        expect(RedactorUtils.normaliseString('hello')).toBe('hello')
-      })
-    })
-
-    describe('when the string is camelCase', () => {
-      it('should return the string in lowercase', () => {
-        expect(RedactorUtils.normaliseString('helloWorld')).toBe('helloworld')
-      })
-    })
-
-    describe('when the string is snake_case', () => {
-      it('should return the string in lowercase', () => {
-        expect(RedactorUtils.normaliseString('hello_world')).toBe('hello_world')
-      })
-    })
-
-    describe('when the string is kebab-case', () => {
-      it('should return the string in lowercase', () => {
-        expect(RedactorUtils.normaliseString('hello-world')).toBe('helloworld')
-      })
-    })
-
-    describe('when the string is PascalCase', () => {
-      it('should return the string in lowercase', () => {
-        expect(RedactorUtils.normaliseString('HelloWorld')).toBe('helloworld')
-      })
-    })
-
-    describe('when the string is a number', () => {
-      it('should return the string in lowercase', () => {
-        expect(RedactorUtils.normaliseString('123')).toBe('123')
-      })
-    })
-
-    describe('when the string includes spaces', () => {
-      it('should return the string in lowercase', () => {
-        expect(RedactorUtils.normaliseString('Hello World')).toBe('helloworld')
-      })
-    })
-
-    describe('when the string includes special characters', () => {
-      it('should return the string in lowercase', () => {
-        expect(RedactorUtils.normaliseString('HelloWorld!@£$%^&*()+=¡€#¢∞§¶•ªº`~,<.>/?\'":;{}[]\\|')).toBe('helloworld')
-      })
-    })
-  })
-
-  describe('complexKeyMatch', () => {
-    let normaliseStringSpy: MockInstance<typeof RedactorUtils.normaliseString>
-
-    describe('when the blacklistKeyConfig.key is a RegExp', () => {
-      let result: boolean
-
-      describe('when the key matches the RegExp', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: [{ key: /^Hello/ }],
-          })
-          normaliseStringSpy = vi.spyOn(RedactorUtils, 'normaliseString')
-          result = RedactorUtils.complexKeyMatch('HelloWorld', utils.config.blacklistedKeys[0])
-        })
-
-        it('should not call normaliseString', () => {
-          expect(normaliseStringSpy).not.toHaveBeenCalled()
-        })
-
-        it('should return true', () => {
-          expect(result).toBe(true)
-        })
-      })
-
-      describe('when the key does not match the RegExp', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: [{ key: /^Hello/ }],
-          })
-          normaliseStringSpy = vi.spyOn(RedactorUtils, 'normaliseString')
-          result = RedactorUtils.complexKeyMatch('World', utils.config.blacklistedKeys[0])
-        })
-
-        it('should not call normaliseString', () => {
-          expect(normaliseStringSpy).not.toHaveBeenCalled()
-        })
-
-        it('should return false', () => {
-          expect(result).toBe(false)
-        })
-      })
-    })
-
-    describe('when the blacklistKeyConfig.key is a string', () => {
-      let result: boolean
-
-      describe('when matching exactly', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: [{ key: 'Hello', caseSensitiveKeyMatch: true, fuzzyKeyMatch: false }],
-          })
-          normaliseStringSpy = vi.spyOn(RedactorUtils, 'normaliseString')
-        })
-
-        describe('when the key matches', () => {
-          beforeEach(() => {
-            // @ts-expect-error - Testing complexKeyMatch
-            result = RedactorUtils.complexKeyMatch('Hello', utils.config.blacklistedKeys[0])
-          })
-
-          it('should not call normaliseString', () => {
-            expect(normaliseStringSpy).not.toHaveBeenCalled()
-          })
-
-          it('should return true', () => {
-            expect(result).toBe(true)
-          })
-        })
-
-        describe('when the key does not match', () => {
-          beforeEach(() => {
-            result = RedactorUtils.complexKeyMatch('World', utils.config.blacklistedKeys[0])
-          })
-
-          it('should not call normaliseString', () => {
-            expect(normaliseStringSpy).not.toHaveBeenCalled()
-          })
-
-          it('should return false', () => {
-            expect(result).toBe(false)
-          })
-        })
-      })
-
-      describe('when matching the key case-insensitive and non-fuzzy', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: [{ key: 'Hello', caseSensitiveKeyMatch: false, fuzzyKeyMatch: false }],
-          })
-          normaliseStringSpy = vi.spyOn(RedactorUtils, 'normaliseString')
-        })
-
-        describe('when the key matches', () => {
-          beforeEach(() => {
-            result = RedactorUtils.complexKeyMatch('hello', utils.config.blacklistedKeys[0])
-          })
-
-          it('should call normaliseString', () => {
-            expect(normaliseStringSpy).toHaveBeenCalledWith('hello')
-          })
-
-          it('should return true', () => {
-            expect(result).toBe(true)
-          })
-        })
-
-        describe('when the key does not match', () => {
-          beforeEach(() => {
-            // @ts-expect-error - Testing complexKeyMatch
-            result = RedactorUtils.complexKeyMatch('World', utils.config.blacklistedKeys[0])
-          })
-
-          it('should call normaliseString', () => {
-            expect(normaliseStringSpy).toHaveBeenCalledWith('World')
-          })
-
-          it('should return false', () => {
-            expect(result).toBe(false)
-          })
-        })
-      })
-
-      describe('when matching the key fuzzy and case-sensitive', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: [{ key: 'hello', caseSensitiveKeyMatch: true, fuzzyKeyMatch: true }],
-          })
-          normaliseStringSpy = vi.spyOn(RedactorUtils, 'normaliseString')
-        })
-
-        describe('when the key is a match', () => {
-          beforeEach(() => {
-            result = RedactorUtils.complexKeyMatch('helloworld', utils.config.blacklistedKeys[0])
-          })
-
-          it('should not call normaliseString', () => {
-            expect(normaliseStringSpy).not.toHaveBeenCalled()
-          })
-
-          it('should return true', () => {
-            expect(result).toBe(true)
-          })
-        })
-
-        describe('when the key is not a match', () => {
-          beforeEach(() => {
-            result = RedactorUtils.complexKeyMatch('HelloWorld', utils.config.blacklistedKeys[0])
-          })
-
-          it('should not call normaliseString', () => {
-            expect(normaliseStringSpy).not.toHaveBeenCalled()
-          })
-
-          it('should return false', () => {
-            expect(result).toBe(false)
-          })
-        })
-      })
-
-      describe('when matching the the key case-insensitive and fuzzy', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: [{ key: 'hello', caseSensitiveKeyMatch: false, fuzzyKeyMatch: true }],
-          })
-          normaliseStringSpy = vi.spyOn(RedactorUtils, 'normaliseString')
-        })
-
-        describe('when the key is a match', () => {
-          beforeEach(() => {
-            result = RedactorUtils.complexKeyMatch('HelloWorld', utils.config.blacklistedKeys[0])
-          })
-
-          it('should call normaliseString', () => {
-            expect(normaliseStringSpy).toHaveBeenCalledWith('HelloWorld')
-          })
-
-          it('should return true', () => {
-            expect(result).toBe(true)
-          })
-        })
-
-        describe('when the key is not a match', () => {
-          beforeEach(() => {
-            result = RedactorUtils.complexKeyMatch('World', utils.config.blacklistedKeys[0])
-          })
-
-          it('should call normaliseString', () => {
-            expect(normaliseStringSpy).toHaveBeenCalledWith('World')
-          })
-
-          it('should return false', () => {
-            expect(result).toBe(false)
-          })
-        })
-      })
-    })
-  })
-
-  describe('getBlacklistedKeyConfig', () => {
-    describe('when the key is an empty string', () => {
-      it('should return undefined', () => {
-        expect(utils.getBlacklistedKeyConfig('')).toBe(undefined)
-      })
-    })
-
-    describe('when the key is not in the blacklistedKeys', () => {
-      it('should return undefined', () => {
-        expect(utils.config.blacklistedKeysTransformed).not.toContain('foo')
-        expect(utils.getBlacklistedKeyConfig('foo')).toBeUndefined()
-      })
-    })
-
-    describe('when the key is in the blacklistedKeys', () => {
-      describe('when the key is a string', () => {
-        it('should return the blacklisted key config', () => {
-          // @ts-expect-error - Testing getBlacklistedKeyConfig
-          expect(utils.getBlacklistedKeyConfig('a')).toEqual({
-            key: 'a',
-            caseSensitiveKeyMatch: true,
-            fuzzyKeyMatch: false,
-            retainStructure: false,
-            replacement: '[REDACTED]',
-            remove: false,
-          })
-        })
-      })
-
-      describe('when the key is a RegExp', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: [/a/],
-          })
-        })
-
-        it('should return the blacklisted key config', () => {
-          const config: RegExp = utils.config.blacklistedKeys[0]
-          const regex = /a/
-          expect(config.source).toEqual(regex.source)
-          expect(config.flags).toEqual(regex.flags)
-          expect(utils.getBlacklistedKeyConfig('a')).toEqual({
-            key: regex,
-            caseSensitiveKeyMatch: true,
-            fuzzyKeyMatch: false,
-            retainStructure: false,
-            replacement: '[REDACTED]',
-            remove: false,
-          })
-        })
-      })
-
-      describe('when the key is a blacklistedConfig object', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: [{ key: 'a' }],
-          })
-        })
-
-        it('should return the blacklisted key config', () => {
-          expect(utils.getBlacklistedKeyConfig('a')).toEqual({
-            key: 'a',
-            caseSensitiveKeyMatch: true,
-            fuzzyKeyMatch: false,
-            retainStructure: false,
-            replacement: '[REDACTED]',
-            remove: false,
-          })
-        })
-      })
-    })
-  })
-
-  describe('shouldRedactObjectValue', () => {
-    let complexKeyMatchSpy: MockInstance<typeof RedactorUtils.complexKeyMatch>
-    let result: boolean
-
-    describe('when the key is an empty string', () => {
-      beforeEach(() => {
-        complexKeyMatchSpy = vi.spyOn(RedactorUtils, 'complexKeyMatch')
-        result = utils.shouldRedactObjectValue('')
-      })
-
-      it('should not call complexKeyMatch', () => {
-        expect(complexKeyMatchSpy).not.toHaveBeenCalled()
-      })
-
-      it('should return false', () => {
-        expect(result).toBe(false)
-      })
-    })
-
-    describe('when the key is not in the blacklistedKeys', () => {
-      beforeEach(() => {
-        utils = new RedactorUtils({
-          blacklistedKeys: ['a'],
-        })
-        complexKeyMatchSpy = vi.spyOn(RedactorUtils, 'complexKeyMatch')
-        result = utils.shouldRedactObjectValue('foo')
-      })
-
-      it('should call complexKeyMatch with the search key and blacklisted key config', () => {
-        expect(complexKeyMatchSpy).toHaveBeenCalledWith('foo', {
-          key: 'a',
-          caseSensitiveKeyMatch: true,
-          fuzzyKeyMatch: false,
-          remove: false,
-          replacement: '[REDACTED]',
-          retainStructure: false,
-        })
-      })
-
-      it('should return false', () => {
-        expect(utils.config.blacklistedKeys).not.toContain('foo')
-        expect(result).toBe(false)
-      })
-    })
-
-    describe('when the key is in the blacklistedKeys', () => {
-      describe('when the key is a blacklistedConfig object', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: [{ key: 'a' }],
-          })
-        })
-
-        it('should return true', () => {
-          expect(utils.shouldRedactObjectValue('a')).toBe(true)
-        })
-      })
-    })
-  })
-
-  describe('redactString', () => {
-    describe('when shouldRedact from parent is false', () => {
-      describe('when the test is a simple RegExp', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            stringTests: [/^Hello/],
-          })
-        })
-
-        describe('when the value is an empty string', () => {
-          it('should return the value', () => {
-            expect(utils.redactString('', '[REDACTED]', false, false)).toBe('')
-          })
-        })
-
-        describe('when the value is not a string', () => {
-          it('should return the value', () => {
-            expect(utils.redactString(123, '[REDACTED]', false, false)).toBe(123)
-          })
-        })
-
-        describe('when the value is a string', () => {
-          describe('when the value does not match any stringTests', () => {
-            it('should return the value', () => {
-              expect(utils.redactString('World', '[REDACTED]', true, false)).toBe('World')
-            })
-          })
-
-          describe('when the value matches a stringTest', () => {
-            describe('when the replacement is a string', () => {
-              it('should return the replacement string', () => {
-                expect(utils.redactString('Hello, world!', '[REDACTED]', false, false)).toBe('[REDACTED]')
-              })
-            })
-
-            describe('when the replacement is a function', () => {
-              it('should return the replacement string', () => {
-                expect(utils.redactString('Hello, world!', (value) => `[REDACTED ${typeof value}]`, false, false)).toBe('[REDACTED string]')
-              })
-            })
-
-            describe('when replaceStringByLength is true', () => {
-              beforeEach(() => {
-                utils = new RedactorUtils({
-                  stringTests: [/^Hello/],
-                  replaceStringByLength: true,
-                })
-              })
-
-              it('should return the replacement string repeated the length of the value', () => {
-                const value = 'Hello, world!'
-                expect(utils.redactString(value, '*', false, false)).toBe('*'.repeat(value.length))
-              })
-            })
-          })
-        })
-      })
-
-      describe('when the test has its own replacer function', () => {
-        let replacer
-
-        beforeEach(() => {
-          replacer = vi.fn((value: string, pattern: RegExp) => value.replace(pattern, '<$1>[REDACTED]</$1>'))
-
-          utils = new RedactorUtils({
-            stringTests: [{ pattern: /<(email|password)>.+<\/\1>/gi, replacer }],
-          })
-        })
-
-        describe('when the value is an empty string', () => {
-          it('should return the value', () => {
-            expect(utils.redactString('', '[REDACTED]', false, false)).toBe('')
-          })
-
-          it('should not call the replacer', () => {
-            expect(replacer).not.toHaveBeenCalled()
-          })
-        })
-
-        describe('when the value is not a string', () => {
-          it('should return the value', () => {
-            expect(utils.redactString(123, '[REDACTED]', false, false)).toBe(123)
-          })
-
-          it('should not call the replacer', () => {
-            expect(replacer).not.toHaveBeenCalled()
-          })
-        })
-
-        describe('when the value is a string', () => {
-          describe('when the value does not match any stringTests', () => {
-            it('should return the value', () => {
-              expect(utils.redactString('Hello', '[REDACTED]', false, false)).toBe('Hello')
-            })
-
-            it('should not call the replacer', () => {
-              expect(replacer).not.toHaveBeenCalled()
-            })
-          })
-
-          describe('when the value matches a stringTest', () => {
-            const value = '<email>someone@somewhere.com</email><foo>bar</foo><password>secret</password>'
-            let result: unknown
-
-            describe('when not removing the value', () => {
-              beforeEach(() => {
-                result = utils.redactString(value, '[REDACTED]', false, false)
-              })
-
-              it('should call the replacer with the value and the pattern', () => {
-                expect(replacer).toHaveBeenCalledWith(value, /<(email|password)>.+<\/\1>/gi)
-              })
-
-              it('should return the replacement string', () => {
-                expect(result).toBe('<email>[REDACTED]</email><foo>bar</foo><password>[REDACTED]</password>')
-              })
-            })
-
-            describe('when removing the value', () => {
-              beforeEach(() => {
-                result = utils.redactString(value, '[REDACTED]', true, false)
-              })
-
-              it('should not call the replacer', () => {
-                expect(replacer).not.toHaveBeenCalled()
-              })
-
-              it('should return undefined', () => {
-                expect(result).toBeUndefined()
-              })
-            })
-          })
-        })
-      })
-    })
-
-    describe('when shouldRedact from parent is true', () => {
-      describe('when the test is a simple RegExp', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            stringTests: [/^Hello/],
-          })
-        })
-
-        describe('when the value is an empty string', () => {
-          it('should return the value', () => {
-            expect(utils.redactString('', '[REDACTED]', false, true)).toBe('')
-          })
-        })
-
-        describe('when the value is not a string', () => {
-          it('should return the value', () => {
-            expect(utils.redactString(123, '[REDACTED]', false, true)).toBe(123)
-          })
-        })
-
-        describe('when the value is a string', () => {
-          describe('when the value does not match any stringTests', () => {
-            it('should return the value', () => {
-              expect(utils.redactString('World', '[REDACTED]', true, true)).toBeUndefined()
-            })
-          })
-
-          describe('when the value matches a stringTest', () => {
-            describe('when the replacement is a string', () => {
-              it('should return the replacement string', () => {
-                expect(utils.redactString('Hello, world!', '[REDACTED]', false, true)).toBe('[REDACTED]')
-              })
-            })
-
-            describe('when the replacement is a function', () => {
-              it('should return the replacement string', () => {
-                expect(utils.redactString('Hello, world!', (value) => `[REDACTED ${typeof value}]`, false, true)).toBe('[REDACTED string]')
-              })
-            })
-
-            describe('when replaceStringByLength is true', () => {
-              beforeEach(() => {
-                utils = new RedactorUtils({
-                  stringTests: [/^Hello/],
-                  replaceStringByLength: true,
-                })
-              })
-
-              it('should return the replacement string repeated the length of the value', () => {
-                const value = 'Hello, world!'
-                expect(utils.redactString(value, '*', false, true)).toBe('*'.repeat(value.length))
-              })
-            })
-          })
-        })
-      })
-
-      describe('when the test has its own replacer function', () => {
-        let replacer
-
-        beforeEach(() => {
-          replacer = vi.fn((value: string, pattern: RegExp) => value.replace(pattern, '<$1>[REDACTED]</$1>'))
-
-          utils = new RedactorUtils({
-            stringTests: [{ pattern: /<(email|password)>.+<\/\1>/gi, replacer }],
-          })
-        })
-
-        describe('when the value is an empty string', () => {
-          it('should return the value', () => {
-            expect(utils.redactString('', '[REDACTED]', false, false)).toBe('')
-          })
-
-          it('should not call the replacer', () => {
-            expect(replacer).not.toHaveBeenCalled()
-          })
-        })
-
-        describe('when the value is not a string', () => {
-          it('should return the value', () => {
-            expect(utils.redactString(123, '[REDACTED]', false, false)).toBe(123)
-          })
-
-          it('should not call the replacer', () => {
-            expect(replacer).not.toHaveBeenCalled()
-          })
-        })
-
-        describe('when the value is a string', () => {
-          describe('when the value does not match any stringTests', () => {
-            it('should return the value', () => {
-              expect(utils.redactString('Hello', '[REDACTED]', false, false)).toBe('Hello')
-            })
-
-            it('should not call the replacer', () => {
-              expect(replacer).not.toHaveBeenCalled()
-            })
-          })
-
-          describe('when the value matches a stringTest', () => {
-            const value = '<email>someone@somewhere.com</email><foo>bar</foo><password>secret</password>'
-            let result: unknown
-
-            describe('when not removing the value', () => {
-              beforeEach(() => {
-                result = utils.redactString(value, '[REDACTED]', false, false)
-              })
-
-              it('should call the replacer with the value and the pattern', () => {
-                expect(replacer).toHaveBeenCalledWith(value, /<(email|password)>.+<\/\1>/gi)
-              })
-
-              it('should return the replacement string', () => {
-                expect(result).toBe('<email>[REDACTED]</email><foo>bar</foo><password>[REDACTED]</password>')
-              })
-            })
-
-            describe('when removing the value', () => {
-              beforeEach(() => {
-                result = utils.redactString(value, '[REDACTED]', true, false)
-              })
-
-              it('should not call the replacer', () => {
-                expect(replacer).not.toHaveBeenCalled()
-              })
-
-              it('should return undefined', () => {
-                expect(result).toBeUndefined()
-              })
-            })
-          })
-        })
-      })
-    })
-  })
-
-  describe('getRecursionConfig', () => {
-    let getBlacklistedKeyConfigSpy: MockInstance<typeof utils.getBlacklistedKeyConfig>
-    let result: any
-
-    describe('when the key is an empty string', () => {
-      it('should return the default recursion config', () => {
-        // @ts-expect-error - Testing getRecursionConfig
-        expect(utils.getRecursionConfig('')).toEqual({
-          remove: false,
-          replacement: '[REDACTED]',
-          retainStructure: false,
-        })
-      })
-    })
-
-    describe('when the key is not in the blacklistedKeys', () => {
-      beforeEach(() => {
-        utils = new RedactorUtils({
-          blacklistedKeys: ['a'],
-        })
-        getBlacklistedKeyConfigSpy = vi.spyOn(utils, 'getBlacklistedKeyConfig')
-        result = utils.getRecursionConfig('foo')
-      })
-
-      it('should call getBlacklistedKeyConfig with the key', () => {
-        expect(getBlacklistedKeyConfigSpy).toHaveBeenCalledWith('foo')
-      })
-
-      it('should return the default recursion config', () => {
-        expect(result).toEqual({
-          remove: false,
-          replacement: '[REDACTED]',
-          retainStructure: false,
-        })
-      })
-    })
-
-    describe('when the key is in the blacklistedKeys', () => {
-      describe('when the key is a string', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: ['a'],
-          })
-          getBlacklistedKeyConfigSpy = vi.spyOn(utils, 'getBlacklistedKeyConfig')
-          result = utils.getRecursionConfig('a')
-        })
-
-        it('should call getBlacklistedKeyConfig with the key', () => {
-          expect(getBlacklistedKeyConfigSpy).toHaveBeenCalledWith('a')
-        })
-
-        it('should return the blacklisted key config', () => {
-          expect(result).toEqual({
-            remove: false,
-            replacement: '[REDACTED]',
-            retainStructure: false,
-          })
-        })
-      })
-
-      describe('when the key is a RegExp', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: [/a/],
-          })
-          getBlacklistedKeyConfigSpy = vi.spyOn(utils, 'getBlacklistedKeyConfig')
-          result = utils.getRecursionConfig('a')
-        })
-
-        it('should call getBlacklistedKeyConfig with the key', () => {
-          expect(getBlacklistedKeyConfigSpy).toHaveBeenCalledWith('a')
-        })
-
-        it('should return the blacklisted key config', () => {
-          expect(result).toEqual({
-            remove: false,
-            replacement: '[REDACTED]',
-            retainStructure: false,
-          })
-        })
-      })
-    })
-  })
-
-  describe('redactPrimitive', () => {
-    let redactStringSpy: MockInstance<typeof utils.redactString>
-    let result: any
-
-    describe('with default config', () => {
-      describe('when the value is not a string', () => {
-        describe('when the value is redacted', () => {
-          beforeEach(() => {
-            utils = new RedactorUtils({
-              blacklistedKeys: [],
-              types: ['string', 'number'],
-            })
-            redactStringSpy = vi.spyOn(utils, 'redactString')
-            result = utils.redactPrimitive(123, '[REDACTED]', false, true)
-          })
-
-          it('should not call redactString', () => {
-            expect(redactStringSpy).not.toHaveBeenCalled()
-          })
-
-          it('should return the redacted value', () => {
-            expect(result).toBe('[REDACTED]')
-          })
-        })
-
-        describe('when the value is not redacted', () => {
-          beforeEach(() => {
-            utils = new RedactorUtils({
-              blacklistedKeys: [],
-              types: ['string', 'number'],
-            })
-            redactStringSpy = vi.spyOn(utils, 'redactString')
-            result = utils.redactPrimitive(123, '[REDACTED]', false, false)
-          })
-
-          it('should not call redactString', () => {
-            expect(redactStringSpy).not.toHaveBeenCalled()
-          })
-
-          it('should return the value', () => {
-            expect(result).toBe(123)
-          })
-        })
-      })
-
-      describe('when the value is a string', () => {
-        describe('when the value is not redacted', () => {
-          beforeEach(() => {
-            utils = new RedactorUtils({
-              stringTests: [/^Hello/],
-            })
-            redactStringSpy = vi.spyOn(utils, 'redactString')
-            result = utils.redactPrimitive('World', '[REDACTED]', true, false)
-          })
-
-          it('should call redactString with correct arguments', () => {
-            expect(redactStringSpy).toHaveBeenNthCalledWith(1, 'World', '[REDACTED]', true, false)
-          })
-
-          it('should return the original value', () => {
-            expect(result).toEqual('World')
-          })
-        })
-
-        describe('when the value is redacted', () => {
-          beforeEach(() => {
-            utils = new RedactorUtils({
-              stringTests: [/^Hello/],
-            })
-            redactStringSpy = vi.spyOn(utils, 'redactString')
-            result = utils.redactPrimitive('Hello, world!', '[REDACTED]', false, true)
-          })
-
-          it('should call redactString with correct arguments', () => {
-            expect(redactStringSpy).toHaveBeenNthCalledWith(1, 'Hello, world!', '[REDACTED]', false, true)
-          })
-
-          it('should return the redacted value', () => {
-            expect(result).toBe('[REDACTED]')
-          })
-        })
-      })
-    })
-
-    describe('when removing', () => {
-      describe('when the value is not a string', () => {
-        describe('when the value is redacted', () => {
-          beforeEach(() => {
-            utils = new RedactorUtils({
-              blacklistedKeys: [],
-              types: ['string', 'number'],
-              remove: true,
-            })
-            redactStringSpy = vi.spyOn(utils, 'redactString')
-            result = utils.redactPrimitive(123, '[REDACTED]', true, true)
-          })
-
-          it('should not call redactString', () => {
-            expect(redactStringSpy).not.toHaveBeenCalled()
-          })
-
-          it('should return undefined', () => {
-            expect(result).toBeUndefined()
-          })
-        })
-
-        describe('when the value is not redacted', () => {
-          beforeEach(() => {
-            utils = new RedactorUtils({
-              stringTests: [/^Hello/],
-              remove: true,
-            })
-            redactStringSpy = vi.spyOn(utils, 'redactString')
-            result = utils.redactPrimitive(123, '[REDACTED]', true, false)
-          })
-
-          it('should not call redactString', () => {
-            expect(redactStringSpy).not.toHaveBeenCalled()
-          })
-
-          it('should return the value', () => {
-            expect(result).toBe(123)
-          })
-        })
-      })
-    })
-
-    describe('with custom replacement function', () => {
-      let replaceFn: (value: unknown) => string
-      beforeEach(() => {
-        replaceFn = vi.fn((value: unknown) => `[REDACTED ${typeof value}]`)
-        utils = new RedactorUtils({
-          replacement: replaceFn,
-          types: ['string', 'number'],
-        })
-      })
-
-      describe('when the value is not a string', () => {
-        describe('when the value is redacted', () => {
-          beforeEach(() => {
-            result = utils.redactPrimitive(123, replaceFn, false, true)
-          })
-
-          it('should call the replace function', () => {
-            expect(replaceFn).toHaveBeenCalledWith(123)
-          })
-
-          it('should return the redacted value', () => {
-            expect(result).toBe('[REDACTED number]')
-          })
-        })
-
-        describe('when the value is not redacted', () => {
-          beforeEach(() => {
-            result = utils.redactPrimitive(123, replaceFn, false, false)
-          })
-
-          it('should not call the replace function', () => {
-            expect(replaceFn).not.toHaveBeenCalled()
-          })
-
-          it('should return the value', () => {
-            expect(result).toBe(123)
-          })
-        })
-      })
-
-      describe('when the value is a string', () => {
-        describe('when the value is redacted', () => {
-          beforeEach(() => {
-            result = utils.redactPrimitive('World', replaceFn, false, true)
-          })
-
-          it('should call the replace function', () => {
-            expect(replaceFn).toHaveBeenCalledWith('World')
-          })
-
-          it('should return the redacted string', () => {
-            expect(result).toBe('[REDACTED string]')
-          })
-        })
-
-        describe('when the value is not redacted', () => {
-          beforeEach(() => {
-            result = utils.redactPrimitive('Hello, world!', replaceFn, false, false)
-          })
-
-          it('should not call the replace function', () => {
-            expect(replaceFn).not.toHaveBeenCalled()
-          })
-
-          it('should return the value', () => {
-            expect(result).toBe('Hello, world!')
-          })
-        })
-      })
-    })
-  })
-
-  describe('redactArray', () => {
-    let recurseSpy: MockInstance<typeof utils.recurse>
-    let result: any
-
-    describe('when the array is empty', () => {
-      it('should return the array', () => {
-        expect(utils.redactArray([])).toEqual([])
-      })
-    })
-
-    describe('when the array is not empty', () => {
-      beforeEach(() => {
-        utils = new RedactorUtils({
-          blacklistedKeys: ['a'],
-          types: ['string', 'number'],
-        })
-        recurseSpy = vi.spyOn(utils, 'recurse')
-        result = utils.redactArray([{ a: 1 }, { b: 2 }])
-      })
-
-      it('should call recurse', () => {
-        expect(recurseSpy).toHaveBeenNthCalledWith(1, { a: 1 })
-        expect(recurseSpy).toHaveNthReturnedWith(1, '[REDACTED]')
-        expect(recurseSpy).toHaveBeenNthCalledWith(2, 1, 'a', true)
-        expect(recurseSpy).toHaveNthReturnedWith(2, { a: '[REDACTED]' })
-        expect(recurseSpy).toHaveBeenNthCalledWith(3, { b: 2 })
-        expect(recurseSpy).toHaveNthReturnedWith(3, 2)
-        expect(recurseSpy).toHaveBeenNthCalledWith(4, 2, 'b', false)
-        expect(recurseSpy).toHaveNthReturnedWith(4, { b: 2 })
-      })
-
-      it('should return the redacted array', () => {
-        expect(result).toEqual([{ a: '[REDACTED]' }, { b: 2 }])
-      })
-    })
-  })
-
-  describe('recurse', () => {
-    let getRecursionConfigSpy: MockInstance<typeof utils.getRecursionConfig>
-    let shouldRedactObjectValueSpy: MockInstance<typeof utils.shouldRedactObjectValue>
-    let redactPrimitiveSpy: MockInstance<typeof utils.redactPrimitive>
-    let redactObjectSpy: MockInstance<typeof utils.redactObject>
-    let redactArraySpy: MockInstance<typeof utils.redactArray>
-    let recurseSpy: MockInstance<typeof utils.recurse>
-    let result: any
-
+  describe('computedRegex', () => {
     beforeEach(() => {
-      getRecursionConfigSpy = vi.spyOn(utils, 'getRecursionConfig')
-      shouldRedactObjectValueSpy = vi.spyOn(utils, 'shouldRedactObjectValue')
-      redactPrimitiveSpy = vi.spyOn(utils, 'redactPrimitive')
-      redactObjectSpy = vi.spyOn(utils, 'redactObject')
-      redactArraySpy = vi.spyOn(utils, 'redactArray')
-      recurseSpy = vi.spyOn(utils, 'recurse')
+      utils = new RedactorUtils({
+        blacklistedKeys: ['a', 'b'],
+      })
     })
 
-    describe('when using the default config', () => {
-      describe('when the value is undefined', () => {
-        it('should return the value', () => {
-          expect(utils.recurse(undefined)).toBeUndefined()
-        })
-      })
+    it('should return the correct regex', () => {
+      // @ts-expect-error - computedRegex is private but we're testing it
+      expect(utils.computedRegex).toEqual(/a|b/)
+    })
+  })
 
-      describe('when the value is null', () => {
-        it('should return the value', () => {
-          expect(utils.recurse(null)).toBeNull()
-        })
-      })
-
-      describe('when the value is an object', () => {
-        beforeEach(() => {
-          const obj = {
-            a: {
-              b: {
-                c: 'd',
-              },
-            },
-          }
-
-          result = utils.recurse(obj)
-        })
-
-        it('should call getRecursionConfig', () => {
-          const blacklistKeyObj = {
-            retainStructure: false,
-            replacement: '[REDACTED]',
-            remove: false,
-          }
-          expect(getRecursionConfigSpy).toHaveBeenNthCalledWith(1, undefined)
-          expect(getRecursionConfigSpy).toHaveNthReturnedWith(1, blacklistKeyObj)
-          expect(getRecursionConfigSpy).toHaveBeenNthCalledWith(2, 'a')
-          expect(getRecursionConfigSpy).toHaveNthReturnedWith(2, blacklistKeyObj)
-          expect(getRecursionConfigSpy).toHaveBeenNthCalledWith(3, 'a')
-          expect(getRecursionConfigSpy).toHaveNthReturnedWith(3, blacklistKeyObj)
-        })
-
-        it('should call shouldRedactObjectValue', () => {
-          expect(shouldRedactObjectValueSpy).toHaveBeenNthCalledWith(1, 'a')
-          expect(shouldRedactObjectValueSpy).toHaveReturnedWith(true)
-        })
-
-        it('should call redactObject', () => {
-          expect(redactObjectSpy).toHaveBeenNthCalledWith(1, { a: { b: { c: 'd' } } }, undefined, undefined)
-          expect(redactObjectSpy).toHaveNthReturnedWith(1, { a: '[REDACTED]' })
-        })
-
-        it('should recurse the object', () => {
-          expect(recurseSpy).toHaveBeenCalledTimes(2)
-        })
-
-        it('should return the redacted object', () => {
-          expect(result).toEqual({ a: '[REDACTED]' })
-        })
-      })
-
-      describe('when the value is an array', () => {
+  describe('traverse', () => {
+    describe('when the value is a string', () => {
+      describe('with partialStringTests', () => {
         beforeEach(() => {
           utils = new RedactorUtils({
-            blacklistedKeys: ['b'],
+            partialStringTests: [{ pattern: /Hello/gi, replacer: (value: string, pattern: RegExp) => value.replace(pattern, '[REDACTED]') }],
           })
-          shouldRedactObjectValueSpy = vi.spyOn(utils, 'shouldRedactObjectValue')
-          recurseSpy = vi.spyOn(utils, 'recurse')
-          const obj = {
-            a: [
-              {
-                b: [
-                  {
-                    c: 'd',
-                  },
-                ],
-              },
-            ],
-          }
-
-          result = utils.recurse(obj)
+          result = utils.traverse('Hello, world!')
         })
 
-        it('should call shouldRedactObjectValue', () => {
-          expect(shouldRedactObjectValueSpy).toHaveBeenCalledTimes(2)
-        })
-
-        it('should recurse the object', () => {
-          expect(recurseSpy).toHaveBeenCalledTimes(4)
-        })
-
-        it('should return the redacted object', () => {
-          expect(result).toEqual({
-            a: [
-              {
-                b: '[REDACTED]',
-              },
-            ],
-          })
+        it('should return the redacted value', () => {
+          expect(result).toEqual('[REDACTED], world!')
         })
       })
 
-      describe('when the value is neither an object nor an array', () => {
+      describe('with stringTests', () => {
         beforeEach(() => {
           utils = new RedactorUtils({
             stringTests: [/^Hello/],
           })
-          getRecursionConfigSpy = vi.spyOn(utils, 'getRecursionConfig')
-          redactPrimitiveSpy = vi.spyOn(utils, 'redactPrimitive')
-          redactObjectSpy = vi.spyOn(utils, 'redactObject')
-          redactArraySpy = vi.spyOn(utils, 'redactArray')
-          recurseSpy = vi.spyOn(utils, 'recurse')
-          result = utils.recurse('Hello, world!')
+          result = utils.traverse('Hello, world!')
         })
 
-        it('should not call redactObject', () => {
-          expect(redactObjectSpy).not.toHaveBeenCalled()
-        })
-
-        it('should not call redactArray', () => {
-          expect(redactArraySpy).not.toHaveBeenCalled()
-        })
-
-        it('should call redactPrimitive', () => {
-          expect(redactPrimitiveSpy).toHaveBeenNthCalledWith(1, 'Hello, world!', '[REDACTED]', false, false)
-          expect(redactPrimitiveSpy).toHaveNthReturnedWith(1, '[REDACTED]')
-        })
-
-        it('should not recurse the value', () => {
-          expect(recurseSpy).toHaveBeenCalledTimes(1)
-        })
-
-        it('should return the redacted string', () => {
+        it('should return the redacted value', () => {
           expect(result).toEqual('[REDACTED]')
         })
       })
 
-      describe('when the value is an object of non-string values', () => {
+      describe('with blacklistedKeys', () => {
         beforeEach(() => {
           utils = new RedactorUtils({
-            blacklistedKeys: ['a'],
-            types: ['number'],
+            blacklistedKeys: ['Hello', /world/],
           })
-          getRecursionConfigSpy = vi.spyOn(utils, 'getRecursionConfig')
-          recurseSpy = vi.spyOn(utils, 'recurse')
-          const obj = {
-            a: 1,
-          }
-
-          result = utils.recurse(obj)
+          result = utils.traverse('Hello, world!')
         })
 
-        it('should recurse the object', () => {
-          expect(recurseSpy).toHaveBeenCalledTimes(2)
-        })
-
-        it('should return the redacted object', () => {
-          expect(result).toEqual({
-            a: '[REDACTED]',
-          })
+        it('should return the value unchanged', () => {
+          expect(result).toEqual('Hello, world!')
         })
       })
     })
 
-    describe('when removing', () => {
-      describe('via root config', () => {
+    describe('when the value is a number', () => {
+      describe('with partialStringTests', () => {
         beforeEach(() => {
           utils = new RedactorUtils({
-            blacklistedKeys: ['a'],
-            remove: true,
+            partialStringTests: [{ pattern: /2/i, replacer: (value: string, pattern: RegExp) => value.replace(pattern, '[REDACTED]') }],
           })
+          result = utils.traverse(2)
         })
 
-        describe('when the value is an object', () => {
-          beforeEach(() => {
-            recurseSpy = vi.spyOn(utils, 'recurse')
-            const obj = {
-              a: {
-                b: {
-                  c: 'd',
-                },
-              },
-            }
+        it('should return the value unchanged', () => {
+          expect(result).toEqual(2)
+        })
+      })
 
-            result = utils.recurse(obj)
+      describe('with stringTests', () => {
+        beforeEach(() => {
+          utils = new RedactorUtils({
+            stringTests: [/^2/],
           })
-
-          it('should recurse the object', () => {
-            expect(recurseSpy).toHaveBeenCalledTimes(1)
-          })
-
-          it('should return the redacted object with the redacted data removed', () => {
-            expect(result).toEqual({})
-          })
+          result = utils.traverse(2)
         })
 
-        describe('when the value is neither an object nor an array', () => {
-          beforeEach(() => {
-            utils = new RedactorUtils({
-              stringTests: [/^Hello/],
-              remove: true,
-            })
-            recurseSpy = vi.spyOn(utils, 'recurse')
-            result = utils.recurse('Hello, world!')
-          })
+        it('should return the value unchanged', () => {
+          expect(result).toEqual(2)
+        })
+      })
 
-          it('should not recurse the value', () => {
-            expect(recurseSpy).toHaveBeenCalledTimes(1)
+      describe('with blacklistedKeys', () => {
+        beforeEach(() => {
+          utils = new RedactorUtils({
+            blacklistedKeys: ['Hello', /world/],
           })
-
-          it('should return undefined', () => {
-            expect(result).toBeUndefined()
-          })
+          result = utils.traverse(2)
         })
 
-        describe('when the value is an object of non-string values', () => {
+        it('should return the value unchanged', () => {
+          expect(result).toEqual(2)
+        })
+      })
+    })
+
+    describe('when the value is an array', () => {
+      describe('with partialStringTests', () => {
+        beforeEach(() => {
+          utils = new RedactorUtils({
+            partialStringTests: [{ pattern: /Hello/gi, replacer: (value: string, pattern: RegExp) => value.replace(pattern, '[REDACTED]') }],
+          })
+          result = utils.traverse(['Hello', 'world'])
+        })
+
+        it('should return the redacted value', () => {
+          expect(result).toEqual(['[REDACTED]', 'world'])
+        })
+      })
+
+      describe('with stringTests', () => {
+        beforeEach(() => {
+          utils = new RedactorUtils({
+            stringTests: [/^[Hh]ello/],
+          })
+          result = utils.traverse(['Hello', 'world', 'Hello, world!'])
+        })
+
+        it('should return the redacted value', () => {
+          expect(result).toEqual(['[REDACTED]', 'world', '[REDACTED]'])
+        })
+      })
+
+      describe('blacklistedKeys', () => {
+        describe('when the key is a string', () => {
           beforeEach(() => {
             utils = new RedactorUtils({
               blacklistedKeys: ['a'],
-              types: ['number'],
-              remove: true,
             })
-            getRecursionConfigSpy = vi.spyOn(utils, 'getRecursionConfig')
-            recurseSpy = vi.spyOn(utils, 'recurse')
-            const obj = {
-              a: 1,
-            }
-
-            result = utils.recurse(obj)
+            result = utils.traverse([{ a: 'b', c: 'd' }])
           })
 
-          it('should recurse the object', () => {
-            expect(recurseSpy).toHaveBeenCalledTimes(1)
-          })
-
-          it('should return the redacted object', () => {
-            expect(result).toEqual({})
-          })
-        })
-      })
-
-      describe('via getRecursionConfig', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: [{ key: 'a', remove: true }],
+          it('should return the redacted value', () => {
+            expect(result).toEqual([{ a: '[REDACTED]', c: 'd' }])
           })
         })
 
-        describe('when the value is an object', () => {
-          beforeEach(() => {
-            getRecursionConfigSpy = vi.spyOn(utils, 'getRecursionConfig')
-            recurseSpy = vi.spyOn(utils, 'recurse')
-            const obj = {
-              a: {
-                b: {
-                  c: 'd',
-                },
-              },
-            }
-
-            result = utils.recurse(obj)
-          })
-
-          it('should call getBlacklistedKeyConfig', () => {
-            expect(getRecursionConfigSpy).toHaveBeenCalledWith('a')
-          })
-
-          it('should recurse the object', () => {
-            expect(recurseSpy).toHaveBeenCalledTimes(1)
-          })
-
-          it('should return the redacted object with the redacted data removed', () => {
-            expect(result).toEqual({})
-          })
-        })
-
-        describe('when the value is an object of non-string values', () => {
+        describe('when the key is a RegExp', () => {
           beforeEach(() => {
             utils = new RedactorUtils({
-              blacklistedKeys: [{ key: 'a', remove: true }],
-              types: ['number'],
+              blacklistedKeys: [/[A-Z]/gi],
             })
-            getRecursionConfigSpy = vi.spyOn(utils, 'getRecursionConfig')
-            recurseSpy = vi.spyOn(utils, 'recurse')
-            const obj = {
-              a: 1,
-            }
-
-            result = utils.recurse(obj)
+            result = utils.traverse([{ A: 'B', C: 'D' }])
           })
 
-          it('should recurse the object', () => {
-            expect(recurseSpy).toHaveBeenCalledTimes(1)
+          it('should return the redacted value', () => {
+            expect(result).toEqual([{ A: '[REDACTED]', C: '[REDACTED]' }])
+          })
+        })
+
+        describe('when the key is a BlacklistKeyConfig', () => {
+          describe('when then key is a string', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: 'a' }],
+              })
+              result = utils.traverse([{ a: 'b', c: 'd' }])
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual([{ a: '[REDACTED]', c: 'd' }])
+            })
           })
 
-          it('should return the redacted object', () => {
-            expect(result).toEqual({})
+          describe('when then key is a RegExp', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: /a/i }],
+              })
+              result = utils.traverse([{ a: 'b', c: 'd' }])
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual([{ a: '[REDACTED]', c: 'd' }])
+            })
+          })
+
+          describe('when remove is true', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: 'a', remove: true }],
+              })
+              result = utils.traverse([{ a: 'b', c: 'd' }])
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual([{ c: 'd' }])
+            })
+          })
+
+          describe('when fuzzyKeyMatch is true', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: 'a', fuzzyKeyMatch: true }],
+              })
+              result = utils.traverse([{ a: 'b', c: 'd', address: 'e' }])
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual([{ a: '[REDACTED]', c: 'd', address: '[REDACTED]' }])
+            })
+          })
+
+          describe('when caseSensitiveKeyMatch is false', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: 'a', caseSensitiveKeyMatch: false }],
+              })
+              result = utils.traverse([{ A: 'B', C: 'D' }])
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual([{ A: '[REDACTED]', C: 'D' }])
+            })
+          })
+
+          describe('when retainStructure is true', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: 'a', retainStructure: true }],
+              })
+              result = utils.traverse([{ a: { foo: 'bar' }, c: 'd' }])
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual([{ a: { foo: '[REDACTED]' }, c: 'd' }])
+            })
+          })
+
+          describe('when replaceStringByLength is true', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: 'a', replaceStringByLength: true }],
+              })
+              result = utils.traverse([{ a: 'FOO' }])
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual([{ a: '[REDACTED][REDACTED][REDACTED]' }])
+            })
+          })
+
+          describe('when replacement is a custom string', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: 'a', replacement: '*' }],
+              })
+              result = utils.traverse([{ a: 'FOO' }])
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual([{ a: '*' }])
+            })
+          })
+
+          describe('when replacement is a function', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: 'a', replacement: (value: unknown) => (value as string).replace(/o/gi, '*') }],
+              })
+              result = utils.traverse([{ a: 'FOO' }])
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual([{ a: 'F**' }])
+            })
           })
         })
       })
     })
 
-    describe('when retaining structure', () => {
-      describe('via root config', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: ['a'],
+    describe('when the value is an object', () => {
+      describe('partialStringTests', () => {
+        const partialStringTests = [{ pattern: /Hello/gi, replacer: (value: string, pattern: RegExp) => value.replace(pattern, '[REDACTED]') }]
+
+        describe('when the value is a string', () => {
+          beforeEach(() => {
+            utils = new RedactorUtils({ partialStringTests })
+            result = utils.traverse({ a: 'Hello, world!' })
+          })
+
+          it('should return the value partially redacted', () => {
+            expect(result).toEqual({ a: '[REDACTED], world!' })
+          })
+        })
+
+        describe('when the value is a number', () => {
+          beforeEach(() => {
+            utils = new RedactorUtils({
+              partialStringTests: [{ pattern: /Hello/gi, replacer: (value: string, pattern: RegExp) => value.replace(pattern, '[REDACTED]') }],
+            })
+            result = utils.traverse({ a: 123 })
+          })
+
+          it('should return the value unchanged', () => {
+            expect(result).toEqual({ a: 123 })
+          })
+        })
+      })
+
+      describe('stringTests', () => {
+        describe('when the value is a string', () => {
+          beforeEach(() => {
+            utils = new RedactorUtils({
+              stringTests: [/^Hello/],
+            })
+            result = utils.traverse({ a: 'Hello, world!' })
+          })
+
+          it('should return the redacted value', () => {
+            expect(result).toEqual({ a: '[REDACTED]' })
+          })
+        })
+
+        describe('when the value is a number', () => {
+          beforeEach(() => {
+            utils = new RedactorUtils({
+              stringTests: [/^Hello/],
+            })
+            result = utils.traverse({ a: 123 })
+          })
+
+          it('should return the value unchanged', () => {
+            expect(result).toEqual({ a: 123 })
+          })
+        })
+      })
+
+      describe('blacklistedKeys', () => {
+        describe('when the key is a string', () => {
+          beforeEach(() => {
+            utils = new RedactorUtils({
+              blacklistedKeys: ['a'],
+            })
+            result = utils.traverse({ a: 'b', c: 'd' })
+          })
+
+          it('should return the redacted value', () => {
+            expect(result).toEqual({ a: '[REDACTED]', c: 'd' })
+          })
+        })
+
+        describe('when the key is a RegExp', () => {
+          beforeEach(() => {
+            utils = new RedactorUtils({
+              blacklistedKeys: [/[A-Z]/gi],
+            })
+            result = utils.traverse({ A: 'B', C: 'D' })
+          })
+
+          it('should return the redacted value', () => {
+            expect(result).toEqual({ A: '[REDACTED]', C: '[REDACTED]' })
+          })
+        })
+
+        describe('when the key is a BlacklistKeyConfig', () => {
+          describe('when then key is a string', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: 'a' }],
+              })
+              result = utils.traverse({ a: 'b', c: 'd' })
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual({ a: '[REDACTED]', c: 'd' })
+            })
+          })
+
+          describe('when then key is a RegExp', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: /a/i }],
+              })
+              result = utils.traverse({ a: 'b', c: 'd' })
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual({ a: '[REDACTED]', c: 'd' })
+            })
+          })
+
+          describe('when remove is true', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: 'a', remove: true }],
+              })
+              result = utils.traverse({ a: 'b', c: 'd' })
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual({ c: 'd' })
+            })
+          })
+
+          describe('when fuzzyKeyMatch is true', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: 'a', fuzzyKeyMatch: true }],
+              })
+              result = utils.traverse({ a: 'b', c: 'd', address: 'e' })
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual({ a: '[REDACTED]', c: 'd', address: '[REDACTED]' })
+            })
+          })
+
+          describe('when caseSensitiveKeyMatch is false', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: 'a', caseSensitiveKeyMatch: false }],
+              })
+              result = utils.traverse({ A: 'B', C: 'D' })
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual({ A: '[REDACTED]', C: 'D' })
+            })
+          })
+
+          describe('when retainStructure is true', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: 'a', retainStructure: true }],
+              })
+              result = utils.traverse({ a: { foo: 'bar' }, c: 'd' })
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual({ a: { foo: '[REDACTED]' }, c: 'd' })
+            })
+          })
+
+          describe('when replaceStringByLength is true', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: 'a', replaceStringByLength: true }],
+              })
+              result = utils.traverse({ a: 'FOO' })
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual({ a: '[REDACTED][REDACTED][REDACTED]' })
+            })
+          })
+
+          describe('when replacement is a custom string', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: 'a', replacement: '*' }],
+              })
+              result = utils.traverse({ a: 'FOO' })
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual({ a: '*' })
+            })
+          })
+
+          describe('when replacement is a function', () => {
+            beforeEach(() => {
+              utils = new RedactorUtils({
+                blacklistedKeys: [{ key: 'a', replacement: (value: unknown) => (value as string).replace(/o/gi, '*') }],
+              })
+              result = utils.traverse({ a: 'FOO' })
+            })
+
+            it('should return the redacted value', () => {
+              expect(result).toEqual({ a: 'F**' })
+            })
+          })
+        })
+      })
+    })
+
+    describe('when the value is a circular reference', () => {
+      beforeEach(() => {
+        utils = new RedactorUtils({
+          blacklistedKeys: ['foo'],
+        })
+        const circularReference = { a: { foo: { bar: 'baz' } } }
+        // @ts-expect-error - we're testing a circular reference
+        circularReference.a.foo.circularReference = circularReference.a.foo
+        result = utils.traverse(circularReference)
+      })
+
+      it('should return the redacted value', () => {
+        expect(result).toEqual({
+          a: {
+            foo: {
+              bar: 'baz',
+              circularReference: {
+                _transformer: 'circular',
+                path: 'a.foo.circularReference',
+                value: 'a.foo',
+              },
+            },
+          },
+        })
+      })
+    })
+  })
+
+  describe('createTransformedBlacklistedKeys', () => {
+    describe('with a custom config', () => {
+      const customConfig = {
+        fuzzyKeyMatch: true,
+        caseSensitiveKeyMatch: false,
+        retainStructure: true,
+        remove: true,
+        replaceStringByLength: true,
+        replacement: '*',
+      }
+
+      beforeEach(() => {
+        utils = new RedactorUtils({
+          blacklistedKeys: ['a'],
+          ...customConfig,
+        })
+      })
+
+      describe('when the key is a RegExp', () => {
+        it('should create a transformed blacklisted key using custom config', () => {
+          // @ts-expect-error - createTransformedBlacklistedKeys is private but we're testing it
+          expect(utils.createTransformedBlacklistedKey(/a/gi, customConfig)).toEqual({
+            key: /a/gi,
+            fuzzyKeyMatch: true,
+            caseSensitiveKeyMatch: false,
             retainStructure: true,
-          })
-        })
-
-        describe('when the value is an object', () => {
-          beforeEach(() => {
-            recurseSpy = vi.spyOn(utils, 'recurse')
-            const obj = {
-              a: {
-                b: {
-                  c: 'd',
-                },
-              },
-            }
-
-            result = utils.recurse(obj)
-          })
-
-          it('should recurse the object', () => {
-            expect(recurseSpy).toHaveBeenCalledTimes(4)
-          })
-
-          it('should return the redacted object with the redacted data removed', () => {
-            expect(result).toEqual({
-              a: {
-                b: {
-                  c: '[REDACTED]',
-                },
-              },
-            })
+            remove: true,
+            replacement: '*',
+            replaceStringByLength: true,
           })
         })
       })
 
-      describe('via blacklistedKeyConfig', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: [{ key: 'a', retainStructure: true }],
-          })
-          recurseSpy = vi.spyOn(utils, 'recurse')
-        })
-
-        describe('when the value is an object', () => {
-          beforeEach(() => {
-            const obj = {
-              a: {
-                b: {
-                  c: 'd',
-                },
-              },
-            }
-
-            result = utils.recurse(obj)
-          })
-
-          it('should recurse the object', () => {
-            expect(recurseSpy).toHaveBeenCalledTimes(4)
-          })
-
-          it('should return the redacted object with the redacted data removed', () => {
-            expect(result).toEqual({
-              a: {
-                b: {
-                  c: '[REDACTED]',
-                },
-              },
-            })
+      describe('when the key is a BlacklistKeyConfig', () => {
+        it('should create a transformed blacklisted key using key specific config and custom config fallback', () => {
+          // @ts-expect-error - createTransformedBlacklistedKeys is private but we're testing it
+          expect(utils.createTransformedBlacklistedKey({
+            key: 'a',
+            remove: false,
+            replacement: '[REDACTED]',
+            replaceStringByLength: false,
+          }, customConfig)).toEqual({
+            key: 'a',
+            fuzzyKeyMatch: true,
+            caseSensitiveKeyMatch: false,
+            retainStructure: true,
+            remove: false,
+            replacement: '[REDACTED]',
+            replaceStringByLength: false,
           })
         })
       })
     })
 
-    describe('when using a custom replacement string', () => {
-      describe('via root config', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: ['a'],
-            replacement: '[SECRET]',
-          })
+    describe('without a custom config', () => {
+      beforeEach(() => {
+        utils = new RedactorUtils({
+          blacklistedKeys: ['a'],
         })
+      })
 
-        describe('when the value is an object', () => {
-          beforeEach(() => {
-            recurseSpy = vi.spyOn(utils, 'recurse')
-            const obj = {
-              a: {
-                b: {
-                  c: 'd',
-                },
-              },
-            }
-
-            result = utils.recurse(obj)
-          })
-
-          it('should recurse the object', () => {
-            expect(recurseSpy).toHaveBeenCalledTimes(2)
-          })
-
-          it('should return the redacted object with the redacted data removed', () => {
-            expect(result).toEqual({
-              a: '[SECRET]',
-            })
+      describe('when the key is a RegExp', () => {
+        it('should create a transformed blacklisted key using default config', () => {
+          // @ts-expect-error - createTransformedBlacklistedKeys is private but we're testing it
+          expect(utils.createTransformedBlacklistedKey(/a/gi, {})).toEqual({
+            key: /a/gi,
+            fuzzyKeyMatch: false,
+            caseSensitiveKeyMatch: true,
+            retainStructure: false,
+            remove: false,
+            replacement: '[REDACTED]',
+            replaceStringByLength: false,
           })
         })
       })
 
-      describe('via blacklistedKeyConfig', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: [{ key: 'a', replacement: '[SECRET]' }],
-          })
-        })
-
-        describe('when the value is an object', () => {
-          beforeEach(() => {
-            recurseSpy = vi.spyOn(utils, 'recurse')
-            const obj = {
-              a: {
-                b: {
-                  c: 'd',
-                },
-              },
-            }
-
-            result = utils.recurse(obj)
-          })
-
-          it('should recurse the object', () => {
-            expect(recurseSpy).toHaveBeenCalledTimes(2)
-          })
-
-          it('should return the redacted object with the redacted data removed', () => {
-            expect(result).toEqual({
-              a: '[SECRET]',
-            })
-          })
-        })
-      })
-    })
-
-    describe('when using a custom replacement function', () => {
-      describe('via root config', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: ['a'],
-            replacement: (value) => `[REDACTED ${typeof value}]`,
-          })
-        })
-
-        describe('when the value is an object', () => {
-          beforeEach(() => {
-            recurseSpy = vi.spyOn(utils, 'recurse')
-            const obj = {
-              a: {
-                b: {
-                  c: 'd',
-                },
-              },
-            }
-
-            result = utils.recurse(obj)
-          })
-
-          it('should recurse the object', () => {
-            expect(recurseSpy).toHaveBeenCalledTimes(2)
-          })
-
-          it('should return the redacted object with the redacted data removed', () => {
-            expect(result).toEqual({
-              a: '[REDACTED object]',
-            })
-          })
-        })
-      })
-
-      describe('via blacklistedKeyConfig', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            blacklistedKeys: [{ key: 'a', replacement: (value) => `[REDACTED ${typeof value}]` }],
-          })
-        })
-
-        describe('when the value is an object', () => {
-          beforeEach(() => {
-            recurseSpy = vi.spyOn(utils, 'recurse')
-            const obj = {
-              a: {
-                b: {
-                  c: 'd',
-                },
-              },
-            }
-
-            result = utils.recurse(obj)
-          })
-
-          it('should recurse the object', () => {
-            expect(recurseSpy).toHaveBeenCalledTimes(2)
-          })
-
-          it('should return the redacted object with the redacted data removed', () => {
-            expect(result).toEqual({
-              a: '[REDACTED object]',
-            })
+      describe('when the key is a BlacklistKeyConfig', () => {
+        it('should create a transformed blacklisted key using key specific config and default config fallback', () => {
+          // @ts-expect-error - createTransformedBlacklistedKeys is private but we're testing it
+          expect(utils.createTransformedBlacklistedKey({ key: 'a', replacement: '*', replaceStringByLength: true }, {})).toEqual({
+            key: 'a',
+            fuzzyKeyMatch: false,
+            caseSensitiveKeyMatch: true,
+            retainStructure: false,
+            remove: false,
+            replacement: '*',
+            replaceStringByLength: true,
           })
         })
       })
@@ -1730,6 +713,931 @@ describe('RedactorUtils', () => {
             expect(utils.partialStringRedact('Hello, Foo, world!')).toBe('[REDACTED], [REDACTED], world!')
           })
         })
+      })
+    })
+  })
+
+  describe('applyTransformers', () => {
+    let transformerSpies: Array<MockInstance<Transformer>> = []
+
+    beforeEach(async () => {
+      const modules = [
+        () => import('../../src/utils/standardTransformers/bigint'),
+        () => import('../../src/utils/standardTransformers/date'),
+      ]
+
+      await Promise.all(modules.map(async (moduleImport, index) => {
+        const module = await moduleImport()
+        const exportName = Object.keys(module)[0]
+        transformerSpies.push(vi.spyOn(module, exportName as keyof typeof module))
+      }))
+
+      utils = new RedactorUtils({
+        transformers: transformerSpies as unknown as Transformer[],
+      })
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    describe('when no transformers apply', () => {
+      let result: unknown
+
+      beforeEach(() => {
+        // @ts-expect-error - applyTransformers is private but we're testing it
+        result = utils.applyTransformers({ a: 'b' }, 'a', new WeakMap())
+      })
+
+      it('should return the value unchanged', () => {
+        expect(result).toEqual({ a: 'b' })
+      })
+    })
+
+    describe('when the value is a string', () => {
+      let result: unknown
+
+      beforeEach(() => {
+        // @ts-expect-error - applyTransformers is private but we're testing it
+        result = utils.applyTransformers('Hello, world!', 'a', new WeakMap())
+      })
+
+      it('should return the value unchanged', () => {
+        expect(result).toBe('Hello, world!')
+      })
+
+      it('should not apply any transformers', () => {
+        expect(transformerSpies[0]).not.toHaveBeenCalled()
+        expect(transformerSpies[1]).not.toHaveBeenCalled()
+      })
+    })
+
+    describe('when the value is an object', () => {
+      let result: unknown
+
+      beforeEach(() => {
+        // @ts-expect-error - applyTransformers is private but we're testing it
+        result = utils.applyTransformers(BigInt(2), 'a', new WeakMap())
+      })
+
+      it('should return the value with the transformers applied', () => {
+        expect(result).toEqual({ value: { radix: 10, number: '2' }, _transformer: 'bigint' })
+      })
+
+      it('should return the value without applying the date transformer', () => {
+        expect(transformerSpies[0]).toHaveBeenCalled()
+        expect(transformerSpies[1]).not.toHaveBeenCalled()
+      })
+    })
+  })
+
+  describe('sanitiseStringForRegex', () => {
+    it('should sanitise the string for the regex', () => {
+      // @ts-expect-error - sanitiseStringForRegex is private but we're testing it
+      expect(utils.sanitiseStringForRegex('Hello, world!')).toBe('Helloworld')
+    })
+  })
+
+  describe('shouldRedactKey', () => {
+    describe('computed regex', () => {
+      beforeEach(() => {
+        utils = new RedactorUtils({
+          blacklistedKeys: ['foo', 'bar'],
+        })
+      })
+
+      describe('when the key satisfies the computed regex', () => {
+        it('should return true', () => {
+          // @ts-expect-error - shouldRedactKey is private but we're testing it
+          expect(utils.shouldRedactKey('foo')).toBe(true)
+        })
+      })
+
+      describe('when the key does not satisfy the computed regex', () => {
+        it('should return false', () => {
+          // @ts-expect-error - shouldRedactKey is private but we're testing it
+          expect(utils.shouldRedactKey('a')).toBe(false)
+        })
+      })
+    })
+
+    describe('blacklisted keys', () => {
+      beforeEach(() => {
+        utils = new RedactorUtils({
+          blacklistedKeys: [/a/gi, { key: 'boo', fuzzyKeyMatch: true, caseSensitiveKeyMatch: false }],
+        })
+      })
+
+      describe('RegExp', () => {
+        describe('when the key matches the RegExp', () => {
+          it('should return true', () => {
+            // @ts-expect-error - shouldRedactKey is private but we're testing it
+            expect(utils.shouldRedactKey('a')).toBe(true)
+          })
+        })
+
+        describe('when the key does not match the RegExp', () => {
+          it('should return false', () => {
+            // @ts-expect-error - shouldRedactKey is private but we're testing it
+            expect(utils.shouldRedactKey('c')).toBe(false)
+          })
+        })
+      })
+
+      describe('BlacklistKeyConfig', () => {
+        describe('when the key matches the BlacklistKeyConfig', () => {
+          describe('fuzzyKeyMatch', () => {
+            describe('when enabled', () => {
+              beforeEach(() => {
+                utils = new RedactorUtils({
+                  blacklistedKeys: [/a/gi, { key: 'boo', fuzzyKeyMatch: true }],
+                })
+              })
+
+              describe('when matches exactly', () => {
+                it('should return true', () => {
+                  // @ts-expect-error - shouldRedactKey is private but we're testing it
+                  expect(utils.shouldRedactKey('boo')).toBe(true)
+                })
+              })
+  
+              describe('when matches partially', () => {
+                it('should return true', () => {
+                  // @ts-expect-error - shouldRedactKey is private but we're testing it
+                  expect(utils.shouldRedactKey('boom')).toBe(true)
+                })
+              })
+  
+              describe('when does not match', () => {
+                it('should return false', () => {
+                  // @ts-expect-error - shouldRedactKey is private but we're testing it
+                  expect(utils.shouldRedactKey('b')).toBe(false)
+                })
+              })
+            })
+
+            describe('when disabled', () => {
+              beforeEach(() => {
+                utils = new RedactorUtils({
+                  blacklistedKeys: [/a/gi, { key: 'boo', fuzzyKeyMatch: false }],
+                })
+              })
+
+              describe('when matches exactly', () => {
+                it('should return false', () => {
+                  // @ts-expect-error - shouldRedactKey is private but we're testing it
+                  expect(utils.shouldRedactKey('boo')).toBe(true)
+                })
+              })
+
+              describe('when matches partially', () => {
+                it('should return false', () => {
+                  // @ts-expect-error - shouldRedactKey is private but we're testing it
+                  expect(utils.shouldRedactKey('boom')).toBe(false)
+                })
+              })
+
+              describe('when fuzzyKeyMatch does not match', () => {
+                it('should return false', () => {
+                  // @ts-expect-error - shouldRedactKey is private but we're testing it
+                  expect(utils.shouldRedactKey('b')).toBe(false)
+                })
+              })
+            })
+          })
+
+          describe('caseSensitiveKeyMatch', () => {
+            describe('when required to match', () => {
+              beforeEach(() => {
+                utils = new RedactorUtils({
+                  blacklistedKeys: [/a/gi, { key: 'boo', caseSensitiveKeyMatch: true }],
+                })
+              })
+
+              describe('when caseSensitiveKeyMatch matches', () => {
+                it('should return true', () => {
+                  // @ts-expect-error - shouldRedactKey is private but we're testing it
+                  expect(utils.shouldRedactKey('boo')).toBe(true)
+                })
+              })
+  
+              describe('when caseSensitiveKeyMatch does not match', () => {
+                it('should return false', () => {
+                  // @ts-expect-error - shouldRedactKey is private but we're testing it
+                  expect(utils.shouldRedactKey('BOO')).toBe(false)
+                })
+              })
+            })
+
+            describe('when not required to match', () => {
+              beforeEach(() => {
+                utils = new RedactorUtils({
+                  blacklistedKeys: [/a/gi, { key: 'boo', caseSensitiveKeyMatch: false }],
+                })
+              })
+
+              describe('when caseSensitiveKeyMatch matches', () => {
+                it('should return true', () => {
+                  // @ts-expect-error - shouldRedactKey is private but we're testing it
+                  expect(utils.shouldRedactKey('boo')).toBe(true)
+                })
+              })
+
+              describe('when caseSensitiveKeyMatch does not match', () => {
+                it('should return false', () => {
+                  // @ts-expect-error - shouldRedactKey is private but we're testing it
+                  expect(utils.shouldRedactKey('BOO')).toBe(true)
+                })
+              })
+            })
+          })
+        })
+
+        describe('when the key does not match the BlacklistKeyConfig', () => {
+          it('should return false', () => {
+            // @ts-expect-error - shouldRedactKey is private but we're testing it
+            expect(utils.shouldRedactKey('c')).toBe(false)
+          })
+        })
+      })
+    })
+  })
+
+  describe('shouldRedactValue', () => {
+    let shouldRedactKeySpy: MockInstance<RedactorUtils['findMatchingKeyConfig']>
+    let result: unknown
+
+    describe('when the key is a string', () => {
+      beforeEach(() => {
+        utils = new RedactorUtils({
+          blacklistedKeys: ['a'],
+        })
+        // @ts-expect-error - shouldRedactKey is private but we're testing it
+        shouldRedactKeySpy = vi.spyOn(utils, 'shouldRedactKey')
+        // @ts-expect-error - shouldRedactValue is private but we're testing it
+        result = utils.shouldRedactValue('Hello, world!', 'a')
+      })
+
+      it('should call findMatchingKeyConfig', () => {
+        expect(shouldRedactKeySpy).toHaveBeenCalledOnce()
+        expect(shouldRedactKeySpy).toHaveBeenNthCalledWith(1, 'a')
+      })
+
+      it('should return result of shouldRedactKey', () => {
+        expect(result).toEqual(shouldRedactKeySpy.mock.results[0].value)
+      })
+    })
+
+    describe('when the value is a number', () => {
+      beforeEach(() => {
+        utils = new RedactorUtils({
+          blacklistedKeys: ['a'],
+        })
+        // @ts-expect-error - shouldRedactValue is private but we're testing it
+        result = utils.shouldRedactValue(1, 'a')
+      })
+
+      it('should return false', () => {
+        expect(result).toBe(false)
+      })
+
+      it('should not call shouldRedactKey', () => {
+        expect(shouldRedactKeySpy).not.toHaveBeenCalled()
+      })
+    })
+  })
+
+  describe('redactValue', () => {
+    beforeEach(() => {
+      utils = new RedactorUtils({
+        blacklistedKeys: ['a'],
+        types: ['string', 'object'],
+      })
+    })
+
+    describe('when the value is a string', () => {
+      describe('replacement', () => {
+        describe('when replacement is a function', () => {
+          it('should return the redacted value', () => {
+            // @ts-expect-error - redactValue is private but we're testing it
+            expect(utils.redactValue('Hello, world!', false, { replacement: () => '[REDACTED BY FUNCTION]' })).toEqual({ transformed: '[REDACTED BY FUNCTION]', redactingParent: false })
+          })
+        })
+
+        describe('when replacement is a string', () => {
+          it('should return the redacted value', () => {
+            // @ts-expect-error - redactValue is private but we're testing it
+            expect(utils.redactValue('Hello, world!', false, { replacement: '[REDACTED BY STRING]' })).toEqual({ transformed: '[REDACTED BY STRING]', redactingParent: false })
+          })
+        })
+      })
+
+      describe('replaceStringByLength', () => {
+        describe('when replaceStringByLength is true', () => {
+          it('should return the redacted value without redacting by length', () => {
+            // @ts-expect-error - redactValue is private but we're testing it
+            expect(utils.redactValue('Hello, world!', false, { replaceStringByLength: true, replacement: '*' })).toEqual({ transformed: '*************', redactingParent: false })
+          })
+        })
+
+        describe('when replaceStringByLength is false', () => {
+          it('should return the redacted value without redacting by length', () => {
+            // @ts-expect-error - redactValue is private but we're testing it
+            expect(utils.redactValue('Hello, world!', false, { replaceStringByLength: false, replacement: '*' })).toEqual({ transformed: '*', redactingParent: false })
+          })
+        })
+      })
+    })
+
+    describe('when the value is an object', () => {
+      describe('retainStructure', () => {
+        describe('when retainStructure is true', () => {
+          it('should return the value unchanged', () => {
+            // @ts-expect-error - redactValue is private but we're testing it
+            expect(utils.redactValue({ a: 'b' }, false, { retainStructure: true })).toEqual({ transformed: { a: 'b' }, redactingParent: true })
+          })
+        })
+        
+        describe('when retainStructure is false', () => {
+          it('should return the redacted value', () => {
+            // @ts-expect-error - redactValue is private but we're testing it
+            expect(utils.redactValue({ a: 'b' }, false)).toEqual({ transformed: '[REDACTED]', redactingParent: false })
+          })
+        })
+      })
+
+      describe('remove', () => {
+        describe('when remove is true', () => {
+          it('should return the redacted value', () => {
+            // @ts-expect-error - redactValue is private but we're testing it
+            expect(utils.redactValue({ a: 'b' }, false, { remove: true })).toEqual({ transformed: undefined, redactingParent: false })
+          })
+        })
+
+        describe('when remove is false', () => {
+          it('should return the redacted value', () => {
+            // @ts-expect-error - redactValue is private but we're testing it
+            expect(utils.redactValue({ a: 'b' }, false)).toEqual({ transformed: '[REDACTED]', redactingParent: false })
+          })
+        })
+      })
+
+      describe('replacement', () => {
+        describe('when replacement is a function', () => {
+          it('should return the redacted value', () => {
+            // @ts-expect-error - redactValue is private but we're testing it
+            expect(utils.redactValue({ a: 'b' }, false, { replacement: () => '[REDACTED BY FUNCTION]' })).toEqual({ transformed: '[REDACTED BY FUNCTION]', redactingParent: false })
+          })
+        })
+
+        describe('when replacement is a string', () => {
+          it('should return the redacted value', () => {
+            // @ts-expect-error - redactValue is private but we're testing it
+            expect(utils.redactValue({ a: 'b' }, false, { replacement: '[REDACTED BY STRING]' })).toEqual({ transformed: '[REDACTED BY STRING]', redactingParent: false })
+          })
+        })
+      })
+
+      describe('replaceStringByLength', () => {
+        it('should return the redacted value without redacting by length', () => {
+          // @ts-expect-error - redactValue is private but we're testing it
+          expect(utils.redactValue({ a: 'b' }, false, { replaceStringByLength: true })).toEqual({ transformed: '[REDACTED]', redactingParent: false })
+        })
+      })
+    })
+  })
+
+  describe('applyStringTransformations', () => {
+    let result: unknown
+    let stringTestStub: MockInstance
+    let applyStringTransformationsSpy: MockInstance<RedactorUtils['applyStringTransformations']>
+    let redactValueSpy: MockInstance<RedactorUtils['redactValue']>
+    
+    describe('when partialStringTests is empty', () => {
+      describe('when stringTests contains a RegExp', () => {
+        describe('when the value matches the RegExp', () => {
+          beforeEach(() => {
+            utils = new RedactorUtils({
+              stringTests: [/hello/i],
+            })
+            // @ts-expect-error - redactValue is private but we're testing it
+            redactValueSpy = vi.spyOn(utils, 'redactValue')
+            // @ts-expect-error - applyStringTransformations is private but we're testing it
+            result = utils.applyStringTransformations('Hello, world!', false)
+          })
+
+          it('should call redactValue', () => {
+            expect(redactValueSpy).toHaveBeenCalledOnce()
+            expect(redactValueSpy).toHaveBeenNthCalledWith(1, 'Hello, world!', false, undefined)
+          })
+
+          it('should return the result of redactValue', () => {
+            expect(result).toEqual(redactValueSpy.mock.results[0]?.value)
+          })
+        })
+
+        describe('when the value does not match the RegExp', () => {
+          beforeEach(() => {
+            utils = new RedactorUtils({
+              stringTests: [/a/i],
+            })
+            // @ts-expect-error - redactValue is private but we're testing it
+            redactValueSpy = vi.spyOn(utils, 'redactValue')
+            // @ts-expect-error - applyStringTransformations is private but we're testing it
+            result = utils.applyStringTransformations('Hello, world!', false)
+          })
+
+          it('should not call redactValue', () => {
+            expect(redactValueSpy).not.toHaveBeenCalled()
+          })
+
+          it('should return the value unchanged', () => {
+            expect(result).toEqual({ transformed: 'Hello, world!', redactingParent: false })
+          })
+        })
+      })
+
+      describe('when stringTests contains a ComplexStringTest', () => {
+        beforeEach(() => {
+          stringTestStub = vi.fn().mockImplementation((value: string) => value.replace(/a/gi, '*'))
+          utils = new RedactorUtils({
+            stringTests: [{ pattern: /hello/i, replacer: stringTestStub as unknown as ComplexStringTest['replacer'] }],
+          })
+          // @ts-expect-error - redactValue is private but we're testing it
+          redactValueSpy = vi.spyOn(utils, 'redactValue')
+          // @ts-expect-error - applyStringTransformations is private but we're testing it
+          result = utils.applyStringTransformations('Hello, world!', false)
+        })
+  
+        it('should call redactValue', () => {
+          expect(stringTestStub).toHaveBeenCalledOnce()
+          // @ts-expect-error - config is private but we're testing it
+          expect(stringTestStub).toHaveBeenNthCalledWith(1, 'Hello, world!', utils.config.stringTests[0]?.pattern)
+        })
+  
+        it('should return the result of redactValue', () => {
+          expect(result).toEqual({ transformed: stringTestStub.mock.results[0]?.value, redactingParent: false })
+        })
+      })
+    })
+
+    describe('when partialStringTests is not empty', () => {
+      let partialStringTestSpy: MockInstance<RedactorUtils['partialStringRedact']>
+      let redactValueSpy: MockInstance<RedactorUtils['redactValue']>
+      let result: unknown
+
+      beforeEach(() => {
+        utils = new RedactorUtils({
+          stringTests: [/^hello/i],
+          partialStringTests: [{ pattern: /^hello/i, replacer: (_value: string) => '[PARTIALLY REDACTED]' }],
+        })
+        partialStringTestSpy = vi.spyOn(utils, 'partialStringRedact')
+        // @ts-expect-error - redactValue is private but we're testing it
+        redactValueSpy = vi.spyOn(utils, 'redactValue')
+        // @ts-expect-error - applyStringTransformations is private but we're testing it
+        result = utils.applyStringTransformations('Hello, world!', false)
+      })
+
+      it('should call partialStringRedact', () => {
+        expect(partialStringTestSpy).toHaveBeenCalledOnce()
+        expect(partialStringTestSpy).toHaveBeenNthCalledWith(1, 'Hello, world!')
+      })
+
+      it('should not call redactValue', () => {
+        expect(redactValueSpy).not.toHaveBeenCalled()
+      })
+
+      it('should return the result of partialStringRedact and redactingParent', () => {
+        expect(result).toEqual({ transformed: '[PARTIALLY REDACTED]', redactingParent: false })
+      })
+    })
+  })
+
+  describe('handlePrimitiveValue', () => {
+    let applyStringTransformationsSpy: MockInstance<RedactorUtils['applyStringTransformations']>
+    let shouldRedactKeySpy: MockInstance<RedactorUtils['shouldRedactKey']>
+    let redactValueSpy: MockInstance<RedactorUtils['redactValue']>
+    let result: unknown
+
+    describe('when value is a string', () => {
+      describe('when the value is a string', () => {
+        beforeEach(() => {
+          utils = new RedactorUtils({
+            blacklistedKeys: ['a'],
+          })
+          // @ts-expect-error - handlePrimitiveValue is private but we're testing it
+          applyStringTransformationsSpy = vi.spyOn(utils, 'applyStringTransformations')
+          // @ts-expect-error - shouldRedactKey is private but we're testing it
+          shouldRedactKeySpy = vi.spyOn(utils, 'shouldRedactKey')
+          // @ts-expect-error - redactValue is private but we're testing it
+          redactValueSpy = vi.spyOn(utils, 'redactValue')
+        })
+
+        describe('when the key is blacklisted', () => {
+          describe('when passed a key config', () => {
+            beforeEach(() => {
+              // @ts-expect-error - handlePrimitiveValue is private but we're testing it
+              result = utils.handlePrimitiveValue('Hello, world!', 'a', false, { replacement: '[REDACTED]' })
+            })
+
+            it('should not call shouldRedactKey', () => {
+              expect(shouldRedactKeySpy).not.toHaveBeenCalled()
+            })
+
+            it('should call redactValue', () => {
+              expect(applyStringTransformationsSpy).not.toHaveBeenCalled()
+              expect(redactValueSpy).toHaveBeenCalledOnce()
+              expect(redactValueSpy).toHaveBeenNthCalledWith(1, 'Hello, world!', false, { replacement: '[REDACTED]' })
+            })
+
+            it('should return the result of redactValue', () => {
+              expect(result).toEqual(redactValueSpy.mock.results[0]?.value)
+            })
+          })
+
+          describe('when not passed a key config', () => {
+            beforeEach(() => {
+              // @ts-expect-error - handlePrimitiveValue is private but we're testing it
+              result = utils.handlePrimitiveValue('Hello, world!', 'a', false)
+            })
+
+            it('should call shouldRedactKey', () => {
+              expect(shouldRedactKeySpy).toHaveBeenCalledOnce()
+              expect(shouldRedactKeySpy).toHaveBeenNthCalledWith(1, 'a')
+            })
+  
+            it('should call redactValue', () => {
+              expect(applyStringTransformationsSpy).not.toHaveBeenCalled()
+              expect(redactValueSpy).toHaveBeenCalledOnce()
+              expect(redactValueSpy).toHaveBeenNthCalledWith(1, 'Hello, world!', false, undefined)
+            })
+  
+            it('should return the result of redactValue', () => {
+              expect(result).toEqual(redactValueSpy.mock.results[0]?.value)
+            })
+          })
+        })
+
+        describe('when the key is not blacklisted', () => {
+          beforeEach(() => {
+            // @ts-expect-error - handlePrimitiveValue is private but we're testing it
+            result = utils.handlePrimitiveValue('Hello, world!', 'b', false)
+          })
+
+          it('should call applyStringTransformations', () => {
+            expect(redactValueSpy).not.toHaveBeenCalled()
+            expect(applyStringTransformationsSpy).toHaveBeenCalledOnce()
+            expect(applyStringTransformationsSpy).toHaveBeenNthCalledWith(1, 'Hello, world!', false, undefined)
+          })
+
+          it('should return the result of applyStringTransformations', () => {
+            expect(result).toEqual(applyStringTransformationsSpy.mock.results[0]?.value)
+          })
+        })
+      })
+    })
+
+    describe('when redacting a parent', () => {
+      describe('when the value is a string', () => {
+        beforeEach(() => {
+          // @ts-expect-error - handlePrimitiveValue is private but we're testing it
+          result = utils.handlePrimitiveValue('Hello, world!', 'a', true)
+        })
+
+        it('should call redactValue', () => {
+          expect(redactValueSpy).toHaveBeenCalledOnce()
+          expect(redactValueSpy).toHaveBeenNthCalledWith(1, 'Hello, world!', true, undefined)
+        })
+
+        it('should return the redacted value equal to the result of redactValue', () => {
+          expect(result).toEqual(redactValueSpy.mock.results[0]?.value)
+        })
+      })
+
+      describe('when the key is _transformer', () => {
+        beforeEach(() => {
+          // @ts-expect-error - handlePrimitiveValue is private but we're testing it
+          result = utils.handlePrimitiveValue('Hello, world!', '_transformer', true)
+        })
+        
+        it('should return the value unchanged', () => {
+          expect(result).toEqual({ transformed: 'Hello, world!', redactingParent: true })
+        })
+
+        it('should not call redactValue', () => {
+          expect(redactValueSpy).not.toHaveBeenCalled()
+        })
+
+        it('should not call applyStringTransformations', () => {
+          expect(applyStringTransformationsSpy).not.toHaveBeenCalled()
+        })
+
+        it('should not call shouldRedactKey', () => {
+          expect(shouldRedactKeySpy).not.toHaveBeenCalled()
+        })
+      })
+
+      describe('when the value is not a string', () => {
+        beforeEach(() => {
+          // @ts-expect-error - handlePrimitiveValue is private but we're testing it
+          result = utils.handlePrimitiveValue(1, 'a', true)
+        })
+
+        it('should return the value unchanged', () => {
+          expect(result).toEqual({ transformed: 1, redactingParent: true })
+        })
+
+        it('should not call redactValue', () => {
+          expect(redactValueSpy).not.toHaveBeenCalled()
+        })
+
+        it('should not call applyStringTransformations', () => {
+          expect(applyStringTransformationsSpy).not.toHaveBeenCalled()
+        })
+
+        it('should not call shouldRedactKey', () => {
+          expect(shouldRedactKeySpy).not.toHaveBeenCalled()
+        })
+      })
+    })
+
+    describe('when none of the above conditions are met', () => {
+      beforeEach(() => {
+        // @ts-expect-error - handlePrimitiveValue is private but we're testing it
+        result = utils.handlePrimitiveValue(2, 'a', false)
+      })
+
+      it('should return the value unchanged', () => {
+        expect(result).toEqual({ transformed: 2, redactingParent: false })
+      })
+
+      it('should not call redactValue', () => {
+        expect(redactValueSpy).not.toHaveBeenCalled()
+      })
+
+      it('should not call applyStringTransformations', () => {
+        expect(applyStringTransformationsSpy).not.toHaveBeenCalled()
+      })
+
+      it('should not call shouldRedactKey', () => { 
+        expect(shouldRedactKeySpy).not.toHaveBeenCalled()
+      })
+    })
+  })
+
+  describe('handleObjectValue', () => {
+    let result: unknown
+    let redactValueSpy: MockInstance<RedactorUtils['redactValue']>
+    let handleRetainStructureSpy: MockInstance<RedactorUtils['handleRetainStructure']>
+    let shouldRedactKeySpy: MockInstance<RedactorUtils['shouldRedactKey']>
+
+    describe('updating the reference map', () => {
+      let referenceMap: WeakMap<object, string>
+      let referenceMapSpy: MockInstance
+
+      beforeEach(() => {
+        referenceMap = new WeakMap()
+        referenceMapSpy = vi.spyOn(referenceMap, 'set')
+        utils = new RedactorUtils({
+          blacklistedKeys: ['a'],
+        })
+        // @ts-expect-error - handleObjectValue is private but we're testing it
+        result = utils.handleObjectValue({ a: 'b' }, 'a', ['a'], false, referenceMap)
+      })
+
+      it('should update the reference map', () => {
+        expect(referenceMapSpy).toHaveBeenCalledOnce()
+        expect(referenceMapSpy).toHaveBeenNthCalledWith(1, { a: 'b' }, 'a')
+      })
+    })
+
+    describe('when redacting a parent', () => {
+      beforeEach(() => {
+        utils = new RedactorUtils({
+          blacklistedKeys: ['a'],
+        })
+        // @ts-expect-error - handleRetainStructure is private but we're testing it
+        handleRetainStructureSpy = vi.spyOn(utils, 'handleRetainStructure')
+        // @ts-expect-error - shouldRedactKey is private but we're testing it
+        shouldRedactKeySpy = vi.spyOn(utils, 'shouldRedactKey')
+        // @ts-expect-error - redactValue is private but we're testing it
+        redactValueSpy = vi.spyOn(utils, 'redactValue')
+        // @ts-expect-error - handleObjectValue is private but we're testing it
+        result = utils.handleObjectValue({ a: 'b' }, 'a', ['a'], true, new WeakMap())
+      })
+
+      it('should not call handleRetainStructure', () => {
+        expect(handleRetainStructureSpy).not.toHaveBeenCalled()
+      })
+      
+      it('should not call shouldRedactKey', () => {
+        expect(shouldRedactKeySpy).not.toHaveBeenCalled()
+      })
+
+      it('should call redactValue', () => {
+        expect(redactValueSpy).toHaveBeenCalledOnce()
+        expect(redactValueSpy).toHaveBeenNthCalledWith(1, { a: 'b' }, true, undefined)
+      })
+
+      it('should return the value unchanged, redactingParent, and empty stack', () => {
+        expect(result).toEqual({ transformed: { a: 'b' }, redactingParent: true, stack: [] })
+      })
+    })
+
+    describe('when not redacting a parent', () => {
+      beforeEach(() => {
+        // @ts-expect-error - handleObjectValue is private but we're testing it
+        result = utils.handleObjectValue({ a: 'b' }, 'a', ['a'], false, new WeakMap())
+      })
+
+      it('should call handleRetainStructure', () => {
+        expect(handleRetainStructureSpy).toHaveBeenCalledOnce()
+        expect(handleRetainStructureSpy).toHaveBeenNthCalledWith(1, { a: 'b' }, ['a'], false)
+      })
+
+      it('should not call shouldRedactKey', () => {
+        expect(shouldRedactKeySpy).not.toHaveBeenCalled()
+      })
+
+      it('should return the result of handleRetainStructure', () => {
+        expect(result).toEqual(handleRetainStructureSpy.mock.results[0]?.value)
+      })
+    })
+  })
+
+  describe('handleRetainStructure', () => {
+    let findMatchingKeyConfigSpy: MockInstance<RedactorUtils['findMatchingKeyConfig']>
+    let result: unknown
+    
+    describe('when the value is an object', () => {
+      let value = { a: 'b' }
+
+      beforeEach(() => {
+        utils = new RedactorUtils({
+          blacklistedKeys: ['a'],
+        })
+        // @ts-expect-error - findMatchingKeyConfig is private but we're testing it
+        findMatchingKeyConfigSpy = vi.spyOn(utils, 'findMatchingKeyConfig')
+        // @ts-expect-error - handleRetainStructure is private but we're testing it
+        result = utils.handleRetainStructure(value, ['a'], false)
+      })
+
+      it('should return the correct stack', () => {
+        expect(result).toEqual({
+          transformed: {},
+          redactingParent: false,
+          stack: [{
+            parent: {},
+            key: 'a',
+            value: 'b',
+            path: ['a', 'a'],
+            redactingParent: false,
+            keyConfig: findMatchingKeyConfigSpy.mock.results[0].value,
+          }]
+        })
+      })
+    })
+
+    describe('when the value is an array', () => {
+      let value = ['a', 'b']
+
+      beforeEach(() => {
+        utils = new RedactorUtils({
+          blacklistedKeys: ['a'],
+        })
+        // @ts-expect-error - findMatchingKeyConfig is private but we're testing it
+        findMatchingKeyConfigSpy = vi.spyOn(utils, 'findMatchingKeyConfig')
+        // @ts-expect-error - handleRetainStructure is private but we're testing it
+        result = utils.handleRetainStructure(value, [0], false)
+      })
+
+      it('should return the correct stack', () => {
+        expect(result).toEqual({
+          transformed: [],
+          redactingParent: false,
+          stack: [
+            {
+              parent: [],
+              key: '1',
+              value: 'b',
+              path: [0, 1],
+              redactingParent: false,
+              keyConfig: findMatchingKeyConfigSpy.mock.results[0].value,
+            },
+            {
+              parent: [],
+              key: '0',
+              value: 'a',
+              path: [0, 0],
+              redactingParent: false,
+              keyConfig: findMatchingKeyConfigSpy.mock.results[1].value,
+            },
+          ]
+        })
+      })
+    })
+  })
+
+  describe('findMatchingKeyConfig', () => {
+    let blacklistedKeysTransformedFindSpy: MockInstance<Array<BlacklistKeyConfig>['find']>
+    let result: unknown
+
+    beforeEach(() => {
+      utils = new RedactorUtils({
+        blacklistedKeys: ['a', { key: 'foo', replacement: '*', replaceStringByLength: true, fuzzyKeyMatch: true, caseSensitiveKeyMatch: true }],
+      })
+      // @ts-expect-error - blacklistedKeysTransformedFindSpy is private but we're testing it
+      blacklistedKeysTransformedFindSpy = vi.spyOn(utils.blacklistedKeysTransformed, 'find')
+      // @ts-expect-error - findMatchingKeyConfig is private but we're testing it
+      result = utils.findMatchingKeyConfig('a')
+    })
+
+    describe('when the key is a string that matches the computed regex', () => {
+      it('should return the correct key config', () => {
+        expect(result).toEqual({
+          key: 'a',
+          fuzzyKeyMatch: false,
+          caseSensitiveKeyMatch: true,
+          remove: false,
+          replaceStringByLength: false,
+          replacement: '[REDACTED]',
+          retainStructure: false,
+        })
+      })
+
+      it('should not call blacklistedKeysTransformed.find', () => {
+        expect(blacklistedKeysTransformedFindSpy).not.toHaveBeenCalled()
+      })
+    })
+
+    describe('when the key is a string that does not match the computed regex', () => {
+      beforeEach(() => {
+        // @ts-expect-error - findMatchingKeyConfig is private but we're testing it
+        result = utils.findMatchingKeyConfig('b')
+      })
+
+      it('should call blacklistedKeysTransformed.find', () => {
+        expect(blacklistedKeysTransformedFindSpy).toHaveBeenCalledOnce()
+        expect(blacklistedKeysTransformedFindSpy).toHaveBeenNthCalledWith(1, expect.any(Function))
+      })
+
+      it('should return undefined', () => {
+        expect(result).toBeUndefined()
+      })
+    })
+
+    describe('when the key is a string that matches a complex key', () => {
+      beforeEach(() => {
+        // @ts-expect-error - findMatchingKeyConfig is private but we're testing it
+        result = utils.findMatchingKeyConfig('foo')
+      })
+
+      it('should call blacklistedKeysTransformed.find', () => {
+        expect(blacklistedKeysTransformedFindSpy).toHaveBeenCalledOnce()
+        expect(blacklistedKeysTransformedFindSpy).toHaveBeenNthCalledWith(1, expect.any(Function))
+      })
+
+      it('should return the correct key config', () => {
+        expect(result).toEqual({
+          key: 'foo',
+          replacement: '*',
+          replaceStringByLength: true,
+          fuzzyKeyMatch: true,
+          caseSensitiveKeyMatch: true,
+          retainStructure: false,
+          remove: false,
+        })
+      })
+    })
+  })
+
+  describe('removeCircularReferences', () => {
+    let applyTransformersSpy: MockInstance<RedactorUtils['applyTransformers']>
+    let initialiseTraversalSpy: MockInstance<RedactorUtils['initialiseTraversal']>
+    let initialValue = { foo: { bar: 'biz', baz: { qux: 'quux' }, arr: [{ some: 'object' }, {}] } }
+    // @ts-expect-error - we're testing a circular reference
+    initialValue.foo.baz.circularReference = initialValue.foo.baz
+    // @ts-expect-error - we're testing a circular reference
+    initialValue.foo.arr[1].circularReference = initialValue.foo.arr[1]
+    let result: unknown
+
+    beforeEach(() => {
+      utils = new RedactorUtils({})
+      // @ts-expect-error - applyTransformers is private but we're testing it
+      applyTransformersSpy = vi.spyOn(utils, 'applyTransformers')
+      // @ts-expect-error - removeCircularReferences is private but we're testing it
+      initialiseTraversalSpy = vi.spyOn(utils, 'initialiseTraversal')
+      // @ts-expect-error - removeCircularReferences is private but we're testing it
+      result = utils.removeCircularReferences(initialValue)
+    })
+
+    it('should return the correct result with circular references transformed', () => {
+      expect(result).toEqual({
+        foo: {
+          bar: 'biz',
+          baz: { qux: 'quux', circularReference: { _transformer: 'circular', value: 'foo.baz', path: 'foo.baz.circularReference' } },
+          arr: [{some: 'object'}, { circularReference: { _transformer: 'circular', value: 'foo.arr.1', path: 'foo.arr.1.circularReference' } }],
+        },
       })
     })
   })

@@ -1,6 +1,7 @@
-import type { Transformer } from "../../types"
+import type { Transformer } from '../../types'
 
 export const _bigint: Transformer = (value: unknown) => {
     if (typeof value !== 'bigint') return value
-    return value.toString(10)
+    const radix = 10
+    return { value: { radix, number: value.toString(radix) }, _transformer: 'bigint' }
 }

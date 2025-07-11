@@ -35,12 +35,23 @@ export interface BlacklistKeyConfig {
   remove?: boolean
 
   /**
+   * The replacement value for redacted data. Can be a string, or a function that takes the original value and returns any value.
+   * @default '[REDACTED]'
+   * @example '*' // if `replacement` equals `*` then `joe.bloggs@example.com` becomes `**********************`
+   * @example (value) => `REDACTED: ${typeof value}` // redact the value with a prefix of 'REDACTED: ' and the type of the value.
+   * @example (value) => return typeof value === 'string' ? '*'.repeat(value.length) : '[REDACTED]' // redact the value with a string of the same length.
+   * @param value The original value that is being redacted.
+   * @returns The redacted value or undefined to remove the value.
+   */
+  replacement?: string | ((value: unknown) => unknown)
+
+  /**
    * Replace string values with a redacted string of the same length, using the `replacement` option. Ignored if `remove` is true, `replacement` is a function, or the value is not a string.
    * @default false
    * @example true // if `replacement` equals `*` then `joe.bloggs@example.com` becomes `**********************`
    * @example false // if `replacement` equals `*` then `joe.bloggs@example.com` becomes `*`
    */
-  replacement?: string | ((value: unknown) => unknown)
+  replaceStringByLength?: boolean
 
   /**
    * The key to redact. Can be a string or a RegExp.
@@ -162,12 +173,6 @@ export interface BaseDeepRedactConfig {
    *   }
    */
   transformers?: Array<Transformer>
-
-  /**
-   * Enable logging of the redaction process.
-   * @default false
-   */
-  enableLogging?: boolean
 }
 
 export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, '_blacklistedKeysTransformed' | 'blacklistedKeys' | 'stringTests'>> & ({
@@ -200,7 +205,8 @@ export type Stack = Array<{
   key: string, 
   value: unknown, 
   path: Array<string | number>, 
-  redactingParent: boolean 
+  redactingParent: boolean
+  keyConfig: BlacklistKeyConfig | undefined
 }>
 
 export type Logs = Array<{ path: string, message: string, raw: unknown, transformed: unknown }> | null
