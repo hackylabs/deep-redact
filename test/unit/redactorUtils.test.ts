@@ -3,7 +3,7 @@ import {
   afterEach,
 } from 'vitest'
 import RedactorUtils from '../../src/utils/'
-import type { BaseDeepRedactConfig, BlacklistKeyConfig, ComplexStringTest, Transformer } from '../../src/types'
+import type { BlacklistKeyConfig, ComplexStringTest, Transformer } from '../../src/types'
 import { standardTransformers } from '../../src/utils/standardTransformers'
 
 describe('RedactorUtils', () => {
@@ -24,7 +24,6 @@ describe('RedactorUtils', () => {
         // @ts-expect-error - config is private but we're testing it
         expect(utils.config).toEqual({
           blacklistedKeys: [],
-          partialStringTests: [],
           stringTests: [],
           fuzzyKeyMatch: false,
           caseSensitiveKeyMatch: true,
@@ -45,8 +44,7 @@ describe('RedactorUtils', () => {
         replacer = vi.fn((value: string, pattern: RegExp) => value.replace(pattern, '[REDACTED]'))
         utils = new RedactorUtils({
           blacklistedKeys: ['a', /b/],
-          partialStringTests: [{ pattern: /Foo/gi, replacer: replacer as unknown as ComplexStringTest['replacer'] }],
-          stringTests: [/^Hello/],
+          stringTests: [/^Hello/, { pattern: /Foo/gi, replacer: replacer as unknown as ComplexStringTest['replacer'] }],
           fuzzyKeyMatch: true,
           caseSensitiveKeyMatch: false,
           retainStructure: true,
@@ -61,13 +59,7 @@ describe('RedactorUtils', () => {
         // @ts-expect-error - config is private but we're testing it
         expect(utils.config).toEqual({
           blacklistedKeys: ['a', /b/],
-          partialStringTests: [
-            {
-              pattern: /Foo/gi,
-              replacer,
-            },
-          ],
-          stringTests: [/^Hello/],
+          stringTests: [/^Hello/, { pattern: /Foo/gi, replacer: replacer as unknown as ComplexStringTest['replacer'] }],
           fuzzyKeyMatch: true,
           caseSensitiveKeyMatch: false,
           retainStructure: true,
@@ -96,19 +88,6 @@ describe('RedactorUtils', () => {
 
   describe('traverse', () => {
     describe('when the value is a string', () => {
-      describe('with partialStringTests', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            partialStringTests: [{ pattern: /Hello/gi, replacer: (value: string, pattern: RegExp) => value.replace(pattern, '[REDACTED]') }],
-          })
-          result = utils.traverse('Hello, world!')
-        })
-
-        it('should return the redacted value', () => {
-          expect(result).toEqual('[REDACTED], world!')
-        })
-      })
-
       describe('with stringTests', () => {
         beforeEach(() => {
           utils = new RedactorUtils({
@@ -140,7 +119,7 @@ describe('RedactorUtils', () => {
       describe('with partialStringTests', () => {
         beforeEach(() => {
           utils = new RedactorUtils({
-            partialStringTests: [{ pattern: /2/i, replacer: (value: string, pattern: RegExp) => value.replace(pattern, '[REDACTED]') }],
+            stringTests: [{ pattern: /2/i, replacer: (value: string, pattern: RegExp) => value.replace(pattern, '[REDACTED]') }],
           })
           result = utils.traverse(2)
         })
@@ -178,19 +157,6 @@ describe('RedactorUtils', () => {
     })
 
     describe('when the value is an array', () => {
-      describe('with partialStringTests', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            partialStringTests: [{ pattern: /Hello/gi, replacer: (value: string, pattern: RegExp) => value.replace(pattern, '[REDACTED]') }],
-          })
-          result = utils.traverse(['Hello', 'world'])
-        })
-
-        it('should return the redacted value', () => {
-          expect(result).toEqual(['[REDACTED]', 'world'])
-        })
-      })
-
       describe('with stringTests', () => {
         beforeEach(() => {
           utils = new RedactorUtils({
@@ -353,12 +319,12 @@ describe('RedactorUtils', () => {
     })
 
     describe('when the value is an object', () => {
-      describe('partialStringTests', () => {
-        const partialStringTests = [{ pattern: /Hello/gi, replacer: (value: string, pattern: RegExp) => value.replace(pattern, '[REDACTED]') }]
+      describe('stringTests', () => {
+        const stringTests = [{ pattern: /Hello/gi, replacer: (value: string, pattern: RegExp) => value.replace(pattern, '[REDACTED]') }]
 
         describe('when the value is a string', () => {
           beforeEach(() => {
-            utils = new RedactorUtils({ partialStringTests })
+            utils = new RedactorUtils({ stringTests })
             result = utils.traverse({ a: 'Hello, world!' })
           })
 
@@ -370,7 +336,7 @@ describe('RedactorUtils', () => {
         describe('when the value is a number', () => {
           beforeEach(() => {
             utils = new RedactorUtils({
-              partialStringTests: [{ pattern: /Hello/gi, replacer: (value: string, pattern: RegExp) => value.replace(pattern, '[REDACTED]') }],
+              stringTests: [{ pattern: /Hello/gi, replacer: (value: string, pattern: RegExp) => value.replace(pattern, '[REDACTED]') }],
             })
             result = utils.traverse({ a: 123 })
           })
@@ -682,45 +648,6 @@ describe('RedactorUtils', () => {
     })
   })
 
-  describe('partialStringRedactor', () => {
-    beforeEach(() => {
-      utils = new RedactorUtils({
-        partialStringTests: [
-          {
-            pattern: /Hello/gi,
-            replacer: (value: string, pattern) => value.replace(pattern, '[REDACTED]'),
-          },
-          {
-            pattern: /Foo/gi,
-            replacer: (value: string, pattern) => value.replace(pattern, '[REDACTED]'),
-          },
-        ],
-      })
-    })
-
-    describe('when the value is a string', () => {
-      describe('when the value does not match any partialStringTests', () => {
-        it('should return the value', () => {
-          expect(utils.partialStringRedact('Bar')).toBe('Bar')
-        })
-      })
-
-      describe('when the value matches a partialStringTest', () => {
-        describe('when it matches only one partialStringTest', () => {
-          it('should return the redacted string', () => {
-            expect(utils.partialStringRedact('Hello, world!')).toBe('[REDACTED], world!')
-          })
-        })
-
-        describe('when it matches multiple partialStringTests', () => {
-          it('should return the redacted string', () => {
-            expect(utils.partialStringRedact('Hello, Foo, world!')).toBe('[REDACTED], [REDACTED], world!')
-          })
-        })
-      })
-    })
-  })
-
   describe('applyTransformers', () => {
     let transformerSpies: Array<MockInstance<Transformer>> = []
 
@@ -864,14 +791,14 @@ describe('RedactorUtils', () => {
                   expect(utils.shouldRedactKey('boo')).toBe(true)
                 })
               })
-  
+
               describe('when matches partially', () => {
                 it('should return true', () => {
                   // @ts-expect-error - shouldRedactKey is private but we're testing it
                   expect(utils.shouldRedactKey('boom')).toBe(true)
                 })
               })
-  
+
               describe('when does not match', () => {
                 it('should return false', () => {
                   // @ts-expect-error - shouldRedactKey is private but we're testing it
@@ -924,7 +851,7 @@ describe('RedactorUtils', () => {
                   expect(utils.shouldRedactKey('boo')).toBe(true)
                 })
               })
-  
+
               describe('when caseSensitiveKeyMatch does not match', () => {
                 it('should return false', () => {
                   // @ts-expect-error - shouldRedactKey is private but we're testing it
@@ -1061,7 +988,7 @@ describe('RedactorUtils', () => {
             expect(utils.redactValue({ a: 'b' }, false, { retainStructure: true })).toEqual({ transformed: { a: 'b' }, redactingParent: true })
           })
         })
-        
+
         describe('when retainStructure is false', () => {
           it('should return the redacted value', () => {
             // @ts-expect-error - redactValue is private but we're testing it
@@ -1115,34 +1042,57 @@ describe('RedactorUtils', () => {
     let redactValueSpy: MockInstance<RedactorUtils['redactValue']>
     let stringTestStub: MockInstance
     let result: unknown
-    
-    describe('when partialStringTests is empty', () => {
-      describe('when stringTests contains a RegExp', () => {
-        describe('when the value matches the RegExp', () => {
-          beforeEach(() => {
-            utils = new RedactorUtils({
-              stringTests: [/hello/i],
-            })
-            // @ts-expect-error - redactValue is private but we're testing it
-            redactValueSpy = vi.spyOn(utils, 'redactValue')
-            // @ts-expect-error - applyStringTransformations is private but we're testing it
-            result = utils.applyStringTransformations('Hello, world!', false)
-          })
 
-          it('should call redactValue', () => {
-            expect(redactValueSpy).toHaveBeenCalledOnce()
-            expect(redactValueSpy).toHaveBeenNthCalledWith(1, 'Hello, world!', false, undefined)
+    describe('when stringTests contains a RegExp', () => {
+      describe('when the value matches the RegExp', () => {
+        beforeEach(() => {
+          utils = new RedactorUtils({
+            stringTests: [/hello/i],
           })
-
-          it('should return the result of redactValue', () => {
-            expect(result).toEqual(redactValueSpy.mock.results[0]?.value)
-          })
+          // @ts-expect-error - redactValue is private but we're testing it
+          redactValueSpy = vi.spyOn(utils, 'redactValue')
+          // @ts-expect-error - applyStringTransformations is private but we're testing it
+          result = utils.applyStringTransformations('Hello, world!', false)
         })
 
-        describe('when the value does not match the RegExp', () => {
+        it('should call redactValue', () => {
+          expect(redactValueSpy).toHaveBeenCalledOnce()
+          expect(redactValueSpy).toHaveBeenNthCalledWith(1, 'Hello, world!', false, undefined)
+        })
+
+        it('should return the result of redactValue', () => {
+          expect(result).toEqual(redactValueSpy.mock.results[0]?.value)
+        })
+      })
+
+      describe('when the value does not match the RegExp', () => {
+        beforeEach(() => {
+          utils = new RedactorUtils({
+            stringTests: [/a/i],
+          })
+          // @ts-expect-error - redactValue is private but we're testing it
+          redactValueSpy = vi.spyOn(utils, 'redactValue')
+          // @ts-expect-error - applyStringTransformations is private but we're testing it
+          result = utils.applyStringTransformations('Hello, world!', false)
+        })
+
+        it('should not call redactValue', () => {
+          expect(redactValueSpy).not.toHaveBeenCalled()
+        })
+
+        it('should return the value unchanged', () => {
+          expect(result).toEqual({ transformed: 'Hello, world!', redactingParent: false })
+        })
+      })
+    })
+
+    describe('when stringTests contains a ComplexStringTest', () => {
+      describe('with a replacer that partially redacts the value', () => {
+        describe('when the value matches the RegExp', () => {
           beforeEach(() => {
+            stringTestStub = vi.fn().mockImplementation((value: string, pattern: RegExp) => value.replace(pattern, '[PARTIALLY REDACTED BY REPLACER]'))
             utils = new RedactorUtils({
-              stringTests: [/a/i],
+              stringTests: [{ pattern: /hello/i, replacer: stringTestStub as unknown as ComplexStringTest['replacer'] }],
             })
             // @ts-expect-error - redactValue is private but we're testing it
             redactValueSpy = vi.spyOn(utils, 'redactValue')
@@ -1154,138 +1104,115 @@ describe('RedactorUtils', () => {
             expect(redactValueSpy).not.toHaveBeenCalled()
           })
 
-          it('should return the value unchanged', () => {
+          it('should call the replacer', () => {
+            expect(stringTestStub).toHaveBeenCalledOnce()
+            // @ts-expect-error - config is private but we're testing it
+            expect(stringTestStub).toHaveBeenNthCalledWith(1, 'Hello, world!', utils.config.stringTests[0]?.pattern)
+          })
+
+          it('should return the result of the replacer', () => {
+            expect(result).toEqual({ transformed: '[PARTIALLY REDACTED BY REPLACER], world!', redactingParent: false })
+          })
+        })
+
+        describe('when the value does not match the RegExp', () => {
+          beforeEach(() => {
+            stringTestStub = vi.fn().mockImplementation((value: string, pattern: RegExp) => value.replace(pattern, '[PARTIALLY REDACTED BY REPLACER]'))
+            utils = new RedactorUtils({
+              stringTests: [{ pattern: /^hello$/i, replacer: stringTestStub as unknown as ComplexStringTest['replacer'] }],
+            })
+            // @ts-expect-error - redactValue is private but we're testing it
+            redactValueSpy = vi.spyOn(utils, 'redactValue')
+            // @ts-expect-error - applyStringTransformations is private but we're testing it
+            result = utils.applyStringTransformations('Hello, world!', false)
+          })
+
+          it('should not call redactValue', () => {
+            expect(redactValueSpy).not.toHaveBeenCalled()
+          })
+
+          it('should not call the replacer', () => {
+            expect(stringTestStub).not.toHaveBeenCalled()
+          })
+
+          it('should return the result of the replacer', () => {
             expect(result).toEqual({ transformed: 'Hello, world!', redactingParent: false })
           })
         })
       })
 
-      describe('when stringTests contains a ComplexStringTest', () => {
-        beforeEach(() => {
-          stringTestStub = vi.fn().mockImplementation((value: string) => value.replace(/a/gi, '*'))
-          utils = new RedactorUtils({
-            stringTests: [{ pattern: /hello/i, replacer: stringTestStub as unknown as ComplexStringTest['replacer'] }],
+      describe('with a replacer that fully redacts the value', () => {
+        describe('when the value matches the RegExp', () => {
+          beforeEach(() => {
+            stringTestStub = vi.fn().mockImplementation(() => '[FULLY REDACTED BY REPLACER]')
+            utils = new RedactorUtils({
+              stringTests: [{ pattern: /^hello/i, replacer: stringTestStub as unknown as ComplexStringTest['replacer'] }],
+            })
+            // @ts-expect-error - redactValue is private but we're testing it
+            redactValueSpy = vi.spyOn(utils, 'redactValue')
+            // @ts-expect-error - applyStringTransformations is private but we're testing it
+            result = utils.applyStringTransformations('Hello, world!', false)
           })
-          // @ts-expect-error - redactValue is private but we're testing it
-          redactValueSpy = vi.spyOn(utils, 'redactValue')
-          // @ts-expect-error - applyStringTransformations is private but we're testing it
-          result = utils.applyStringTransformations('Hello, world!', false)
-        })
-  
-        it('should call redactValue', () => {
-          expect(stringTestStub).toHaveBeenCalledOnce()
-          // @ts-expect-error - config is private but we're testing it
-          expect(stringTestStub).toHaveBeenNthCalledWith(1, 'Hello, world!', utils.config.stringTests[0]?.pattern)
-        })
-  
-        it('should return the result of redactValue', () => {
-          expect(result).toEqual({ transformed: stringTestStub.mock.results[0]?.value, redactingParent: false })
-        })
-      })
 
-      describe('when stringTests is explicitly undefined', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            stringTests: undefined,
+          it('should not call redactValue', () => {
+            expect(redactValueSpy).not.toHaveBeenCalled()
           })
-          // @ts-expect-error - redactValue is private but we're testing it
-          redactValueSpy = vi.spyOn(utils, 'redactValue')
-          // @ts-expect-error - applyStringTransformations is private but we're testing it
-          result = utils.applyStringTransformations('Hello, world!', false)
-        })
 
-        it('should return the value unchanged', () => {
-          expect(result).toEqual({ transformed: 'Hello, world!', redactingParent: false })
-        })
-
-        it('should not call redactValue', () => {
-          expect(redactValueSpy).not.toHaveBeenCalled()
-        })
-      })
-
-      describe('when both partialStringTests and stringTests are empty', () => {
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            partialStringTests: [],
-            stringTests: [],
+          it('should call the replacer', () => {
+            expect(stringTestStub).toHaveBeenCalledOnce()
+            // @ts-expect-error - config is private but we're testing it
+            expect(stringTestStub).toHaveBeenNthCalledWith(1, 'Hello, world!', utils.config.stringTests[0]?.pattern)
           })
-          // @ts-expect-error - redactValue is private but we're testing it
-          redactValueSpy = vi.spyOn(utils, 'redactValue')
-          // @ts-expect-error - applyStringTransformations is private but we're testing it
-          result = utils.applyStringTransformations('Hello, world!', false)
+
+          it('should return the result of the replacer', () => {
+            expect(result).toEqual({ transformed: '[FULLY REDACTED BY REPLACER]', redactingParent: false })
+          })
         })
 
-        it('should return the value unchanged', () => {
-          expect(result).toEqual({ transformed: 'Hello, world!', redactingParent: false })
-        })
+        describe('when the value does not match the RegExp', () => {
+          beforeEach(() => {
+            stringTestStub = vi.fn().mockImplementation(() => '[FULLY REDACTED BY REPLACER]')
+            utils = new RedactorUtils({
+              stringTests: [{ pattern: /^hello$/i, replacer: stringTestStub as unknown as ComplexStringTest['replacer'] }],
+            })
+            // @ts-expect-error - redactValue is private but we're testing it
+            redactValueSpy = vi.spyOn(utils, 'redactValue')
+            // @ts-expect-error - applyStringTransformations is private but we're testing it
+            result = utils.applyStringTransformations('Hello, world!', false)
+          })
 
-        it('should not call redactValue', () => {
-          expect(redactValueSpy).not.toHaveBeenCalled()
+          it('should not call redactValue', () => {
+            expect(redactValueSpy).not.toHaveBeenCalled()
+          })
+
+          it('should not call the replacer', () => {
+            expect(stringTestStub).not.toHaveBeenCalled()
+          })
+
+          it('should return the value unchanged', () => {
+            expect(result).toEqual({ transformed: 'Hello, world!', redactingParent: false })
+          })
         })
       })
     })
 
-    describe('when partialStringTests is not empty', () => {
-      describe('when the replacer changes the value', () => {
-        let partialStringTestSpy: MockInstance<RedactorUtils['partialStringRedact']>
-        let redactValueSpy: MockInstance<RedactorUtils['redactValue']>
-        let result: unknown
-
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            // Only partialStringTests, no stringTests to avoid confusion
-            partialStringTests: [{ pattern: /^hello/i, replacer: (value: string) => value.replace(/hello/i, '[REDACTED]') }],
-          })
-          partialStringTestSpy = vi.spyOn(utils, 'partialStringRedact')
-          // @ts-expect-error - redactValue is private but we're testing it
-          redactValueSpy = vi.spyOn(utils, 'redactValue')
-          // @ts-expect-error - applyStringTransformations is private but we're testing it
-          result = utils.applyStringTransformations('Hello, world!', false)
+    describe('when stringTests is explicitly undefined', () => {
+      beforeEach(() => {
+        utils = new RedactorUtils({
+          stringTests: undefined,
         })
-
-        it('should call partialStringRedact', () => {
-          expect(partialStringTestSpy).toHaveBeenCalledOnce()
-          expect(partialStringTestSpy).toHaveBeenNthCalledWith(1, 'Hello, world!')
-        })
-
-        it('should not call redactValue', () => {
-          expect(redactValueSpy).not.toHaveBeenCalled()
-        })
-
-        it('should return the result of partialStringRedact and redactingParent', () => {
-          expect(result).toEqual({ transformed: '[REDACTED], world!', redactingParent: false })
-        })
+        // @ts-expect-error - redactValue is private but we're testing it
+        redactValueSpy = vi.spyOn(utils, 'redactValue')
+        // @ts-expect-error - applyStringTransformations is private but we're testing it
+        result = utils.applyStringTransformations('Hello, world!', false)
       })
 
-      describe('when the replacer does not change the value', () => {
-        let partialStringTestSpy: MockInstance<RedactorUtils['partialStringRedact']>
-        let redactValueSpy: MockInstance<RedactorUtils['redactValue']>
-        let result: unknown
+      it('should return the value unchanged', () => {
+        expect(result).toEqual({ transformed: 'Hello, world!', redactingParent: false })
+      })
 
-        beforeEach(() => {
-          utils = new RedactorUtils({
-            // Pattern that won't match the test string
-            partialStringTests: [{ pattern: /notfound/i, replacer: (_value: string) => '[PARTIALLY REDACTED]' }],
-          })
-          partialStringTestSpy = vi.spyOn(utils, 'partialStringRedact')
-          // @ts-expect-error - redactValue is private but we're testing it
-          redactValueSpy = vi.spyOn(utils, 'redactValue')
-          // @ts-expect-error - applyStringTransformations is private but we're testing it
-          result = utils.applyStringTransformations('Hello, world!', false)
-        })
-
-        it('should call partialStringRedact', () => {
-          expect(partialStringTestSpy).toHaveBeenCalledOnce()
-          expect(partialStringTestSpy).toHaveBeenNthCalledWith(1, 'Hello, world!')
-        })
-
-        it('should not call redactValue', () => {
-          expect(redactValueSpy).not.toHaveBeenCalled()
-        })
-
-        it('should return the value unchanged since no transformations occurred', () => {
-          expect(result).toEqual({ transformed: 'Hello, world!', redactingParent: false })
-        })
+      it('should not call redactValue', () => {
+        expect(redactValueSpy).not.toHaveBeenCalled()
       })
     })
   })
@@ -1342,13 +1269,13 @@ describe('RedactorUtils', () => {
               expect(shouldRedactKeySpy).toHaveBeenCalledOnce()
               expect(shouldRedactKeySpy).toHaveBeenNthCalledWith(1, 'a')
             })
-  
+
             it('should call redactValue', () => {
               expect(applyStringTransformationsSpy).not.toHaveBeenCalled()
               expect(redactValueSpy).toHaveBeenCalledOnce()
               expect(redactValueSpy).toHaveBeenNthCalledWith(1, 'Hello, world!', false, undefined)
             })
-  
+
             it('should return the result of redactValue', () => {
               expect(result).toEqual(redactValueSpy.mock.results[0]?.value)
             })
@@ -1396,7 +1323,7 @@ describe('RedactorUtils', () => {
           // @ts-expect-error - handlePrimitiveValue is private but we're testing it
           result = utils.handlePrimitiveValue('Hello, world!', '_transformer', true)
         })
-        
+
         it('should return the value unchanged', () => {
           expect(result).toEqual({ transformed: 'Hello, world!', redactingParent: true })
         })
@@ -1456,7 +1383,7 @@ describe('RedactorUtils', () => {
         expect(applyStringTransformationsSpy).not.toHaveBeenCalled()
       })
 
-      it('should not call shouldRedactKey', () => { 
+      it('should not call shouldRedactKey', () => {
         expect(shouldRedactKeySpy).not.toHaveBeenCalled()
       })
     })
@@ -1506,7 +1433,7 @@ describe('RedactorUtils', () => {
       it('should not call handleRetainStructure', () => {
         expect(handleRetainStructureSpy).not.toHaveBeenCalled()
       })
-      
+
       it('should not call shouldRedactKey', () => {
         expect(shouldRedactKeySpy).not.toHaveBeenCalled()
       })
@@ -1545,7 +1472,7 @@ describe('RedactorUtils', () => {
   describe('handleRetainStructure', () => {
     let findMatchingKeyConfigSpy: MockInstance<RedactorUtils['findMatchingKeyConfig']>
     let result: unknown
-    
+
     describe('when the value is an object', () => {
       let value = { a: 'b' }
 
@@ -1844,10 +1771,10 @@ describe('RedactorUtils', () => {
         it('should replace direct self-reference', () => {
           const input: any = { name: 'test' }
           input.self = input
-          
+
           // @ts-expect-error - replaceCircularReferences is private but we're testing it
           result = utils.replaceCircularReferences(input)
-          
+
           expect(result).not.toBe(input)
           expect(result).toEqual({
             name: 'test',
@@ -1863,10 +1790,10 @@ describe('RedactorUtils', () => {
           const input: any = { name: 'test' }
           input.ref1 = input
           input.ref2 = input
-          
+
           // @ts-expect-error - replaceCircularReferences is private but we're testing it
           result = utils.replaceCircularReferences(input)
-          
+
           expect(result).not.toBe(input)
           expect(result).toEqual({
             name: 'test',
@@ -1888,10 +1815,10 @@ describe('RedactorUtils', () => {
         it('should replace direct self-reference in arrays', () => {
           const input: any = ['test', 'value']
           input.push(input)
-          
+
           // @ts-expect-error - replaceCircularReferences is private but we're testing it
           result = utils.replaceCircularReferences(input)
-          
+
           expect(result).not.toBe(input)
           expect(result).toEqual([
             'test',
@@ -1907,10 +1834,10 @@ describe('RedactorUtils', () => {
         it('should handle multiple self-references in arrays', () => {
           const input: any = ['test']
           input.push(input, input)
-          
+
           // @ts-expect-error - replaceCircularReferences is private but we're testing it
           result = utils.replaceCircularReferences(input)
-          
+
           expect(result).not.toBe(input)
           expect(result).toEqual([
             'test',
@@ -1930,18 +1857,18 @@ describe('RedactorUtils', () => {
 
       describe('nested circular references', () => {
         it('should handle circular reference in nested objects', () => {
-          const input: any = { 
-            level1: { 
-              level2: { 
-                data: 'deep' 
-              } 
-            } 
+          const input: any = {
+            level1: {
+              level2: {
+                data: 'deep'
+              }
+            }
           }
           input.level1.level2.circular = input
-          
+
           // @ts-expect-error - replaceCircularReferences is private but we're testing it
           result = utils.replaceCircularReferences(input)
-          
+
           expect(result).not.toBe(input)
           expect(result).toEqual({
             level1: {
@@ -1959,17 +1886,17 @@ describe('RedactorUtils', () => {
 
         it('should handle circular reference in nested arrays', () => {
           const input: any = [
-            'first', 
+            'first',
             [
-              'second', 
+              'second',
               ['third']
             ]
           ]
           input[1][1].push(input)
-          
+
           // @ts-expect-error - replaceCircularReferences is private but we're testing it
           result = utils.replaceCircularReferences(input)
-          
+
           expect(result).not.toBe(input)
           expect(result).toEqual([
             'first',
@@ -1995,10 +1922,10 @@ describe('RedactorUtils', () => {
             items: ['a', 'b']
           }
           input.items.push(input)
-          
+
           // @ts-expect-error - replaceCircularReferences is private but we're testing it
           result = utils.replaceCircularReferences(input)
-          
+
           expect(result).not.toBe(input)
           expect(result).toEqual({
             data: 'test',
@@ -2020,10 +1947,10 @@ describe('RedactorUtils', () => {
             { name: 'test', value: 42 }
           ]
           input[1].parent = input
-          
+
           // @ts-expect-error - replaceCircularReferences is private but we're testing it
           result = utils.replaceCircularReferences(input)
-          
+
           expect(result).not.toBe(input)
           expect(result).toEqual([
             'start',
@@ -2046,12 +1973,12 @@ describe('RedactorUtils', () => {
         const objB: any = { name: 'B' }
         objA.refToB = objB
         objB.refToA = objA
-        
+
         const input = { a: objA, b: objB }
-        
+
         // @ts-expect-error - replaceCircularReferences is private but we're testing it
         result = utils.replaceCircularReferences(input)
-        
+
         expect(result).not.toBe(input)
         expect(result).toEqual({
           a: {
@@ -2082,10 +2009,10 @@ describe('RedactorUtils', () => {
         it('should handle empty object path correctly', () => {
           const input: any = { root: true }
           input.circular = input
-          
+
           // @ts-expect-error - replaceCircularReferences is private but we're testing it
           result = utils.replaceCircularReferences(input)
-          
+
           expect(result).toEqual({
             root: true,
             circular: {
