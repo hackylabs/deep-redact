@@ -102,7 +102,6 @@ describe('DeepRedact', () => {
             retainStructure: false,
             remove: false,
             replaceStringByLength: false,
-            partialStringTests: [],
             stringTests: [],
             transformers: standardTransformers,
             replacement: '[REDACTED]',
