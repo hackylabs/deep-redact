@@ -3,14 +3,12 @@ import fastRedact from 'fast-redact'
 import { obglob } from '@hackylabs/obglob'
 import { DeepRedact } from '../../src'
 import { dummyUser, dummyUserXml } from '../setup/dummyUser'
-import { blacklistedKeys, complexBlacklistedKeys, fastRedactArrayBlacklistedKeys, fastRedactBlacklistedKeys, ObGlobPatterns, stringPattern, xmlPattern } from '../setup/blacklist'
+import { blacklistedKeys, complexBlacklistedKeys, fastRedactBlacklistedKeys, ObGlobPatterns, stringPattern, xmlPattern } from '../setup/blacklist'
 
 const jsonStringifyLargeObject = () => JSON.stringify(dummyUser)
-const jsonStringify1000LargeObjects = () => JSON.stringify(Array(1000).fill(dummyUser))
 
 const redactionConfigs = {
   fastRedact: fastRedact({ paths: fastRedactBlacklistedKeys }),
-  fastRedactArray: fastRedact({ paths: fastRedactArrayBlacklistedKeys }),
   obglob: (data) => obglob(data, { patterns: ObGlobPatterns, includeUnmatched: true, callback: () => '[REDACTED]' }),
   deepRedactDefaultConfig: new DeepRedact({ blacklistedKeys }),
   deepRedactConfigPerKey: new DeepRedact({ blacklistedKeys: complexBlacklistedKeys }),
@@ -37,7 +35,9 @@ describe('Redaction benchmark', () => {
   })
 
   bench('JSON.stringify, 1000 large objects', () => {
-    jsonStringify1000LargeObjects()
+    for (let i = 0; i < 1000; i++) {
+      jsonStringifyLargeObject()
+    }
   })
 
   bench('fast redact, large object', () => {
@@ -45,7 +45,9 @@ describe('Redaction benchmark', () => {
   })
 
   bench('fast redact, 1000 large objects', () => {
-    redactionConfigs.fastRedactArray(Array(1000).fill(dummyUser))
+    for (let i = 0; i < 1000; i++) {
+      redactionConfigs.fastRedact(dummyUser)
+    }
   })
 
   bench('ObGlob, large object', () => {
@@ -61,15 +63,21 @@ describe('Redaction benchmark', () => {
   })
 
   bench('ObGlob, 1000 large objects', () => {
-    redactionConfigs.obglob(Array(1000).fill(dummyUser))
+    for (let i = 0; i < 1000; i++) {
+      redactionConfigs.obglob(dummyUser)
+    }
   })
 
   bench('Regex replace, 1000 large objects', () => {
-    JSON.stringify(Array(1000).fill(dummyUser)).replace(stringPattern, '"$1":"[REDACTED]"')
+    for (let i = 0; i < 1000; i++) {
+      JSON.stringify(dummyUser).replace(stringPattern, '"$1":"[REDACTED]"')
+    }
   })
 
   bench('DeepRedact, default config, 1000 large objects', () => {
-    redactionConfigs.deepRedactDefaultConfig.redact(Array(1000).fill(dummyUser))
+    for (let i = 0; i < 1000; i++) {
+      redactionConfigs.deepRedactDefaultConfig.redact(dummyUser)
+    }
   })
 
   bench('DeepRedact, config per key, single object', () => {
@@ -109,6 +117,8 @@ describe('Redaction benchmark', () => {
   })
 
   bench('DeepRedact, partial redaction large string', () => {
-    redactionConfigs.deepRedactPartialRedaction.redact(dummyUserXml.repeat(1000))
+    for (let i = 0; i < 1000; i++) {
+      redactionConfigs.deepRedactPartialRedaction.redact(dummyUserXml)
+    }
   })
 })

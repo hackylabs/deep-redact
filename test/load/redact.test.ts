@@ -1,12 +1,12 @@
 import http from 'http'
-import { afterAll, beforeAll, describe, it, expect } from 'vitest'
-import { writeFileSync } from 'fs'
+import autocannon from 'autocannon'
 import fastRedact from 'fast-redact'
+import { writeFileSync } from 'fs'
 import { obglob } from '@hackylabs/obglob'
-import { DeepRedact } from '../../src'
-import { dummyUser } from '../setup/dummyUser'
+import { afterAll, beforeAll, describe, it } from 'vitest'
 import { blacklistedKeys, complexBlacklistedKeys, fastRedactBlacklistedKeys, ObGlobPatterns, stringPattern } from '../setup/blacklist'
-import autocannon, { type Result } from 'autocannon'
+import { dummyUser } from '../setup/dummyUser'
+import { DeepRedact } from '../../src'
 
 let server: http.Server
 const PORT = 3456
