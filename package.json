@@ -132,8 +132,6 @@
     "eslint-plugin-n": "17.9.0",
     "eslint-plugin-promise": "7.0.0",
     "fast-redact": "3.5.0",
-    "image-charts": "6.1.19",
-    "superjson": "2.2.1",
     "typescript": "5.6.2",
     "vitest": "2.0.4"
   },
