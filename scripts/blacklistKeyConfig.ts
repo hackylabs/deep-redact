@@ -26,6 +26,18 @@ const tableData: TableData = [
     required: 'N',
   },
   {
+    key: 'replacement',
+    type: 'string￨function',
+    default: 'Main options `replacement`',
+    required: 'N',
+  },
+  {
+    key: 'replaceStringByLength',
+    type: 'boolean',
+    default: 'Main options `replaceStringByLength`',
+    required: 'N',
+  },
+  {
     key: 'retainStructure',
     type: 'boolean',
     default: 'Main options `retainStructure`',
