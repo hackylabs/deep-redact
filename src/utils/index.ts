@@ -82,7 +82,7 @@ class RedactorUtils {
    * @returns The transformed value
    * @private
    */
-  private applyTransformers = (value: unknown, key: string, referenceMap: WeakMap<object, string>): unknown => {
+  private applyTransformers = (value: unknown, key?: string, referenceMap?: WeakMap<object, string>): unknown => {
     if (typeof value === 'string') return value
 
     let transformed = value
@@ -424,6 +424,23 @@ class RedactorUtils {
   }
 
   /**
+   * Checks if a non-traversable value requires transformers
+   * @param value - The value to check
+   * @returns Whether the value requires transformers
+   * @private
+   */
+  private requiresTransformers(value: unknown): boolean {
+    if (typeof value === 'bigint') return true
+    if (value instanceof Date) return true
+    if (value instanceof Error) return true
+    if (value instanceof Map) return true
+    if (value instanceof RegExp) return true
+    if (value instanceof Set) return true
+    if (value instanceof URL) return true
+    return false
+  }
+
+  /**
    * Traverses the raw value
    * @param raw - The raw value to traverse
    * @returns The transformed value
@@ -434,7 +451,7 @@ class RedactorUtils {
       return transformed
     }
 
-    if (typeof raw !== 'object' || raw === null) return raw
+    if (typeof raw !== 'object' || raw === null || this.requiresTransformers(raw)) return this.applyTransformers(raw)
 
     const referenceMap = new WeakMap<object, string>()
     const cleanedInput = this.replaceCircularReferences(raw)
