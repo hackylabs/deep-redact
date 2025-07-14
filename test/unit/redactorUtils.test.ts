@@ -156,6 +156,30 @@ describe('RedactorUtils', () => {
       })
     })
 
+    describe('when the value is a bigint', () => {
+      let applyTransformersSpy: MockInstance<RedactorUtils['applyTransformers']>
+      beforeEach(() => {
+        utils = new RedactorUtils({})
+        // @ts-expect-error - applyTransformers is private but we're testing it
+        applyTransformersSpy = vi.spyOn(utils, 'applyTransformers')
+        result = utils.traverse(BigInt(123))
+      })
+
+      it('should call the transformers', () => {
+        expect(applyTransformersSpy).toHaveBeenCalledWith(BigInt(123))
+      })
+
+      it('should return the value transformed but not redacted', () => {
+        expect(result).toEqual({
+          _transformer: 'bigint',
+          value: {
+            number: '123',
+            radix: 10,
+          },
+        })
+      })
+    })
+
     describe('when the value is an array', () => {
       describe('with stringTests', () => {
         beforeEach(() => {
@@ -551,6 +575,99 @@ describe('RedactorUtils', () => {
             datetime: expect.any(String),
           },
         })
+      })
+    })
+  })
+
+  describe('requiresTransformers', () => {
+    describe('when the value is a date', () => {
+      it('should return true', () => {
+        // @ts-expect-error - requiresTransformers is private but we're testing it
+        expect(utils.requiresTransformers(new Date())).toBe(true)
+      })
+    })
+
+    describe('when the value is an error', () => {
+      it('should return true', () => {
+        // @ts-expect-error - requiresTransformers is private but we're testing it
+        expect(utils.requiresTransformers(new Error('test'))).toBe(true)
+      })
+    })
+
+    describe('when the value is a map', () => {
+      it('should return true', () => {
+        // @ts-expect-error - requiresTransformers is private but we're testing it
+        expect(utils.requiresTransformers(new Map([['a', 1]]))).toBe(true)
+      })
+    })
+
+    describe('when the value is a set', () => {
+      it('should return true', () => {
+        // @ts-expect-error - requiresTransformers is private but we're testing it
+        expect(utils.requiresTransformers(new Set([1]))).toBe(true)
+      })
+    })
+
+    describe('when the value is a regex', () => {
+      it('should return true', () => {
+        // @ts-expect-error - requiresTransformers is private but we're testing it
+        expect(utils.requiresTransformers(/test/)).toBe(true)
+      })
+    })
+
+    describe('when the value is a URL', () => {
+      it('should return true', () => {
+        // @ts-expect-error - requiresTransformers is private but we're testing it
+        expect(utils.requiresTransformers(new URL('https://example.com'))).toBe(true)
+      })
+    })
+
+    describe('when the value is a bigint', () => {
+      it('should return true', () => {
+        // @ts-expect-error - requiresTransformers is private but we're testing it
+        expect(utils.requiresTransformers(BigInt(123))).toBe(true)
+      })
+    })
+
+    describe('when the value is a string', () => {
+      it('should return false', () => {
+        // @ts-expect-error - requiresTransformers is private but we're testing it
+        expect(utils.requiresTransformers('test')).toBe(false)
+      })
+    })
+
+    describe('when the value is a number', () => {
+      it('should return false', () => {
+        // @ts-expect-error - requiresTransformers is private but we're testing it
+        expect(utils.requiresTransformers(123)).toBe(false)
+      })
+    })
+
+    describe('when the value is a boolean', () => {
+      it('should return false', () => {
+        // @ts-expect-error - requiresTransformers is private but we're testing it
+        expect(utils.requiresTransformers(true)).toBe(false)
+      })
+    })
+
+    describe('when the value is a function', () => {
+      it('should return false', () => {
+        // @ts-expect-error - requiresTransformers is private but we're testing it
+        expect(utils.requiresTransformers(() => {})).toBe(false)
+      })
+    })
+
+    describe('when the value is undefined', () => {
+      it('should return false', () => {
+        // @ts-expect-error - requiresTransformers is private but we're testing it
+        expect(utils.requiresTransformers(undefined)).toBe(false)
+      })
+    })
+
+    describe('when the value is null', () => {
+      it('should return false', () => {
+        // @ts-expect-error - requiresTransformers is private but we're testing it
+        expect(utils.requiresTransformers(null)).toBe(false)
       })
     })
   })
