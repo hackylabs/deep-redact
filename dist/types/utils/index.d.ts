@@ -121,6 +121,13 @@ declare class RedactorUtils {
      */
     private replaceCircularReferences;
     /**
+     * Checks if a non-traversable value requires transformers
+     * @param value - The value to check
+     * @returns Whether the value requires transformers
+     * @private
+     */
+    private requiresTransformers;
+    /**
      * Traverses the raw value
      * @param raw - The raw value to traverse
      * @returns The transformed value

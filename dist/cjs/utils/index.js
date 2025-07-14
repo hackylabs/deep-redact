@@ -159,8 +159,8 @@ class RedactorUtils {
                 const { transformed } = this.applyStringTransformations(raw, false);
                 return transformed;
             }
-            if (typeof raw !== 'object' || raw === null)
-                return raw;
+            if (typeof raw !== 'object' || raw === null || this.requiresTransformers(raw))
+                return this.applyTransformers(raw);
             const referenceMap = new WeakMap();
             const cleanedInput = this.replaceCircularReferences(raw);
             const { output, stack } = this.initialiseTraversal(cleanedInput);
@@ -424,6 +424,29 @@ class RedactorUtils {
             return result;
         };
         return processValue(raw, '');
+    }
+    /**
+     * Checks if a non-traversable value requires transformers
+     * @param value - The value to check
+     * @returns Whether the value requires transformers
+     * @private
+     */
+    requiresTransformers(value) {
+        if (typeof value === 'bigint')
+            return true;
+        if (value instanceof Date)
+            return true;
+        if (value instanceof Error)
+            return true;
+        if (value instanceof Map)
+            return true;
+        if (value instanceof RegExp)
+            return true;
+        if (value instanceof Set)
+            return true;
+        if (value instanceof URL)
+            return true;
+        return false;
     }
 }
 exports.default = RedactorUtils;
