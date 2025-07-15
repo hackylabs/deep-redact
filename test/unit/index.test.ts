@@ -9,7 +9,6 @@ import { dummyUser } from '../setup/dummyUser'
 import { blacklistedKeys } from '../setup/blacklist'
 import RedactorUtils from '../../src/utils/'
 import { BaseDeepRedactConfig } from '../../src/types'
-import { standardTransformers } from '../../src/utils/standardTransformers'
 
 describe('DeepRedact', () => {
   afterEach(() => {
@@ -103,7 +102,19 @@ describe('DeepRedact', () => {
             remove: false,
             replaceStringByLength: false,
             stringTests: [],
-            transformers: standardTransformers,
+            transformers: {
+              byType: {
+                bigint: [expect.any(Function)]
+              },
+              byConstructor: {
+                Date: [expect.any(Function)],
+                Error: [expect.any(Function)],
+                Map: [expect.any(Function)],
+                RegExp: [expect.any(Function)],
+                Set: [expect.any(Function)],
+                URL: [expect.any(Function)]
+              }
+            },
             replacement: '[REDACTED]',
             types: ['string'],
           })

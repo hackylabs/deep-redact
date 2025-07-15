@@ -1,5 +1,6 @@
-import type { BaseDeepRedactConfig, RedactorUtilsConfig, Stack, BlacklistKeyConfig } from '../types'
-import { standardTransformers } from './standardTransformers'
+import type { RedactorUtilsConfig, Stack, BlacklistKeyConfig, TransformerConfig, OrganisedTransformers } from '../types'
+import { organisedStandardTransformers } from './standardTransformers'
+import { TransformerRegistry } from './TransformerRegistry'
 
 const defaultConfig: Required<RedactorUtilsConfig> = {
   stringTests: [],
@@ -11,7 +12,7 @@ const defaultConfig: Required<RedactorUtilsConfig> = {
   replaceStringByLength: false,
   replacement: '[REDACTED]',
   types: ['string'],
-  transformers: standardTransformers,
+  transformers: organisedStandardTransformers,
 }
 
 class RedactorUtils {
@@ -39,6 +40,12 @@ class RedactorUtils {
    */
   private readonly blacklistedKeysTransformed: Array<BlacklistKeyConfig> = []
 
+  /**
+   * The transformer registry for efficient transformer lookup
+   * @private
+   */
+  private readonly transformerRegistry: TransformerRegistry = new TransformerRegistry()
+
   constructor(customConfig: RedactorUtilsConfig) {
     this.config = {
       ...defaultConfig,
@@ -46,9 +53,59 @@ class RedactorUtils {
     }
 
     this.blacklistedKeysTransformed = (customConfig.blacklistedKeys ?? []).filter(key => typeof key !== 'string').map((key) => this.createTransformedBlacklistedKey(key, customConfig))
-
     const stringKeys = (customConfig.blacklistedKeys ?? []).filter(key => typeof key === 'string')
     if (stringKeys.length > 0) this.computedRegex = new RegExp(stringKeys.map(this.sanitiseStringForRegex).filter(Boolean).join('|'))
+    this.setupTransformerRegistry(this.config.transformers)
+  }
+
+  /**
+   * Sets up the transformer registry based on the configuration
+   * @param transformers - The transformer configuration
+   * @private
+   */
+  private setupTransformerRegistry(transformers: TransformerConfig): void {
+    if (Array.isArray(transformers)) {
+      transformers.forEach(transformer => { this.transformerRegistry.addFallbackTransformer(transformer) })
+    } else {
+      const organised = transformers as OrganisedTransformers
+      if (organised.byType) {
+        Object.entries(organised.byType).forEach(([type, typeTransformers]) => {
+          if (typeTransformers) {
+            typeTransformers.forEach(transformer => {
+              this.transformerRegistry.addTypeTransformer(type, transformer)
+            })
+          }
+        })
+      }
+
+      if (organised.byConstructor) {
+        Object.entries(organised.byConstructor).forEach(([constructorName, constructorTransformers]) => {
+          if (constructorTransformers) {
+            const constructorMap: Record<string, Function> = {
+              Date,
+              Error,
+              Map,
+              Set,
+              RegExp,
+              URL,
+            }
+            
+            const constructor = constructorMap[constructorName]
+            if (constructor) {
+              constructorTransformers.forEach(transformer => {
+                this.transformerRegistry.addConstructorTransformer(constructor, transformer)
+              })
+            }
+          }
+        })
+      }
+
+      if (organised.fallback) {
+        organised.fallback.forEach(transformer => {
+          this.transformerRegistry.addFallbackTransformer(transformer)
+        })
+      }
+    }
   }
 
   private createTransformedBlacklistedKey = (key: RegExp | BlacklistKeyConfig, customConfig: RedactorUtilsConfig): BlacklistKeyConfig => {
@@ -83,14 +140,7 @@ class RedactorUtils {
    * @private
    */
   private applyTransformers = (value: unknown, key?: string, referenceMap?: WeakMap<object, string>): unknown => {
-    if (typeof value === 'string') return value
-
-    let transformed = value
-    for (const transformer of this.config.transformers) {
-      transformed = transformer(transformed, key, referenceMap)
-      if (transformed !== value) return transformed
-    }
-    return value
+    return this.transformerRegistry.applyTransformers(value, key, referenceMap)
   }
 
   /**

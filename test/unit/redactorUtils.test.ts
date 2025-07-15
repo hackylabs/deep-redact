@@ -4,7 +4,6 @@ import {
 } from 'vitest'
 import RedactorUtils from '../../src/utils/'
 import type { BlacklistKeyConfig, ComplexStringTest, Transformer } from '../../src/types'
-import { standardTransformers } from '../../src/utils/standardTransformers'
 
 describe('RedactorUtils', () => {
   let utils: RedactorUtils
@@ -32,7 +31,19 @@ describe('RedactorUtils', () => {
           replaceStringByLength: false,
           replacement: '[REDACTED]',
           types: ['string'],
-          transformers: standardTransformers,
+          transformers: {
+            byType: {
+              bigint: [expect.any(Function)]
+            },
+            byConstructor: {
+              Date: [expect.any(Function)],
+              Error: [expect.any(Function)],
+              Map: [expect.any(Function)],
+              RegExp: [expect.any(Function)],
+              Set: [expect.any(Function)],
+              URL: [expect.any(Function)]
+            }
+          },
         })
       })
     })
@@ -67,7 +78,19 @@ describe('RedactorUtils', () => {
           remove: true,
           replaceStringByLength: true,
           types: ['string', 'number'],
-          transformers: standardTransformers,
+          transformers: {
+            byType: {
+              bigint: [expect.any(Function)]
+            },
+            byConstructor: {
+              Date: [expect.any(Function)],
+              Error: [expect.any(Function)],
+              Map: [expect.any(Function)],
+              RegExp: [expect.any(Function)],
+              Set: [expect.any(Function)],
+              URL: [expect.any(Function)]
+            }
+          },
         })
       })
     })
