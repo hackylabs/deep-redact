@@ -194,5 +194,3 @@ export type Stack = Array<{
   redactingParent: boolean
   keyConfig: BlacklistKeyConfig | undefined
 }>
-
-export type Logs = Array<{ path: string, message: string, raw: unknown, transformed: unknown }> | null
