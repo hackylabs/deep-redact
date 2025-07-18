@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const standardTransformers_1 = require("./standardTransformers");
+const TransformerRegistry_1 = require("./TransformerRegistry");
 const defaultConfig = {
     stringTests: [],
     blacklistedKeys: [],
@@ -36,6 +37,11 @@ class RedactorUtils {
          * @private
          */
         this.blacklistedKeysTransformed = [];
+        /**
+         * The transformer registry for efficient transformer lookup
+         * @private
+         */
+        this.transformerRegistry = new TransformerRegistry_1.TransformerRegistry();
         this.createTransformedBlacklistedKey = (key, customConfig) => {
             var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t;
             if (key instanceof RegExp) {
@@ -67,15 +73,7 @@ class RedactorUtils {
          * @private
          */
         this.applyTransformers = (value, key, referenceMap) => {
-            if (typeof value === 'string')
-                return value;
-            let transformed = value;
-            for (const transformer of this.config.transformers) {
-                transformed = transformer(transformed, key, referenceMap);
-                if (transformed !== value)
-                    return transformed;
-            }
-            return value;
+            return this.transformerRegistry.applyTransformers(value, key, referenceMap);
         };
         /**
          * Sanitises a string for the computed regex
@@ -192,6 +190,49 @@ class RedactorUtils {
         const stringKeys = ((_b = customConfig.blacklistedKeys) !== null && _b !== void 0 ? _b : []).filter(key => typeof key === 'string');
         if (stringKeys.length > 0)
             this.computedRegex = new RegExp(stringKeys.map(this.sanitiseStringForRegex).filter(Boolean).join('|'));
+        this.setupTransformerRegistry(this.config.transformers);
+    }
+    /**
+     * Sets up the transformer registry based on the configuration
+     * @param transformers - The transformer configuration
+     * @private
+     */
+    setupTransformerRegistry(transformers) {
+        if (Array.isArray(transformers)) {
+            transformers.forEach(transformer => { this.transformerRegistry.addFallbackTransformer(transformer); });
+        }
+        else {
+            const organised = transformers;
+            if (organised.byType) {
+                Object.entries(organised.byType).forEach(([type, typeTransformers]) => {
+                    if (typeTransformers) {
+                        typeTransformers.forEach(transformer => {
+                            this.transformerRegistry.addTypeTransformer(type, transformer);
+                        });
+                    }
+                });
+            }
+            if (organised.byConstructor) {
+                Object.entries(organised.byConstructor).forEach(([constructorName, constructorTransformers]) => {
+                    if (constructorTransformers) {
+                        const constructorMap = {
+                            Date,
+                            Error,
+                            Map,
+                            Set,
+                            RegExp,
+                            URL,
+                        };
+                        const constructor = constructorMap[constructorName];
+                        if (constructor) {
+                            constructorTransformers.forEach(transformer => {
+                                this.transformerRegistry.addConstructorTransformer(constructor, transformer);
+                            });
+                        }
+                    }
+                });
+            }
+        }
     }
     /**
      * Applies string transformations

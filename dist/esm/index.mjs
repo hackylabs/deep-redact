@@ -1,3 +1,4 @@
+import { organisedStandardTransformers, standardTransformers } from './utils/standardTransformers';
 import RedactorUtils from './utils';
 class DeepRedact {
     /**
@@ -36,4 +37,4 @@ class DeepRedact {
         return this.config.serialise ? JSON.stringify(redacted) : redacted;
     };
 }
-export { DeepRedact, DeepRedact as default, };
+export { DeepRedact, DeepRedact as default, standardTransformers, organisedStandardTransformers, };
