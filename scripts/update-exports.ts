@@ -37,11 +37,9 @@ function generateExports(dir: string = 'src'): ExportMap {
         const exportPath = generateExportPath(fullPath);
         const exportKey = exportPath === 'index' ? '.' : `./${exportPath}`;
 
-        // Convert paths to use proper extension and directory structure
-        const basePath = `./dist/${exportPath}`;
         exports[exportKey] = {
-          import: `${basePath.replace(/\.ts$/, '.mjs')}`,
-          require: `${basePath.replace(/\.ts$/, '.js')}`,
+          import: `./dist/esm/${exportPath}.mjs`,
+          require: `./dist/cjs/${exportPath}.js`,
           types: `./dist/types/${exportPath}.d.ts`,
         };
       }
@@ -69,4 +67,4 @@ function updatePackageJson() {
   );
 }
 
-updatePackageJson(); 
+updatePackageJson();
