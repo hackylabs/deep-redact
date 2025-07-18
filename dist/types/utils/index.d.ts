@@ -20,7 +20,18 @@ declare class RedactorUtils {
      * @private
      */
     private readonly blacklistedKeysTransformed;
+    /**
+     * The transformer registry for efficient transformer lookup
+     * @private
+     */
+    private readonly transformerRegistry;
     constructor(customConfig: RedactorUtilsConfig);
+    /**
+     * Sets up the transformer registry based on the configuration
+     * @param transformers - The transformer configuration
+     * @private
+     */
+    private setupTransformerRegistry;
     private createTransformedBlacklistedKey;
     /**
      * Applies transformers to a value

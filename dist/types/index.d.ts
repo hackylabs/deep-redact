@@ -1,4 +1,5 @@
-import type { DeepRedactConfig, RedactorUtilsConfig, BlacklistKeyConfig, Types, Transformer, ComplexStringTest, BaseDeepRedactConfig } from './types';
+import type { DeepRedactConfig, RedactorUtilsConfig, BlacklistKeyConfig, Types, Transformer, ComplexStringTest, BaseDeepRedactConfig, OrganisedTransformers, TransformerConfig } from './types';
+import { organisedStandardTransformers, standardTransformers } from './utils/standardTransformers';
 declare class DeepRedact {
     /**
      * The redactorUtils instance to handle the redaction.
@@ -25,4 +26,4 @@ declare class DeepRedact {
      */
     redact: (value: unknown) => unknown;
 }
-export { DeepRedact, DeepRedact as default, type BaseDeepRedactConfig, type RedactorUtilsConfig, type BlacklistKeyConfig, type ComplexStringTest, type Transformer, type Types, };
+export { DeepRedact, DeepRedact as default, type BaseDeepRedactConfig, type RedactorUtilsConfig, type BlacklistKeyConfig, type ComplexStringTest, type Transformer, type Types, type OrganisedTransformers, type TransformerConfig, standardTransformers, organisedStandardTransformers, };

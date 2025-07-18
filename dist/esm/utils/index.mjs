@@ -1,4 +1,5 @@
 import { standardTransformers } from './standardTransformers';
+import { TransformerRegistry } from './TransformerRegistry';
 const defaultConfig = {
     stringTests: [],
     blacklistedKeys: [],
@@ -32,6 +33,11 @@ class RedactorUtils {
      * @private
      */
     blacklistedKeysTransformed = [];
+    /**
+     * The transformer registry for efficient transformer lookup
+     * @private
+     */
+    transformerRegistry = new TransformerRegistry();
     constructor(customConfig) {
         this.config = {
             ...defaultConfig,
@@ -41,6 +47,49 @@ class RedactorUtils {
         const stringKeys = (customConfig.blacklistedKeys ?? []).filter(key => typeof key === 'string');
         if (stringKeys.length > 0)
             this.computedRegex = new RegExp(stringKeys.map(this.sanitiseStringForRegex).filter(Boolean).join('|'));
+        this.setupTransformerRegistry(this.config.transformers);
+    }
+    /**
+     * Sets up the transformer registry based on the configuration
+     * @param transformers - The transformer configuration
+     * @private
+     */
+    setupTransformerRegistry(transformers) {
+        if (Array.isArray(transformers)) {
+            transformers.forEach(transformer => { this.transformerRegistry.addFallbackTransformer(transformer); });
+        }
+        else {
+            const organised = transformers;
+            if (organised.byType) {
+                Object.entries(organised.byType).forEach(([type, typeTransformers]) => {
+                    if (typeTransformers) {
+                        typeTransformers.forEach(transformer => {
+                            this.transformerRegistry.addTypeTransformer(type, transformer);
+                        });
+                    }
+                });
+            }
+            if (organised.byConstructor) {
+                Object.entries(organised.byConstructor).forEach(([constructorName, constructorTransformers]) => {
+                    if (constructorTransformers) {
+                        const constructorMap = {
+                            Date,
+                            Error,
+                            Map,
+                            Set,
+                            RegExp,
+                            URL,
+                        };
+                        const constructor = constructorMap[constructorName];
+                        if (constructor) {
+                            constructorTransformers.forEach(transformer => {
+                                this.transformerRegistry.addConstructorTransformer(constructor, transformer);
+                            });
+                        }
+                    }
+                });
+            }
+        }
     }
     createTransformedBlacklistedKey = (key, customConfig) => {
         if (key instanceof RegExp) {
@@ -72,15 +121,7 @@ class RedactorUtils {
      * @private
      */
     applyTransformers = (value, key, referenceMap) => {
-        if (typeof value === 'string')
-            return value;
-        let transformed = value;
-        for (const transformer of this.config.transformers) {
-            transformed = transformer(transformed, key, referenceMap);
-            if (transformed !== value)
-                return transformed;
-        }
-        return value;
+        return this.transformerRegistry.applyTransformers(value, key, referenceMap);
     };
     /**
      * Sanitises a string for the computed regex

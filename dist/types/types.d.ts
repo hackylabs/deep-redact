@@ -1,5 +1,43 @@
 export type Types = 'string' | 'number' | 'bigint' | 'boolean' | 'object' | 'function' | 'symbol' | 'undefined';
 export type Transformer = (value: unknown, key?: string, reference?: WeakMap<object, unknown>) => unknown;
+/**
+ * Configuration for organised transformers by type and constructor
+ */
+export interface OrganisedTransformers {
+    /**
+     * Transformers for primitive types (based on typeof result)
+     */
+    byType?: {
+        bigint?: Transformer[];
+        string?: Transformer[];
+        number?: Transformer[];
+        boolean?: Transformer[];
+        symbol?: Transformer[];
+        function?: Transformer[];
+        object?: Transformer[];
+        undefined?: Transformer[];
+    };
+    /**
+     * Transformers for specific constructors (based on instanceof checks)
+     */
+    byConstructor?: {
+        Date?: Transformer[];
+        Error?: Transformer[];
+        Map?: Transformer[];
+        Set?: Transformer[];
+        RegExp?: Transformer[];
+        URL?: Transformer[];
+        [key: string]: Transformer[] | undefined;
+    };
+    /**
+     * Transformers that run on all values (like the current system)
+     */
+    fallback?: Transformer[];
+}
+/**
+ * Transformer configuration - supports both old array format and new organised format
+ */
+export type TransformerConfig = Transformer[] | OrganisedTransformers;
 export interface BlacklistKeyConfig {
     /**
      * Perform a fuzzy match on the key. This will match any key that contains the string, rather than a case-sensitive match.
@@ -131,25 +169,40 @@ export interface BaseDeepRedactConfig {
      */
     serialize?: boolean;
     /**
-     * A list of transformers to apply when transforming unsupported values.
-     * Each transformer should conditionally transform the value, or return the value unchanged to be passed to the next transformer.
-     * Transformers will be run in the order they are provided recursively over the entire object.
+     * Configuration for transformers to apply when transforming unsupported values.
+     * Supports both legacy array format and new organised format for better performance.
+     *
+     * Legacy format: Array of transformers that run on all values in order
+     * New format: Object with transformers organised by type and constructor
+     *
      * @default []
-     * @example [
-     *   // redact a key by name.
-     *   standardTransformers.redactByKey,
-     *   // convert a Date to an ISO string.
-     *   (value: unknown) => {
-     *     if (!(value instanceof Date)) return value
-     *     return value.toISOString()
-     *   },
-     *   // convert a BigInt to a string.
+     * @example
+     * // Legacy format (still supported)
+     * [
      *   (value: unknown) => {
      *     if (typeof value !== 'bigint') return value
      *     return value.toString(10)
+     *   },
+     *   (value: unknown) => {
+     *     if (!(value instanceof Date)) return value
+     *     return value.toISOString()
      *   }
+     * ]
+     *
+     * @example
+     * {
+     *   byType: {
+     *     bigint: [(value: unknown) => (value as bigint).toString(10)]
+     *   },
+     *   byConstructor: {
+     *     Date: [(value: unknown) => (value as Date).toISOString()]
+     *   },
+     *   fallback: [
+     *     // transformers that run on all values
+     *   ]
+     * }
      */
-    transformers?: Array<Transformer>;
+    transformers?: TransformerConfig;
 }
 export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, '_blacklistedKeysTransformed' | 'blacklistedKeys' | 'stringTests'>> & ({
     blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys'];
@@ -169,9 +222,3 @@ export type Stack = Array<{
     redactingParent: boolean;
     keyConfig: BlacklistKeyConfig | undefined;
 }>;
-export type Logs = Array<{
-    path: string;
-    message: string;
-    raw: unknown;
-    transformed: unknown;
-}> | null;
