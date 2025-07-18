@@ -4,6 +4,7 @@ import {
 } from 'vitest'
 import RedactorUtils from '../../src/utils/'
 import type { BlacklistKeyConfig, ComplexStringTest, Transformer } from '../../src/types'
+import { standardTransformers, organisedStandardTransformers } from '../../src/utils/standardTransformers'
 
 describe('RedactorUtils', () => {
   let utils: RedactorUtils
@@ -31,19 +32,7 @@ describe('RedactorUtils', () => {
           replaceStringByLength: false,
           replacement: '[REDACTED]',
           types: ['string'],
-          transformers: {
-            byType: {
-              bigint: [expect.any(Function)]
-            },
-            byConstructor: {
-              Date: [expect.any(Function)],
-              Error: [expect.any(Function)],
-              Map: [expect.any(Function)],
-              RegExp: [expect.any(Function)],
-              Set: [expect.any(Function)],
-              URL: [expect.any(Function)]
-            }
-          },
+          transformers: standardTransformers,
         })
       })
     })
@@ -63,6 +52,7 @@ describe('RedactorUtils', () => {
           remove: true,
           replaceStringByLength: true,
           types: ['string', 'number'],
+          transformers: organisedStandardTransformers,
         })
       })
 
@@ -78,19 +68,31 @@ describe('RedactorUtils', () => {
           remove: true,
           replaceStringByLength: true,
           types: ['string', 'number'],
-          transformers: {
-            byType: {
-              bigint: [expect.any(Function)]
-            },
-            byConstructor: {
-              Date: [expect.any(Function)],
-              Error: [expect.any(Function)],
-              Map: [expect.any(Function)],
-              RegExp: [expect.any(Function)],
-              Set: [expect.any(Function)],
-              URL: [expect.any(Function)]
-            }
-          },
+          transformers: organisedStandardTransformers,
+        })
+      })
+    })
+
+    describe('when a legacy transformer config is provided', () => {
+      beforeEach(() => {
+        utils = new RedactorUtils({
+          transformers: standardTransformers,
+        })
+      })
+
+      it('should use the custom config', () => {
+        // @ts-expect-error - config is private but we're testing it
+        expect(utils.config).toEqual({
+          blacklistedKeys: [],
+          stringTests: [],
+          fuzzyKeyMatch: false,
+          caseSensitiveKeyMatch: true,
+          retainStructure: false,
+          remove: false,
+          replaceStringByLength: false,
+          replacement: '[REDACTED]',
+          types: ['string'],
+          transformers: standardTransformers,
         })
       })
     })

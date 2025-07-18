@@ -4,7 +4,7 @@ import {
 import {
   type IHeapSnapshot, type Nullable, config, takeNodeMinimalHeap,
 } from '@memlab/core'
-import { DeepRedact } from '../../src'
+import { DeepRedact, standardTransformers } from '../../src'
 import { dummyUser } from '../setup/dummyUser'
 import { blacklistedKeys } from '../setup/blacklist'
 import RedactorUtils from '../../src/utils/'
@@ -102,19 +102,7 @@ describe('DeepRedact', () => {
             remove: false,
             replaceStringByLength: false,
             stringTests: [],
-            transformers: {
-              byType: {
-                bigint: [expect.any(Function)]
-              },
-              byConstructor: {
-                Date: [expect.any(Function)],
-                Error: [expect.any(Function)],
-                Map: [expect.any(Function)],
-                RegExp: [expect.any(Function)],
-                Set: [expect.any(Function)],
-                URL: [expect.any(Function)]
-              }
-            },
+            transformers: standardTransformers,
             replacement: '[REDACTED]',
             types: ['string'],
           })

@@ -1,5 +1,5 @@
 import type { RedactorUtilsConfig, Stack, BlacklistKeyConfig, TransformerConfig, OrganisedTransformers } from '../types'
-import { organisedStandardTransformers } from './standardTransformers'
+import { standardTransformers } from './standardTransformers'
 import { TransformerRegistry } from './TransformerRegistry'
 
 const defaultConfig: Required<RedactorUtilsConfig> = {
@@ -12,7 +12,7 @@ const defaultConfig: Required<RedactorUtilsConfig> = {
   replaceStringByLength: false,
   replacement: '[REDACTED]',
   types: ['string'],
-  transformers: organisedStandardTransformers,
+  transformers: standardTransformers,
 }
 
 class RedactorUtils {
@@ -97,12 +97,6 @@ class RedactorUtils {
               })
             }
           }
-        })
-      }
-
-      if (organised.fallback) {
-        organised.fallback.forEach(transformer => {
-          this.transformerRegistry.addFallbackTransformer(transformer)
         })
       }
     }
