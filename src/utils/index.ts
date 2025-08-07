@@ -1,10 +1,11 @@
-import type { RedactorUtilsConfig, Stack, BlacklistKeyConfig, TransformerConfig, OrganisedTransformers } from '../types'
+import type { RedactorUtilsConfig, Stack, BlacklistKeyConfig, TransformerConfig, OrganisedTransformers, BlacklistObjectPathConfig } from '../types'
 import { standardTransformers } from './standardTransformers'
 import { TransformerRegistry } from './TransformerRegistry'
 
 const defaultConfig: Required<RedactorUtilsConfig> = {
   stringTests: [],
   blacklistedKeys: [],
+  blacklistedObjectPaths: [],
   fuzzyKeyMatch: false,
   caseSensitiveKeyMatch: true,
   retainStructure: false,
@@ -46,12 +47,19 @@ class RedactorUtils {
    */
   private readonly transformerRegistry: TransformerRegistry = new TransformerRegistry()
 
+  /**
+   * Clone of the blacklistedObjectPaths
+   * @private
+   */
+  private readonly blacklistedObjectPaths: BlacklistObjectPathConfig[] = []
+
   constructor(customConfig: RedactorUtilsConfig) {
     this.config = {
       ...defaultConfig,
       ...customConfig,
     }
 
+    this.blacklistedObjectPaths = [...(customConfig.blacklistedObjectPaths ?? [])]
     this.blacklistedKeysTransformed = (customConfig.blacklistedKeys ?? []).filter(key => typeof key !== 'string').map((key) => this.createTransformedBlacklistedKey(key, customConfig))
     const stringKeys = (customConfig.blacklistedKeys ?? []).filter(key => typeof key === 'string')
     if (stringKeys.length > 0) this.computedRegex = new RegExp(stringKeys.map(this.sanitiseStringForRegex).filter(Boolean).join('|'))
