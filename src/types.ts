@@ -44,7 +44,7 @@ export interface OrganisedTransformers {
  */
 export type TransformerConfig = Transformer[] | OrganisedTransformers
 
-export interface BaseBlacklistConfig {
+export interface ObjectPathConfig {
   /**
    * Perform a fuzzy match on the key. This will match any key that contains the string, rather than a case-sensitive match.
    * @default false
@@ -94,26 +94,21 @@ export interface BaseBlacklistConfig {
    * @example false // if `replacement` equals `*` then `joe.bloggs@example.com` becomes `*`
    */
   replaceStringByLength?: boolean
-}
-
-export interface BlacklistKeyConfig extends BaseBlacklistConfig {
 
   /**
-   * The key to redact. Can be a string or a RegExp.
-   * @example 'address' // redact any key that is 'address'.
-   * @example /^address$/ // redact any key that is exactly 'address'.
+   * The types of values that should be redacted. If the value is not one of these types, it will not be redacted.
+   * @default ['string']
+   * @example ['string', 'number'] // redact only strings and numbers, leave other types unchanged.
    */
-  key: string | RegExp
-}
+  types?: Types[]
 
-export interface BlacklistObjectPathConfig extends BaseBlacklistConfig {
   /**
    * The object path to redact. Must be an array containing any of mixture of strings, numbers, or RegExps.
    * @example ['payment', 'card', '*'] // redact any value that is at the object path 'payment.card.*'.
    * @example ['*', 'address', '**'] // redact any value that is deeply nested in the object path '*.address.**'.
    * @example ['*', /(user|home)Address/gi, '**'] // redact any value that is at the object path '*.userAddress.**.payment.card.*' or '*.homeAddress.**.payment.card.*'.
    */
-  key: Array<string | number | RegExp>
+  path: Array<string | number | RegExp>
 }
 
 export interface ComplexStringTest {
@@ -123,20 +118,12 @@ export interface ComplexStringTest {
 
 export interface BaseDeepRedactConfig {
   /**
-   * Keys that should be redacted. Can be a string, or an object with additional configuration options.
-   * @default []
-   * @example ['password', 'ssn'] // redact any key that is 'password' or 'ssn'.
-   * @example [{ key: 'address', fuzzyKeyMatch: true, caseSensitiveKeyMatch: false }] // redact any key that contains 'address' regardless of case.
-   */
-  blacklistedKeys?: Array<string | RegExp | BlacklistKeyConfig>
-
-  /**
    * Object paths that should be redacted. Can be any valid glob pattern, or an object with additional configuration options.
    * @default []
    * @example ['password', 'ssn'] // redact any value that is 'password' or 'ssn'.
    * @example [{ value: 'payment.card.*' }] // redact any value that's contained in the object path 'payment.card.*'.
    */
-  blacklistedObjectPaths?: BlacklistObjectPathConfig[]
+  paths?: Array<ObjectPathConfig | Array<string | number | RegExp>>
 
   /**
    * Redact a string value that matches a test pattern.
@@ -252,22 +239,10 @@ export interface BaseDeepRedactConfig {
 }
 
 export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, '_blacklistedKeysTransformed' | 'blacklistedKeys' | 'stringTests'>> & ({
-  blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys']
-  blacklistedObjectPaths: BaseDeepRedactConfig['blacklistedObjectPaths']
+  paths: BaseDeepRedactConfig['paths']
   stringTests: BaseDeepRedactConfig['stringTests']
 } | {
-  blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys']
-  blacklistedObjectPaths: BaseDeepRedactConfig['blacklistedObjectPaths']
-} | {
-  stringTests: BaseDeepRedactConfig['stringTests']
-  blacklistedObjectPaths: BaseDeepRedactConfig['blacklistedObjectPaths']
-} | {
-  blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys']
-  stringTests: BaseDeepRedactConfig['stringTests']
-} | {
-  blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys']
-} | {
-  blacklistedObjectPaths: BaseDeepRedactConfig['blacklistedObjectPaths']
+  paths: BaseDeepRedactConfig['paths']
 } | {
   stringTests: BaseDeepRedactConfig['stringTests']
 })
@@ -282,5 +257,5 @@ export type Stack = Array<{
   value: unknown, 
   path: Array<string | number>, 
   redactingParent: boolean
-  keyConfig: BlacklistKeyConfig | undefined
+  pathConfig?: ObjectPathConfig
 }>

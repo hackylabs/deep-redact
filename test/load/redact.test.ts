@@ -4,7 +4,7 @@ import fastRedact from 'fast-redact'
 import { writeFileSync } from 'fs'
 import { obglob } from '@hackylabs/obglob'
 import { afterAll, beforeAll, describe, it } from 'vitest'
-import { blacklistedKeys, complexBlacklistedKeys, fastRedactBlacklistedKeys, ObGlobPatterns, stringPattern } from '../setup/blacklist'
+import { deepRedactPaths, deepRedactComplexPaths, fastRedactBlacklistedKeys, ObGlobPatterns, stringPattern } from '../setup/blacklist'
 import { dummyUser } from '../setup/dummyUser'
 import { DeepRedact } from '../../src'
 
@@ -12,9 +12,9 @@ let server: http.Server
 const PORT = 3456
 
 const handlers = {
-  deepRedact: new DeepRedact({ blacklistedKeys }),
-  deepRedactComplex: new DeepRedact({ blacklistedKeys: complexBlacklistedKeys }),
-  deepRedactRemove: new DeepRedact({ blacklistedKeys: blacklistedKeys, remove: true }),
+  deepRedact: new DeepRedact({ paths: deepRedactPaths }),
+  deepRedactComplex: new DeepRedact({ paths: deepRedactComplexPaths }),
+  deepRedactRemove: new DeepRedact({ paths: deepRedactPaths, remove: true }),
   regexReplace: (data: any) => JSON.stringify(data).replace(stringPattern, '"$1":"[REDACTED]"'),
   jsonStringify: (data: any) => JSON.stringify(data),
   fastRedact: fastRedact({ paths: fastRedactBlacklistedKeys }),

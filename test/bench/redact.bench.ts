@@ -3,22 +3,22 @@ import fastRedact from 'fast-redact'
 import { obglob } from '@hackylabs/obglob'
 import { DeepRedact } from '../../src'
 import { dummyUser, dummyUserXml } from '../setup/dummyUser'
-import { blacklistedKeys, complexBlacklistedKeys, fastRedactBlacklistedKeys, ObGlobPatterns, stringPattern, xmlPattern } from '../setup/blacklist'
+import { deepRedactPaths, deepRedactComplexPaths, fastRedactBlacklistedKeys, ObGlobPatterns, stringPattern, xmlPattern } from '../setup/blacklist'
 
 const jsonStringifyLargeObject = () => JSON.stringify(dummyUser)
 
 const redactionConfigs = {
   fastRedact: fastRedact({ paths: fastRedactBlacklistedKeys }),
   obglob: (data) => obglob(data, { patterns: ObGlobPatterns, includeUnmatched: true, callback: () => '[REDACTED]' }),
-  deepRedactDefaultConfig: new DeepRedact({ blacklistedKeys }),
-  deepRedactConfigPerKey: new DeepRedact({ blacklistedKeys: complexBlacklistedKeys }),
-  deepRedactFuzzyMatching: new DeepRedact({ blacklistedKeys, fuzzyKeyMatch: true }),
-  deepRedactCaseInsensitiveMatching: new DeepRedact({ blacklistedKeys, caseSensitiveKeyMatch: false }),
-  deepRedactFuzzyAndCaseInsensitiveMatching: new DeepRedact({ blacklistedKeys, fuzzyKeyMatch: true, caseSensitiveKeyMatch: false }),
-  deepRedactReplaceStringByLength: new DeepRedact({ blacklistedKeys, replaceStringByLength: true, replacement: '*' }),
-  deepRedactCustomReplacerFunction: new DeepRedact({ blacklistedKeys, replacement: ((value) => `[REDACTED:${typeof value}]`) }),
-  deepRedactRetainStructure: new DeepRedact({ blacklistedKeys, retainStructure: true }),
-  deepRedactRemoveItem: new DeepRedact({ blacklistedKeys, remove: true }),
+  deepRedactDefaultConfig: new DeepRedact({ paths: deepRedactPaths }),
+  deepRedactConfigPerKey: new DeepRedact({ paths: deepRedactComplexPaths }),
+  deepRedactFuzzyMatching: new DeepRedact({ paths: deepRedactPaths, fuzzyKeyMatch: true }),
+  deepRedactCaseInsensitiveMatching: new DeepRedact({ paths: deepRedactPaths, caseSensitiveKeyMatch: false }),
+  deepRedactFuzzyAndCaseInsensitiveMatching: new DeepRedact({ paths: deepRedactPaths, fuzzyKeyMatch: true, caseSensitiveKeyMatch: false }),
+  deepRedactReplaceStringByLength: new DeepRedact({ paths: deepRedactPaths, replaceStringByLength: true, replacement: '*' }),
+  deepRedactCustomReplacerFunction: new DeepRedact({ paths: deepRedactPaths, replacement: ((value) => `[REDACTED:${typeof value}]`) }),
+  deepRedactRetainStructure: new DeepRedact({ paths: deepRedactPaths, retainStructure: true }),
+  deepRedactRemoveItem: new DeepRedact({ paths: deepRedactPaths, remove: true }),
   deepRedactPartialRedaction: new DeepRedact({
     stringTests: [
       {
