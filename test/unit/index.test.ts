@@ -14,7 +14,7 @@ describe('DeepRedact', () => {
     vi.restoreAllMocks()
   })
 
-  describe.skip('performance', () => {
+  describe('performance', () => {
     it('should not leak memory', async () => {
       config.muteConsole = true
 

@@ -98,7 +98,7 @@ describe('RedactorUtils', () => {
     })
   })
 
-  describe.only('traverse', () => {
+  describe('traverse', () => {
     describe('when the value is a string', () => {
       describe('with stringTests', () => {
         beforeEach(() => {
@@ -371,7 +371,7 @@ describe('RedactorUtils', () => {
         it('should create a transformed blacklisted key using custom config', () => {
           // @ts-expect-error - createTransformedpaths is private but we're testing it
           expect(utils.createTransformedObjectPath([/a/gi], customConfig)).toEqual({
-            key: [/a/gi],
+            path: [/a/gi],
             fuzzyKeyMatch: true,
             caseSensitiveKeyMatch: false,
             retainStructure: true,
@@ -415,7 +415,7 @@ describe('RedactorUtils', () => {
       describe('when the key is a RegExp', () => {
         it('should create a transformed blacklisted key using default config', () => {
           // @ts-expect-error - createTransformedpaths is private but we're testing it
-          expect(utils.createTransformedObjectPath(/a/gi, {})).toEqual({
+          expect(utils.createTransformedObjectPath([/a/gi], {})).toEqual({
             path: [/a/gi],
             fuzzyKeyMatch: false,
             caseSensitiveKeyMatch: true,
@@ -423,6 +423,7 @@ describe('RedactorUtils', () => {
             remove: false,
             replacement: '[REDACTED]',
             replaceStringByLength: false,
+            types: ['string'],
           })
         })
       })
@@ -430,7 +431,7 @@ describe('RedactorUtils', () => {
       describe('when the key is a BlacklistKeyConfig', () => {
         it('should create a transformed blacklisted key using key specific config and default config fallback', () => {
           // @ts-expect-error - createTransformedpaths is private but we're testing it
-          expect(utils.createTransformedObjectPath({ key: 'a', replacement: '*', replaceStringByLength: true }, {})).toEqual({
+          expect(utils.createTransformedObjectPath({ path: ['a'], replacement: '*', replaceStringByLength: true }, {})).toEqual({
             path: ['a'],
             fuzzyKeyMatch: false,
             caseSensitiveKeyMatch: true,
@@ -438,6 +439,7 @@ describe('RedactorUtils', () => {
             remove: false,
             replacement: '*',
             replaceStringByLength: true,
+            types: ['string'],
           })
         })
       })
@@ -839,13 +841,15 @@ describe('RedactorUtils', () => {
             })
 
             it('should call redactValue', () => {
-              expect(applyStringTransformationsSpy).not.toHaveBeenCalled()
               expect(redactValueSpy).toHaveBeenCalledOnce()
               expect(redactValueSpy).toHaveBeenNthCalledWith(1, 'Hello, world!', false, undefined)
+              expect(applyStringTransformationsSpy).not.toHaveBeenCalled()
             })
 
             it('should return the result of redactValue', () => {
-              expect(result).toEqual(redactValueSpy.mock.results[0]?.value)
+              const expected = { transformed: '[REDACTED]', redactingParent: false }
+              expect(redactValueSpy.mock.results[0]?.value).toBeUndefined()
+              expect(result).toEqual(expected)
             })
           })
         })
@@ -859,7 +863,7 @@ describe('RedactorUtils', () => {
           it('should call applyStringTransformations', () => {
             expect(redactValueSpy).not.toHaveBeenCalled()
             expect(applyStringTransformationsSpy).toHaveBeenCalledOnce()
-            expect(applyStringTransformationsSpy).toHaveBeenNthCalledWith(1, 'Hello, world!', false, undefined)
+            expect(applyStringTransformationsSpy).toHaveBeenNthCalledWith(1, 'Hello, world!', false)
           })
 
           it('should return the result of applyStringTransformations', () => {
@@ -937,7 +941,7 @@ describe('RedactorUtils', () => {
           paths: [['a']],
         })
         // @ts-expect-error - handleObjectValue is private but we're testing it
-        result = utils.handleObjectValue({ a: 'b' }, 'a', ['a'], false, referenceMap)
+        result = utils.handleObjectValue({ a: 'b' }, ['a'], false, referenceMap)
       })
 
       it('should update the reference map', () => {
@@ -956,7 +960,7 @@ describe('RedactorUtils', () => {
         // @ts-expect-error - redactValue is private but we're testing it
         redactValueSpy = vi.spyOn(utils, 'redactValue')
         // @ts-expect-error - handleObjectValue is private but we're testing it
-        result = utils.handleObjectValue({ a: 'b' }, 'a', ['a'], true, new WeakMap())
+        result = utils.handleObjectValue({ a: 'b' }, ['a'], true, new WeakMap())
       })
 
       it('should not call handleRetainStructure', () => {
@@ -976,7 +980,7 @@ describe('RedactorUtils', () => {
     describe('when not redacting a parent', () => {
       beforeEach(() => {
         // @ts-expect-error - handleObjectValue is private but we're testing it
-        result = utils.handleObjectValue({ a: 'b' }, 'a', ['a'], false, new WeakMap())
+        result = utils.handleObjectValue({ a: 'b' }, ['a'], false, new WeakMap())
       })
 
       it('should call handleRetainStructure', () => {
@@ -1016,7 +1020,7 @@ describe('RedactorUtils', () => {
               path: ['a', 'a'],
               redactingParent: false,
               pathConfig: {
-                key: ['a'],
+                path: ['a'],
                 types: ['string'],
                 retainStructure: false,
                 remove: false,
@@ -1036,10 +1040,10 @@ describe('RedactorUtils', () => {
 
       beforeEach(() => {
         utils = new RedactorUtils({
-          paths: [['a']],
+          paths: [['*', 'a']],
         })
         // @ts-expect-error - handleRetainStructure is private but we're testing it
-        result = utils.handleRetainStructure(value, [0], false)
+        result = utils.handleRetainStructure(value, [0, 'a'], false)
       })
 
       it('should return the correct stack', () => {
@@ -1051,17 +1055,35 @@ describe('RedactorUtils', () => {
               parent: [],
               key: '1',
               value: 'b',
-              path: [0, 1],
+              path: [0, 'a', 1],
               redactingParent: false,
-              pathConfig: { key: ['a'] },
+              pathConfig: {
+                path: ['*', 'a'],
+                types: ['string'],
+                retainStructure: false,
+                remove: false,
+                replacement: '[REDACTED]',
+                replaceStringByLength: false,
+                fuzzyKeyMatch: false,
+                caseSensitiveKeyMatch: true,
+              },
             },
             {
               parent: [],
               key: '0',
               value: 'a',
-              path: [0, 0],
+              path: [0, 'a', 0],
               redactingParent: false,
-              pathConfig: { key: ['a'] },
+              pathConfig: {
+                path: ['*', 'a'],
+                types: ['string'],
+                retainStructure: false,
+                remove: false,
+                replacement: '[REDACTED]',
+                replaceStringByLength: false,
+                fuzzyKeyMatch: false,
+                caseSensitiveKeyMatch: true,
+              },
             },
           ]
         })
