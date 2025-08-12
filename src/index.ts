@@ -1,4 +1,4 @@
-import type { DeepRedactConfig, RedactorUtilsConfig, BlacklistKeyConfig, Types, Transformer, ComplexStringTest, BaseDeepRedactConfig, OrganisedTransformers, TransformerConfig } from './types'
+import type { DeepRedactConfig, RedactorUtilsConfig, Types, Transformer, ComplexStringTest, ObjectPathConfig, BaseDeepRedactConfig, OrganisedTransformers, TransformerConfig } from './types'
 import { organisedStandardTransformers, standardTransformers } from './utils/standardTransformers'
 import RedactorUtils from './utils'
 
@@ -47,7 +47,7 @@ export {
   DeepRedact as default,
   type BaseDeepRedactConfig,
   type RedactorUtilsConfig,
-  type BlacklistKeyConfig,
+  type ObjectPathConfig,
   type ComplexStringTest,
   type Transformer,
   type Types,
