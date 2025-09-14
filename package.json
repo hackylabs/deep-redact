@@ -101,7 +101,7 @@
   },
   "scripts": {
     "lint": "eslint",
-    "build": "npm run lint && npm run test && npm run bench && rm -rf dist && npm run build:esm && npm run build:cjs && npm run update-exports && npm run test:build && npm run update-readme && npm run update-license",
+    "build": "npm run lint && npm run test && npm run bench && npm run build:esm && npm run build:cjs && npm run update-exports && npm run test:build && npm run update-readme && npm run update-license",
     "build:dev": "rm -rf dist && npm run build:esm && npm run build:cjs && npm run update-exports",
     "build:esm": "tsc --project tsconfig.esm.json && ./scripts/js-to-mjs.sh",
     "build:cjs": "tsc --project tsconfig.cjs.json",
