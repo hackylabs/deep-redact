@@ -13,8 +13,12 @@ fi
 # Update import specifiers inside files before renaming (handle both ' and ")
 while IFS= read -r -d '' file; do
   echo "Updating imports in $file ..."
-  # Replace .js' -> .mjs' and .js" -> .mjs"
-  sed -E -i '' "s/\.js'/.mjs'/g; s/\.js\"/.mjs\"/g" "$file"
+  # Replace .js' and .js" with .mjs' and .mjs" (portable inline edit)
+  sed -E -i.bak \
+    -e "s/\.js'/.mjs'/g" \
+    -e "s/\.js\"/.mjs\"/g" \
+    "$file"
+  rm -f "${file}.bak"
 done < <(find ./dist -type f -name '*.js' -print0)
 
 # Rename .js to .mjs recursively
