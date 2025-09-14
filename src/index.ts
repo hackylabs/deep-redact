@@ -1,6 +1,6 @@
-import type { DeepRedactConfig, RedactorUtilsConfig, BlacklistKeyConfig, Types, Transformer, ComplexStringTest, BaseDeepRedactConfig, OrganisedTransformers, TransformerConfig } from './types'
-import { organisedStandardTransformers, standardTransformers } from './utils/standardTransformers'
-import RedactorUtils from './utils'
+import type { DeepRedactConfig, RedactorUtilsConfig, BlacklistKeyConfig, Types, Transformer, ComplexStringTest, BaseDeepRedactConfig, OrganisedTransformers, TransformerConfig } from './types.js'
+import { organisedStandardTransformers, standardTransformers } from './utils/standardTransformers/index.js'
+import RedactorUtils from './utils/index.js'
 
 class DeepRedact {
   /**

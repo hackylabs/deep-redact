@@ -1,5 +1,5 @@
-import { standardTransformers } from './standardTransformers';
-import { TransformerRegistry } from './TransformerRegistry';
+import { standardTransformers } from './standardTransformers/index.mjs';
+import { TransformerRegistry } from './TransformerRegistry.mjs';
 const defaultConfig = {
     stringTests: [],
     blacklistedKeys: [],
@@ -19,16 +19,6 @@ class RedactorUtils {
      */
     config = defaultConfig;
     /**
-     * The computed regex pattern generated from sanitised blacklist keys of flat strings
-     * @private
-     */
-    computedRegex = null;
-    /**
-     * Regex to sanitise strings for the computed regex
-     * @private
-     */
-    sanitiseRegex = /[^a-zA-Z0-9_\-\$]/g;
-    /**
      * The transformed blacklist keys of flat regex patterns and complex config objects
      * @private
      */
@@ -43,10 +33,7 @@ class RedactorUtils {
             ...defaultConfig,
             ...customConfig,
         };
-        this.blacklistedKeysTransformed = (customConfig.blacklistedKeys ?? []).filter(key => typeof key !== 'string').map((key) => this.createTransformedBlacklistedKey(key, customConfig));
-        const stringKeys = (customConfig.blacklistedKeys ?? []).filter(key => typeof key === 'string');
-        if (stringKeys.length > 0)
-            this.computedRegex = new RegExp(stringKeys.map(this.sanitiseStringForRegex).filter(Boolean).join('|'));
+        this.blacklistedKeysTransformed = (customConfig.blacklistedKeys ?? []).map((key) => this.createTransformedBlacklistedKey(key, customConfig));
         this.setupTransformerRegistry(this.config.transformers);
     }
     /**
@@ -103,6 +90,17 @@ class RedactorUtils {
                 remove: customConfig.remove ?? defaultConfig.remove,
             };
         }
+        if (typeof key === 'string') {
+            return {
+                key,
+                fuzzyKeyMatch: customConfig.fuzzyKeyMatch ?? defaultConfig.fuzzyKeyMatch,
+                caseSensitiveKeyMatch: customConfig.caseSensitiveKeyMatch ?? defaultConfig.caseSensitiveKeyMatch,
+                retainStructure: customConfig.retainStructure ?? defaultConfig.retainStructure,
+                replacement: customConfig.replacement ?? defaultConfig.replacement,
+                replaceStringByLength: customConfig.replaceStringByLength ?? defaultConfig.replaceStringByLength,
+                remove: customConfig.remove ?? defaultConfig.remove,
+            };
+        }
         return {
             fuzzyKeyMatch: key.fuzzyKeyMatch ?? customConfig.fuzzyKeyMatch ?? defaultConfig.fuzzyKeyMatch,
             caseSensitiveKeyMatch: key.caseSensitiveKeyMatch ?? customConfig.caseSensitiveKeyMatch ?? defaultConfig.caseSensitiveKeyMatch,
@@ -124,29 +122,20 @@ class RedactorUtils {
         return this.transformerRegistry.applyTransformers(value, key, referenceMap);
     };
     /**
-     * Sanitises a string for the computed regex
-     * @param key - The string to sanitise
-     * @returns The sanitised string
-     * @private
-     */
-    sanitiseStringForRegex = (key) => key.replace(this.sanitiseRegex, '');
-    /**
      * Checks if a key should be redacted
      * @param key - The key to check
      * @returns Whether the key should be redacted
      * @private
      */
     shouldRedactKey = (key) => {
-        if (this.computedRegex?.test(this.sanitiseStringForRegex(key)))
-            return true;
         return this.blacklistedKeysTransformed.some(config => {
             const pattern = config.key;
             if (pattern instanceof RegExp)
                 return pattern.test(key);
             if (!config.fuzzyKeyMatch && !config.caseSensitiveKeyMatch)
-                return key.toLowerCase() === pattern.toLowerCase();
+                return key.toLowerCase().trim().replace(/[_-]/g, '') === pattern.toLowerCase().trim().replace(/[_-]/g, '');
             if (config.fuzzyKeyMatch && !config.caseSensitiveKeyMatch)
-                return key.toLowerCase().includes(pattern.toLowerCase());
+                return key.toLowerCase().trim().replace(/[_-]/g, '').includes(pattern.toLowerCase().trim().replace(/[_-]/g, ''));
             if (config.fuzzyKeyMatch && config.caseSensitiveKeyMatch)
                 return key.includes(pattern);
             if (!config.fuzzyKeyMatch && config.caseSensitiveKeyMatch)
@@ -309,27 +298,18 @@ class RedactorUtils {
      * @private
      */
     findMatchingKeyConfig(key) {
-        if (this.computedRegex?.test(key)) {
-            return {
-                key,
-                fuzzyKeyMatch: this.config.fuzzyKeyMatch,
-                caseSensitiveKeyMatch: this.config.caseSensitiveKeyMatch,
-                replaceStringByLength: this.config.replaceStringByLength,
-                replacement: this.config.replacement,
-                retainStructure: this.config.retainStructure,
-                remove: this.config.remove,
-            };
-        }
         return this.blacklistedKeysTransformed.find(config => {
             const pattern = config.key;
             if (pattern instanceof RegExp)
                 return pattern.test(key);
+            const normalisedKey = key.toLowerCase().trim().replace(/[_-]/g, '');
+            const normalisedPattern = pattern.toLowerCase().trim().replace(/[_-]/g, '');
             if (config.fuzzyKeyMatch) {
-                const compareKey = config.caseSensitiveKeyMatch ? key : key.toLowerCase();
-                const comparePattern = config.caseSensitiveKeyMatch ? pattern : pattern.toLowerCase();
+                const compareKey = config.caseSensitiveKeyMatch ? key : normalisedKey;
+                const comparePattern = config.caseSensitiveKeyMatch ? pattern : normalisedPattern;
                 return compareKey.includes(comparePattern);
             }
-            return config.caseSensitiveKeyMatch ? key === pattern : key.toLowerCase() === pattern.toLowerCase();
+            return config.caseSensitiveKeyMatch ? key === pattern : normalisedKey === normalisedPattern;
         });
     }
     /**

@@ -15,10 +15,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.organisedStandardTransformers = exports.standardTransformers = exports.default = exports.DeepRedact = void 0;
-const standardTransformers_1 = require("./utils/standardTransformers");
-Object.defineProperty(exports, "organisedStandardTransformers", { enumerable: true, get: function () { return standardTransformers_1.organisedStandardTransformers; } });
-Object.defineProperty(exports, "standardTransformers", { enumerable: true, get: function () { return standardTransformers_1.standardTransformers; } });
-const utils_1 = __importDefault(require("./utils"));
+const index_js_1 = require("./utils/standardTransformers/index.js");
+Object.defineProperty(exports, "organisedStandardTransformers", { enumerable: true, get: function () { return index_js_1.organisedStandardTransformers; } });
+Object.defineProperty(exports, "standardTransformers", { enumerable: true, get: function () { return index_js_1.standardTransformers; } });
+const index_js_2 = __importDefault(require("./utils/index.js"));
 class DeepRedact {
     /**
      * Create a new DeepRedact instance with the provided configuration.
@@ -48,7 +48,7 @@ class DeepRedact {
         const englishSerialise = serialise !== null && serialise !== void 0 ? serialise : serialize;
         if (typeof englishSerialise === 'boolean')
             this.config.serialise = englishSerialise;
-        this.redactorUtils = new utils_1.default(Object.assign({}, rest));
+        this.redactorUtils = new index_js_2.default(Object.assign({}, rest));
     }
 }
 exports.DeepRedact = DeepRedact;

@@ -12,8 +12,7 @@ interface ExportMap {
 function generateExportPath(filePath: string): string {
   // Remove src/ and .ts extension, handle index files specially
   const normalizedPath = filePath
-    .replace(/^src\//, '')
-    .replace(/\.ts$/, '');
+    .replace(/^src\//, '');
 
   if (normalizedPath.endsWith('/index')) {
     return normalizedPath.replace(/\/index$/, '');
@@ -38,9 +37,9 @@ function generateExports(dir: string = 'src'): ExportMap {
         const exportKey = exportPath === 'index' ? '.' : `./${exportPath}`;
 
         exports[exportKey] = {
-          import: `./dist/esm/${exportPath}.mjs`,
-          require: `./dist/cjs/${exportPath}.js`,
-          types: `./dist/types/${exportPath}.d.ts`,
+          import: `./dist/${exportPath.replace(/\.ts$/, '')}.mjs`,
+          require: `./dist/${exportPath.replace(/\.ts$/, '')}.js`,
+          types: `./dist/types/${exportPath.replace(/\.ts$/, '')}.d.ts`,
         };
       }
     }

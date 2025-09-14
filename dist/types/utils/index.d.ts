@@ -1,20 +1,10 @@
-import type { RedactorUtilsConfig } from '../types';
+import type { RedactorUtilsConfig } from '../types.js';
 declare class RedactorUtils {
     /**
      * The configuration for the redaction.
      * @private
      */
     private readonly config;
-    /**
-     * The computed regex pattern generated from sanitised blacklist keys of flat strings
-     * @private
-     */
-    private readonly computedRegex;
-    /**
-     * Regex to sanitise strings for the computed regex
-     * @private
-     */
-    private readonly sanitiseRegex;
     /**
      * The transformed blacklist keys of flat regex patterns and complex config objects
      * @private
@@ -41,13 +31,6 @@ declare class RedactorUtils {
      * @private
      */
     private applyTransformers;
-    /**
-     * Sanitises a string for the computed regex
-     * @param key - The string to sanitise
-     * @returns The sanitised string
-     * @private
-     */
-    private sanitiseStringForRegex;
     /**
      * Checks if a key should be redacted
      * @param key - The key to check

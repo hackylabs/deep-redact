@@ -9,8 +9,8 @@ describe('Redaction Build Tests', () => {
   beforeAll(() => {
     Object.values(packageJson.exports).forEach((file: any) => {
       if (typeof file !== 'object' || file === null) return
-      if (file?.import?.startsWith('./dist/esm/')) esmFiles.push(path.relative(__dirname, file.import))
-      if (file?.require?.startsWith('./dist/cjs/')) cjsFiles.push(path.relative(__dirname, file.require))
+      if (file?.import?.startsWith('./dist/')) esmFiles.push(path.relative(__dirname, file.import))
+      if (file?.require?.startsWith('./dist/')) cjsFiles.push(path.relative(__dirname, file.require))
     })
   })
 
@@ -21,7 +21,7 @@ describe('Redaction Build Tests', () => {
 
     it('can import the library', async () => {
       const module = await import(esmFiles[0])
-      expect(esmFiles[0]).toEqual('../dist/esm/index.mjs')
+      expect(esmFiles[0]).toEqual('../dist/index.mjs')
       expect(module).toBeDefined()
     })
   })
@@ -33,7 +33,7 @@ describe('Redaction Build Tests', () => {
 
     it('can import the library', () => {
       const module = require(cjsFiles[0])
-      expect(cjsFiles[0]).toEqual('../dist/cjs/index.js')
+      expect(cjsFiles[0]).toEqual('../dist/index.js')
       expect(module).toBeDefined()
     })
   })

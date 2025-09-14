@@ -1,10 +1,10 @@
-import { _bigint } from './bigint';
-import { _date } from './date';
-import { _error } from './error';
-import { _map } from './map';
-import { _regex } from './regex';
-import { _set } from './set';
-import { _url } from './url';
+import { _bigint } from "./bigint.mjs";
+import { _date } from "./date.mjs";
+import { _error } from "./error.mjs";
+import { _map } from "./map.mjs";
+import { _regex } from "./regex.mjs";
+import { _set } from "./set.mjs";
+import { _url } from "./url.mjs";
 /**
  * Standard transformers in array for legacy support
  */

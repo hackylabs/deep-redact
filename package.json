@@ -1,73 +1,73 @@
 {
   "name": "@hackylabs/deep-redact",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "description": "A fast, safe and configurable zero-dependency library for redacting strings or deeply redacting arrays and objects.",
   "private": false,
   "license": "MIT",
   "author": "Benjamin Green (https://bengreen.dev)",
   "funding": "https://ko-fi.com/hackylabs",
   "types": "./dist/types/index.d.ts",
-  "main": "./dist/cjs/index.js",
-  "module": "./dist/esm/index.mjs",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
   "exports": {
-    ".": {
-      "import": "./dist/esm/index.mjs",
-      "require": "./dist/cjs/index.js",
+    "./index.ts": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
       "types": "./dist/types/index.d.ts"
     },
-    "./types": {
-      "import": "./dist/esm/types.mjs",
-      "require": "./dist/cjs/types.js",
+    "./types.ts": {
+      "import": "./dist/types.mjs",
+      "require": "./dist/types.js",
       "types": "./dist/types/types.d.ts"
     },
-    "./utils/TransformerRegistry": {
-      "import": "./dist/esm/utils/TransformerRegistry.mjs",
-      "require": "./dist/cjs/utils/TransformerRegistry.js",
+    "./utils/TransformerRegistry.ts": {
+      "import": "./dist/utils/TransformerRegistry.mjs",
+      "require": "./dist/utils/TransformerRegistry.js",
       "types": "./dist/types/utils/TransformerRegistry.d.ts"
     },
-    "./utils": {
-      "import": "./dist/esm/utils.mjs",
-      "require": "./dist/cjs/utils.js",
-      "types": "./dist/types/utils.d.ts"
+    "./utils/index.ts": {
+      "import": "./dist/utils/index.mjs",
+      "require": "./dist/utils/index.js",
+      "types": "./dist/types/utils/index.d.ts"
     },
-    "./utils/standardTransformers/bigint": {
-      "import": "./dist/esm/utils/standardTransformers/bigint.mjs",
-      "require": "./dist/cjs/utils/standardTransformers/bigint.js",
+    "./utils/standardTransformers/bigint.ts": {
+      "import": "./dist/utils/standardTransformers/bigint.mjs",
+      "require": "./dist/utils/standardTransformers/bigint.js",
       "types": "./dist/types/utils/standardTransformers/bigint.d.ts"
     },
-    "./utils/standardTransformers/date": {
-      "import": "./dist/esm/utils/standardTransformers/date.mjs",
-      "require": "./dist/cjs/utils/standardTransformers/date.js",
+    "./utils/standardTransformers/date.ts": {
+      "import": "./dist/utils/standardTransformers/date.mjs",
+      "require": "./dist/utils/standardTransformers/date.js",
       "types": "./dist/types/utils/standardTransformers/date.d.ts"
     },
-    "./utils/standardTransformers/error": {
-      "import": "./dist/esm/utils/standardTransformers/error.mjs",
-      "require": "./dist/cjs/utils/standardTransformers/error.js",
+    "./utils/standardTransformers/error.ts": {
+      "import": "./dist/utils/standardTransformers/error.mjs",
+      "require": "./dist/utils/standardTransformers/error.js",
       "types": "./dist/types/utils/standardTransformers/error.d.ts"
     },
-    "./utils/standardTransformers": {
-      "import": "./dist/esm/utils/standardTransformers.mjs",
-      "require": "./dist/cjs/utils/standardTransformers.js",
-      "types": "./dist/types/utils/standardTransformers.d.ts"
+    "./utils/standardTransformers/index.ts": {
+      "import": "./dist/utils/standardTransformers/index.mjs",
+      "require": "./dist/utils/standardTransformers/index.js",
+      "types": "./dist/types/utils/standardTransformers/index.d.ts"
     },
-    "./utils/standardTransformers/map": {
-      "import": "./dist/esm/utils/standardTransformers/map.mjs",
-      "require": "./dist/cjs/utils/standardTransformers/map.js",
+    "./utils/standardTransformers/map.ts": {
+      "import": "./dist/utils/standardTransformers/map.mjs",
+      "require": "./dist/utils/standardTransformers/map.js",
       "types": "./dist/types/utils/standardTransformers/map.d.ts"
     },
-    "./utils/standardTransformers/regex": {
-      "import": "./dist/esm/utils/standardTransformers/regex.mjs",
-      "require": "./dist/cjs/utils/standardTransformers/regex.js",
+    "./utils/standardTransformers/regex.ts": {
+      "import": "./dist/utils/standardTransformers/regex.mjs",
+      "require": "./dist/utils/standardTransformers/regex.js",
       "types": "./dist/types/utils/standardTransformers/regex.d.ts"
     },
-    "./utils/standardTransformers/set": {
-      "import": "./dist/esm/utils/standardTransformers/set.mjs",
-      "require": "./dist/cjs/utils/standardTransformers/set.js",
+    "./utils/standardTransformers/set.ts": {
+      "import": "./dist/utils/standardTransformers/set.mjs",
+      "require": "./dist/utils/standardTransformers/set.js",
       "types": "./dist/types/utils/standardTransformers/set.d.ts"
     },
-    "./utils/standardTransformers/url": {
-      "import": "./dist/esm/utils/standardTransformers/url.mjs",
-      "require": "./dist/cjs/utils/standardTransformers/url.js",
+    "./utils/standardTransformers/url.ts": {
+      "import": "./dist/utils/standardTransformers/url.mjs",
+      "require": "./dist/utils/standardTransformers/url.js",
       "types": "./dist/types/utils/standardTransformers/url.d.ts"
     }
   },
@@ -101,7 +101,8 @@
   },
   "scripts": {
     "lint": "eslint",
-    "build": "npm run lint && npm run test && npm run bench && npm run build:esm && npm run build:cjs && npm run update-exports && npm run test:build && npm run update-readme && npm run update-license",
+    "build": "npm run lint && npm run test && npm run bench && rm -rf dist && npm run build:esm && npm run build:cjs && npm run update-exports && npm run test:build && npm run update-readme && npm run update-license",
+    "build:dev": "rm -rf dist && npm run build:esm && npm run build:cjs && npm run update-exports",
     "build:esm": "tsc --project tsconfig.esm.json && ./scripts/js-to-mjs.sh",
     "build:cjs": "tsc --project tsconfig.cjs.json",
     "bench": "npx vitest bench --watch=false",
