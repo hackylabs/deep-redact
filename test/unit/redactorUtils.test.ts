@@ -98,19 +98,6 @@ describe('RedactorUtils', () => {
     })
   })
 
-  describe('computedRegex', () => {
-    beforeEach(() => {
-      utils = new RedactorUtils({
-        blacklistedKeys: ['a', 'b'],
-      })
-    })
-
-    it('should return the correct regex', () => {
-      // @ts-expect-error - computedRegex is private but we're testing it
-      expect(utils.computedRegex).toEqual(/a|b/)
-    })
-  })
-
   describe('traverse', () => {
     describe('when the value is a string', () => {
       describe('with stringTests', () => {
@@ -428,13 +415,13 @@ describe('RedactorUtils', () => {
         describe('when the key is a string', () => {
           beforeEach(() => {
             utils = new RedactorUtils({
-              blacklistedKeys: ['a'],
+              blacklistedKeys: ['hello'],
             })
-            result = utils.traverse({ a: 'b', c: 'd' })
+            result = utils.traverse({ hello: 'world', helloWorld: 'hello, world!' })
           })
 
           it('should return the redacted value', () => {
-            expect(result).toEqual({ a: '[REDACTED]', c: 'd' })
+            expect(result).toEqual({ hello: '[REDACTED]', helloWorld: 'hello, world!' })
           })
         })
 
@@ -864,36 +851,7 @@ describe('RedactorUtils', () => {
     })
   })
 
-  describe('sanitiseStringForRegex', () => {
-    it('should sanitise the string for the regex', () => {
-      // @ts-expect-error - sanitiseStringForRegex is private but we're testing it
-      expect(utils.sanitiseStringForRegex('Hello, world!')).toBe('Helloworld')
-    })
-  })
-
   describe('shouldRedactKey', () => {
-    describe('computed regex', () => {
-      beforeEach(() => {
-        utils = new RedactorUtils({
-          blacklistedKeys: ['foo', 'bar'],
-        })
-      })
-
-      describe('when the key satisfies the computed regex', () => {
-        it('should return true', () => {
-          // @ts-expect-error - shouldRedactKey is private but we're testing it
-          expect(utils.shouldRedactKey('foo')).toBe(true)
-        })
-      })
-
-      describe('when the key does not satisfy the computed regex', () => {
-        it('should return false', () => {
-          // @ts-expect-error - shouldRedactKey is private but we're testing it
-          expect(utils.shouldRedactKey('a')).toBe(false)
-        })
-      })
-    })
-
     describe('blacklisted keys', () => {
       beforeEach(() => {
         utils = new RedactorUtils({
@@ -1694,42 +1652,6 @@ describe('RedactorUtils', () => {
       })
       // @ts-expect-error - blacklistedKeysTransformedFindSpy is private but we're testing it
       blacklistedKeysTransformedFindSpy = vi.spyOn(utils.blacklistedKeysTransformed, 'find')
-      // @ts-expect-error - findMatchingKeyConfig is private but we're testing it
-      result = utils.findMatchingKeyConfig('a')
-    })
-
-    describe('when the key is a string that matches the computed regex', () => {
-      it('should return the correct key config', () => {
-        expect(result).toEqual({
-          key: 'a',
-          fuzzyKeyMatch: false,
-          caseSensitiveKeyMatch: true,
-          remove: false,
-          replaceStringByLength: false,
-          replacement: '[REDACTED]',
-          retainStructure: false,
-        })
-      })
-
-      it('should not call blacklistedKeysTransformed.find', () => {
-        expect(blacklistedKeysTransformedFindSpy).not.toHaveBeenCalled()
-      })
-    })
-
-    describe('when the key is a string that does not match the computed regex', () => {
-      beforeEach(() => {
-        // @ts-expect-error - findMatchingKeyConfig is private but we're testing it
-        result = utils.findMatchingKeyConfig('b')
-      })
-
-      it('should call blacklistedKeysTransformed.find', () => {
-        expect(blacklistedKeysTransformedFindSpy).toHaveBeenCalledOnce()
-        expect(blacklistedKeysTransformedFindSpy).toHaveBeenNthCalledWith(1, expect.any(Function))
-      })
-
-      it('should return undefined', () => {
-        expect(result).toBeUndefined()
-      })
     })
 
     describe('when the key is a string that matches a complex key', () => {

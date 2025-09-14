@@ -23,18 +23,6 @@ class RedactorUtils {
   private readonly config: Required<RedactorUtilsConfig> = defaultConfig
 
   /**
-   * The computed regex pattern generated from sanitised blacklist keys of flat strings
-   * @private
-   */
-  private readonly computedRegex: RegExp | null = null
-
-  /**
-   * Regex to sanitise strings for the computed regex
-   * @private
-   */
-  private readonly sanitiseRegex = /[^a-zA-Z0-9_\-\$]/g
-
-  /**
    * The transformed blacklist keys of flat regex patterns and complex config objects
    * @private
    */
@@ -52,9 +40,7 @@ class RedactorUtils {
       ...customConfig,
     }
 
-    this.blacklistedKeysTransformed = (customConfig.blacklistedKeys ?? []).filter(key => typeof key !== 'string').map((key) => this.createTransformedBlacklistedKey(key, customConfig))
-    const stringKeys = (customConfig.blacklistedKeys ?? []).filter(key => typeof key === 'string')
-    if (stringKeys.length > 0) this.computedRegex = new RegExp(stringKeys.map(this.sanitiseStringForRegex).filter(Boolean).join('|'))
+    this.blacklistedKeysTransformed = (customConfig.blacklistedKeys ?? []).map((key) => this.createTransformedBlacklistedKey(key, customConfig))
     this.setupTransformerRegistry(this.config.transformers)
   }
 
@@ -102,8 +88,20 @@ class RedactorUtils {
     }
   }
 
-  private createTransformedBlacklistedKey = (key: RegExp | BlacklistKeyConfig, customConfig: RedactorUtilsConfig): BlacklistKeyConfig => {
+  private createTransformedBlacklistedKey = (key: string | RegExp | BlacklistKeyConfig, customConfig: RedactorUtilsConfig): BlacklistKeyConfig => {
     if (key instanceof RegExp) {
+      return {
+        key,
+        fuzzyKeyMatch: customConfig.fuzzyKeyMatch ?? defaultConfig.fuzzyKeyMatch,
+        caseSensitiveKeyMatch: customConfig.caseSensitiveKeyMatch ?? defaultConfig.caseSensitiveKeyMatch,
+        retainStructure: customConfig.retainStructure ?? defaultConfig.retainStructure,
+        replacement: customConfig.replacement ?? defaultConfig.replacement,
+        replaceStringByLength: customConfig.replaceStringByLength ?? defaultConfig.replaceStringByLength,
+        remove: customConfig.remove ?? defaultConfig.remove,
+      }
+    }
+
+    if (typeof key === 'string') {
       return {
         key,
         fuzzyKeyMatch: customConfig.fuzzyKeyMatch ?? defaultConfig.fuzzyKeyMatch,
@@ -138,22 +136,12 @@ class RedactorUtils {
   }
 
   /**
-   * Sanitises a string for the computed regex
-   * @param key - The string to sanitise
-   * @returns The sanitised string
-   * @private
-   */
-  private sanitiseStringForRegex = (key: string): string => key.replace(this.sanitiseRegex, '')
-
-  /**
    * Checks if a key should be redacted
    * @param key - The key to check
    * @returns Whether the key should be redacted
    * @private
    */
   private shouldRedactKey = (key: string): boolean => {
-    if (this.computedRegex?.test(this.sanitiseStringForRegex(key))) return true
-
     return this.blacklistedKeysTransformed.some(config => {
       const pattern = config.key
       if (pattern instanceof RegExp) return pattern.test(key)
@@ -345,18 +333,6 @@ class RedactorUtils {
    * @private
    */
   private findMatchingKeyConfig(key: string): BlacklistKeyConfig | undefined {
-    if (this.computedRegex?.test(key)) {
-      return {
-        key,
-        fuzzyKeyMatch: this.config.fuzzyKeyMatch,
-        caseSensitiveKeyMatch: this.config.caseSensitiveKeyMatch,
-        replaceStringByLength: this.config.replaceStringByLength,
-        replacement: this.config.replacement,
-        retainStructure: this.config.retainStructure,
-        remove: this.config.remove,
-      }
-    }
-
     return this.blacklistedKeysTransformed.find(config => {
       const pattern = config.key
       if (pattern instanceof RegExp) return pattern.test(key)
