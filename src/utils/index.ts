@@ -145,8 +145,8 @@ class RedactorUtils {
     return this.blacklistedKeysTransformed.some(config => {
       const pattern = config.key
       if (pattern instanceof RegExp) return pattern.test(key)
-      if (!config.fuzzyKeyMatch && !config.caseSensitiveKeyMatch) return key.toLowerCase() === pattern.toLowerCase()
-      if (config.fuzzyKeyMatch && !config.caseSensitiveKeyMatch) return key.toLowerCase().includes(pattern.toLowerCase())
+      if (!config.fuzzyKeyMatch && !config.caseSensitiveKeyMatch) return key.toLowerCase().trim().replace(/[_-]/g, '') === pattern.toLowerCase().trim().replace(/[_-]/g, '')
+      if (config.fuzzyKeyMatch && !config.caseSensitiveKeyMatch) return key.toLowerCase().trim().replace(/[_-]/g, '').includes(pattern.toLowerCase().trim().replace(/[_-]/g, ''))
       if (config.fuzzyKeyMatch && config.caseSensitiveKeyMatch) return key.includes(pattern)
       if (!config.fuzzyKeyMatch && config.caseSensitiveKeyMatch) return key === pattern
     })
@@ -337,13 +337,16 @@ class RedactorUtils {
       const pattern = config.key
       if (pattern instanceof RegExp) return pattern.test(key)
 
+      const normalisedKey = key.toLowerCase().trim().replace(/[_-]/g, '')
+      const normalisedPattern = pattern.toLowerCase().trim().replace(/[_-]/g, '')
+
       if (config.fuzzyKeyMatch) {
-        const compareKey = config.caseSensitiveKeyMatch ? key : key.toLowerCase()
-        const comparePattern = config.caseSensitiveKeyMatch ? pattern : pattern.toLowerCase()
+        const compareKey = config.caseSensitiveKeyMatch ? key : normalisedKey
+        const comparePattern = config.caseSensitiveKeyMatch ? pattern : normalisedPattern
         return compareKey.includes(comparePattern)
       }
 
-      return config.caseSensitiveKeyMatch ? key === pattern : key.toLowerCase() === pattern.toLowerCase()
+      return config.caseSensitiveKeyMatch ? key === pattern : normalisedKey === normalisedPattern
     })
   }
 

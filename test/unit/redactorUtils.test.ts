@@ -289,13 +289,13 @@ describe('RedactorUtils', () => {
           describe('when caseSensitiveKeyMatch is false', () => {
             beforeEach(() => {
               utils = new RedactorUtils({
-                blacklistedKeys: [{ key: 'a', caseSensitiveKeyMatch: false }],
+                blacklistedKeys: [{ key: 'FooBar', caseSensitiveKeyMatch: false }],
               })
-              result = utils.traverse([{ A: 'B', C: 'D' }])
+              result = utils.traverse([{ foo_bar: 'world', fooBar: 'hello, world!', 'foo-bar': 'hello, world!', BizBaz: 'hello, world!' }])
             })
 
             it('should return the redacted value', () => {
-              expect(result).toEqual([{ A: '[REDACTED]', C: 'D' }])
+              expect(result).toEqual([{ foo_bar: '[REDACTED]', fooBar: '[REDACTED]', 'foo-bar': '[REDACTED]', BizBaz: 'hello, world!' }])
             })
           })
 
