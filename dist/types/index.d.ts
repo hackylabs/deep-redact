@@ -1,5 +1,5 @@
-import type { DeepRedactConfig, RedactorUtilsConfig, BlacklistKeyConfig, Types, Transformer, ComplexStringTest, BaseDeepRedactConfig, OrganisedTransformers, TransformerConfig } from './types';
-import { organisedStandardTransformers, standardTransformers } from './utils/standardTransformers';
+import type { DeepRedactConfig, RedactorUtilsConfig, BlacklistKeyConfig, Types, Transformer, ComplexStringTest, BaseDeepRedactConfig, OrganisedTransformers, TransformerConfig } from './types.js';
+import { organisedStandardTransformers, standardTransformers } from './utils/standardTransformers/index.js';
 declare class DeepRedact {
     /**
      * The redactorUtils instance to handle the redaction.

@@ -1,6 +1,6 @@
-import type { RedactorUtilsConfig, Stack, BlacklistKeyConfig, TransformerConfig, OrganisedTransformers } from '../types'
-import { standardTransformers } from './standardTransformers'
-import { TransformerRegistry } from './TransformerRegistry'
+import type { RedactorUtilsConfig, Stack, BlacklistKeyConfig, OrganisedTransformers, TransformerConfig } from '../types.js'
+import { standardTransformers } from './standardTransformers/index.js'
+import { TransformerRegistry } from './TransformerRegistry.js'
 
 const defaultConfig: Required<RedactorUtilsConfig> = {
   stringTests: [],
@@ -75,7 +75,7 @@ class RedactorUtils {
               RegExp,
               URL,
             }
-            
+
             const constructor = constructorMap[constructorName]
             if (constructor) {
               constructorTransformers.forEach(transformer => {

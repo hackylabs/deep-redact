@@ -1,2 +1,2 @@
-import type { Transformer } from "../../types";
+import type { Transformer } from "../../types.js";
 export declare const _error: Transformer;

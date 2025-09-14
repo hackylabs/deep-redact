@@ -1,5 +1,5 @@
-import { organisedStandardTransformers, standardTransformers } from './utils/standardTransformers';
-import RedactorUtils from './utils';
+import { organisedStandardTransformers, standardTransformers } from './utils/standardTransformers/index.mjs';
+import RedactorUtils from './utils/index.mjs';
 class DeepRedact {
     /**
      * The redactorUtils instance to handle the redaction.

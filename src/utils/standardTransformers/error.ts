@@ -1,4 +1,4 @@
-import type { Transformer } from "../../types"
+import type { Transformer } from "../../types.js"
 
 export const _error: Transformer = (value: unknown) => {
     if (!(value instanceof Error)) return value

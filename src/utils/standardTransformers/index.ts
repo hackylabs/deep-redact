@@ -1,11 +1,11 @@
-import type { Transformer, OrganisedTransformers } from 'src/types';
-import { _bigint } from './bigint';
-import { _date } from './date';
-import { _error } from './error';
-import { _map } from './map';
-import { _regex } from './regex';
-import { _set } from './set';
-import { _url } from './url';
+import type { Transformer, OrganisedTransformers } from "../../types.js";
+import { _bigint } from "./bigint.js";
+import { _date } from "./date.js";
+import { _error } from "./error.js";
+import { _map } from "./map.js";
+import { _regex } from "./regex.js";
+import { _set } from "./set.js";
+import { _url } from "./url.js";
 
 /**
  * Standard transformers in array for legacy support

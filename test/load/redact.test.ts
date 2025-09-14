@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, it } from 'vitest'
 import { blacklistedKeys, complexBlacklistedKeys, fastRedactBlacklistedKeys, ObGlobPatterns, stringPattern } from '../setup/blacklist'
 import { dummyUser } from '../setup/dummyUser'
 import { DeepRedact } from '../../src'
+import util from 'util'
 
 let server: http.Server
 const PORT = 3456
@@ -30,6 +31,7 @@ type LoadTestResult = {
   timeouts: number;
   errors: number;
   throughput: number;
+  perTestAvgDuration: number;
   latency: {
     average: number;
     max: number;
@@ -61,7 +63,7 @@ describe('Redaction Load Tests', () => {
     server = http.createServer((req, res) => {
       const url = new URL(req.url!, `http://${req.headers.host}`)
       const testType = url.pathname.slice(1)
-      const data = testType.includes('bulk') ? Array(1000).fill(dummyUser) : dummyUser
+      const data = testType.includes('bulk') ? Array(100).fill(dummyUser) : dummyUser
 
       let result: any
 
@@ -119,7 +121,14 @@ describe('Redaction Load Tests', () => {
   })
 
   afterAll(() => {
-    const sortedByP50 = [...results].sort((a, b) => a.latency.p50 - b.latency.p50);
+    const sortedByP50 = [...results].sort((a, b) => {
+      const p50Diff = a.latency.p50 - b.latency.p50
+      const p95Diff = a.latency.p95 - b.latency.p95
+      const perTestAvgDurationDiff = a.perTestAvgDuration - b.perTestAvgDuration
+      const averageLatencyDiff = a.latency.average - b.latency.average
+
+      return p50Diff + p95Diff + perTestAvgDurationDiff + averageLatencyDiff
+    });
 
     const output: LoadTestResults = {
       timestamp: Date.now(),
@@ -128,6 +137,7 @@ describe('Redaction Load Tests', () => {
         timeouts: r.timeouts,
         errors: r.errors,
         throughput: r.throughput,
+        perTestAvgDuration: r.perTestAvgDuration,
         latency: {
           average: r.latency.average,
           max: r.latency.max,
@@ -148,6 +158,19 @@ describe('Redaction Load Tests', () => {
       }
     };
 
+    console.table(output.results.map(r => ({
+      title: r.title,
+      perTestAvgDuration: r.perTestAvgDuration,
+      latency: r.latency.p50,
+      throughput: r.throughput,
+      'latency p50': r.latency.p50,
+      'latency p95': r.latency.p95,
+      'latency min': r.latency.min,
+      'latency max': r.latency.max,
+      'latency average': r.latency.average,
+    })))
+    console.log(util.formatWithOptions({ colors: true }, "%cFastest: %s - %sms", 'color: green; font-weight: bold;', output.summary.fastest.title, output.summary.fastest.latency))
+    console.log(util.formatWithOptions({ colors: true }, "%cSlowest: %s - %sms", 'color: red; font-weight: bold;', output.summary.slowest.title, output.summary.slowest.latency))
     writeFileSync('load-test-results.json', JSON.stringify(output, null, 2));
     return new Promise<void>((resolve) => server.close(() => resolve()));
   })
@@ -156,12 +179,9 @@ describe('Redaction Load Tests', () => {
     const result = await autocannon({
       url: `http://localhost:${PORT}/${url}`,
       connections: 1,
-      duration: 10,
+      amount: 100,
+      timeout: 1,
       title,
-      timeout: 30,
-      connectionRate: 1,
-      pipelining: 1,
-      maxConnectionRequests: 1000
     });
 
     results.push({
@@ -169,6 +189,7 @@ describe('Redaction Load Tests', () => {
       timeouts: result.timeouts ?? 0,
       errors: result.errors ?? 0,
       throughput: result.requests?.average ?? 0,
+      perTestAvgDuration: result.duration / result.requests.sent,
       latency: {
         average: result.latency?.average ?? 0,
         max: result.latency?.max ?? 0,
@@ -184,6 +205,7 @@ describe('Redaction Load Tests', () => {
       timeouts: result.timeouts,
       errors: result.errors,
       totalCount: result.statusCodeStats?.[200]?.count ?? 0,
+      perTestAvgDuration: result.duration / result.requests.sent,
       latency: {
         average: result.latency?.average ?? 0,
         max: result.latency?.max ?? 0,
@@ -198,7 +220,7 @@ describe('Redaction Load Tests', () => {
   })
 
   it('should handle fast-redact bulk objects load', async () => {
-    await runLoadTest('fastRedact-bulk', 'FastRedact 1000 Objects')
+    await runLoadTest('fastRedact-bulk', 'FastRedact 100 Objects')
   })
 
   it('should handle obglob single object load', async () => {
@@ -206,7 +228,7 @@ describe('Redaction Load Tests', () => {
   })
 
   it('should handle obglob bulk objects load', async () => {
-    await runLoadTest('obglob-bulk', 'ObGlob 1000 Objects')
+    await runLoadTest('obglob-bulk', 'ObGlob 100 Objects')
   })
 
   it('should handle deep-redact remove single object load', async () => {
@@ -214,7 +236,7 @@ describe('Redaction Load Tests', () => {
   })
 
   it('should handle deep-redact remove bulk objects load', async () => {
-    await runLoadTest('deepRedactRemove-bulk', 'DeepRedact Remove 1000 Objects')
+    await runLoadTest('deepRedactRemove-bulk', 'DeepRedact Remove 100 Objects')
   })
 
   it('should handle deep-redact single object load', async () => {
@@ -222,7 +244,7 @@ describe('Redaction Load Tests', () => {
   })
 
   it('should handle deep-redact bulk objects load', async () => {
-    await runLoadTest('deepRedact-bulk', 'DeepRedact 1000 Objects')
+    await runLoadTest('deepRedact-bulk', 'DeepRedact 100 Objects')
   })
 
   it('should handle deep-redact complex config load', async () => {
@@ -234,7 +256,7 @@ describe('Redaction Load Tests', () => {
   })
 
   it('should handle regexReplace bulk objects load', async () => {
-    await runLoadTest('regexReplace-bulk', 'RegexReplace 1000 Objects')
+    await runLoadTest('regexReplace-bulk', 'RegexReplace 100 Objects')
   })
 
   it('should handle jsonStringify single object load', async () => {
@@ -242,6 +264,6 @@ describe('Redaction Load Tests', () => {
   })
 
   it('should handle jsonStringify bulk objects load', async () => {
-    await runLoadTest('jsonStringify-bulk', 'JsonStringify 1000 Objects')
+    await runLoadTest('jsonStringify-bulk', 'JsonStringify 100 Objects')
   })
 })
