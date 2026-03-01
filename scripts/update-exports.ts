@@ -34,13 +34,17 @@ function generateExports(dir: string = 'src'): ExportMap {
         processDirectory(fullPath);
       } else if (file.endsWith('.ts') && !file.endsWith('.d.ts') && !file.endsWith('.test.ts')) {
         const exportPath = generateExportPath(fullPath);
-        const exportKey = exportPath === 'index' ? '.' : `./${exportPath}`;
-
-        exports[exportKey] = {
-          import: `./dist/${exportPath.replace(/\.ts$/, '')}.mjs`,
-          require: `./dist/${exportPath.replace(/\.ts$/, '')}.js`,
-          types: `./dist/types/${exportPath.replace(/\.ts$/, '')}.d.ts`,
+        const distPath = exportPath.replace(/\.ts$/, '');
+        const entry = {
+          import: `./dist/${distPath}.mjs`,
+          require: `./dist/${distPath}.js`,
+          types: `./dist/types/${distPath}.d.ts`,
         };
+
+        if (exportPath === 'index.ts') {
+          exports['.'] = entry;
+        }
+        exports[`./${exportPath}`] = entry;
       }
     }
   }
