@@ -134,7 +134,7 @@
     "@types/autocannon": "7.12.6",
     "@types/fast-redact": "3.0.4",
     "@types/node": "20.14.12",
-    "@typescript-eslint/eslint-plugin": "7.14.1",
+    "@typescript-eslint/eslint-plugin": "8.8.0",
     "@typescript-eslint/parser": "7.14.1",
     "@vitest/coverage-v8": "2.0.4",
     "autocannon": "8.0.0",
