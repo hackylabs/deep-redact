@@ -245,7 +245,7 @@ GPT-5 Codex
 - Comprehensive story context created for Story `1.1`.
 - No previous story intelligence exists because this is the first story in Epic `1`.
 - No `project-context.md` file was found in the repository.
-- Scratch scaffold reference captured `pnpm@10.33.0`, `tsdown@0.21.7`, and `typescript@6.0.2`, and those decisions were documented in `docs/adr/0001-scratch-v4-foundation-transplant.md`.
+- Scratch scaffold reference captured `pnpm@10.33.0`, `tsdown@0.21.7`, and `typescript@6.0.2`, and those decisions were documented in `_bmad-output/planning-artifacts/0001-scratch-v4-foundation-transplant.md`.
 - Replaced the npm-first / Airbnb / dual-`tsc` baseline with Node `24.14.1`, `pnpm`, `tsdown`, a root-only v4 package surface, and a deliberate `xo` + `tsc --noEmit` lint gate.
 - Added deterministic generated-file workflows for package export metadata and README content plus explicit verification through `scripts/verify-generated-files.ts`.
 - Added clean-fixture contract coverage for `import`, `require`, and both ESM and CommonJS consumer-facing type declarations under `test/contract/`.
@@ -258,7 +258,7 @@ GPT-5 Codex
 - .npmrc
 - .nvmrc
 - README.md
-- docs/adr/0001-scratch-v4-foundation-transplant.md
+- _bmad-output/planning-artifacts/0001-scratch-v4-foundation-transplant.md
 - package.json
 - pnpm-lock.yaml
 - scripts/generate-exports.ts

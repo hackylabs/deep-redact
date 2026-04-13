@@ -156,7 +156,7 @@ so that I can standardise redaction setup once per service and reuse it without 
 - Story `1.1` already established the scratch-derived v4 contributor baseline, the root-only `deepRedact` / `createRedactor` export surface, and deterministic generated-file workflows.
 - Story `1.1` deliberately retained [src/types.ts](/Users/ben.green/Code/deep-redact/src/types.ts), [src/utils/index.ts](/Users/ben.green/Code/deep-redact/src/utils/index.ts), `test/unit/**`, `test/load/**`, and `test/bench/**` as brownfield pressure only. Do not mistake those files for the approved v4 shape.
 - [test/build.test.ts](/Users/ben.green/Code/deep-redact/test/build.test.ts) and the existing clean-consumer fixtures already enforce that the root package exposes only `deepRedact` and `createRedactor`. Extend that harness to prove the built factories return callable redactors rather than inventing a parallel one.
-- [docs/adr/0001-scratch-v4-foundation-transplant.md](/Users/ben.green/Code/deep-redact/docs/adr/0001-scratch-v4-foundation-transplant.md) records which scaffold conventions were adopted, adapted, or intentionally rejected. Use it if you need to justify why a retained brownfield file should still not drive the v4 design.
+- [0001-scratch-v4-foundation-transplant.md](/Users/ben.green/Code/deep-redact/_bmad-output/planning-artifacts/0001-scratch-v4-foundation-transplant.md) records which scaffold conventions were adopted, adapted, or intentionally rejected. Use it if you need to justify why a retained brownfield file should still not drive the v4 design.
 - Story `1.1` noted that the current `xo` TypeScript path is unreliable under this exact stack, so `tsc --noEmit` is still the main TypeScript quality gate. Work with that constraint instead of trying to fix the lint stack mid-story.
 
 ### Recent Git Intelligence
@@ -195,7 +195,7 @@ so that I can standardise redaction setup once per service and reuse it without 
   - [sprint-status.yaml](/Users/ben.green/Code/deep-redact/_bmad-output/implementation-artifacts/sprint-status.yaml) - current development status
 - Previous implementation context
   - [1-1-establish-the-scratch-v4-foundation-and-brownfield-transplant-scaffold.md](/Users/ben.green/Code/deep-redact/_bmad-output/implementation-artifacts/1-1-establish-the-scratch-v4-foundation-and-brownfield-transplant-scaffold.md)
-  - [0001-scratch-v4-foundation-transplant.md](/Users/ben.green/Code/deep-redact/docs/adr/0001-scratch-v4-foundation-transplant.md)
+  - [0001-scratch-v4-foundation-transplant.md](/Users/ben.green/Code/deep-redact/_bmad-output/planning-artifacts/0001-scratch-v4-foundation-transplant.md)
 - Current repo files
   - [package.json](/Users/ben.green/Code/deep-redact/package.json)
   - [src/index.ts](/Users/ben.green/Code/deep-redact/src/index.ts)

@@ -22,12 +22,14 @@ const paths: PathEntry[] = [
 ]
 
 const options: DeepRedactOptions = {
+  keys: ['password'],
   paths,
   serialise: (value) => JSON.stringify(value) ?? 'null',
 }
 
 const redact: Redactor = deepRedact(options)
 const alias: Redactor = createRedactor({
+  keys: ['token'],
   paths,
 })
 
@@ -36,9 +38,12 @@ const aliasResult = alias({ ok: true })
 
 // @ts-expect-error v4 exposes only the British-English serialise option
 const invalidLegacyOption: DeepRedactOptions = { serialize: true }
+// @ts-expect-error v4 does not expose the legacy v3 key option
+const invalidLegacyKeys: DeepRedactOptions = { blacklistedKeys: ['password'] }
 // @ts-expect-error the reusable redactor accepts payload input only after initialisation
 redact({ ok: true }, options)
 
 void structuredResult
 void aliasResult
 void invalidLegacyOption
+void invalidLegacyKeys

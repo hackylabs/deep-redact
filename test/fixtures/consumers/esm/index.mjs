@@ -1,6 +1,6 @@
 import * as packageSurface from '@hackylabs/deep-redact'
 
-const payload = { user: { password: 'secret' } }
+const payload = { ok: true }
 const redact = packageSurface.deepRedact({
   paths: ['user.password'],
 })

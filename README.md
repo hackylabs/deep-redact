@@ -1,6 +1,6 @@
 # Deep Redact
 
-Deep Redact v4 is currently in its foundation phase. Story `1.1` establishes the package surface, contributor tooling, generated artefact workflow, and dual-format build output without shipping the runtime redaction engine yet.
+Deep Redact v4 is currently in its foundation phase. The initial v4 foundation work establishes the package surface, contributor tooling, generated artefact workflow, and dual-format build output without shipping the runtime redaction engine yet.
 
 ## Contributor Baseline
 
@@ -27,7 +27,7 @@ sameFactory({ secret: 'value' }) // throws until the v4 runtime lands
 - `deepRedact(options)` is the primary public factory.
 - `createRedactor(options)` is the named alias.
 - The published root package surface is limited to the root entrypoint and `package.json`.
-- The runtime implementation is intentionally placeholder-only in Story `1.1`.
+- The runtime implementation is intentionally placeholder-only in the current foundation scaffold.
 - The retained legacy tests remain in the repository as explicit red-phase pressure outside the default contract gate.
 
 ## Scripts
@@ -43,4 +43,4 @@ sameFactory({ secret: 'value' }) // throws until the v4 runtime lands
 
 ## Provenance
 
-The scratch-template transplant decisions for Story `1.1` are documented in `docs/adr/0001-scratch-v4-foundation-transplant.md`.
+The scratch-template transplant decisions for the initial v4 foundation are documented in `_bmad-output/planning-artifacts/0001-scratch-v4-foundation-transplant.md`.

@@ -1,9 +1,14 @@
 import type { PathRule } from '../../types/paths.js'
 import type { DeepRedactOptions, SerialiseOption } from '../../types/public.js'
 import { createValidationReport, type ValidationIssue, type ValidationReport } from './validation-report.js'
+import {
+  validateExactPathSelectors,
+  type ExactPathSelectorCandidate,
+} from './validate-paths.js'
 
 const rootOptionNames = new Set<keyof DeepRedactOptions>([
   'censor',
+  'keys',
   'paths',
   'remove',
   'retainStructure',
@@ -104,11 +109,69 @@ interface EffectiveRuleDefaults {
   readonly retainStructure: boolean
 }
 
+const regexLikeKeySelectorPattern = /^\/.+\/[A-Za-z]*$/
+
+const getUnsupportedKeySelectorMessage = (selector: string): string | undefined => {
+  if (selector.startsWith('!')) {
+    return `Unsupported exclusion key selector "${selector}". Ignore selectors must use structured selector objects and are not supported in this configuration format.`
+  }
+
+  if (selector.includes('**')) {
+    return `Unsupported recursive wildcard key selector "${selector}".`
+  }
+
+  if (selector.includes('*')) {
+    return `Unsupported wildcard key selector "${selector}".`
+  }
+
+  if (regexLikeKeySelectorPattern.test(selector)) {
+    return `Unsupported regex-like key selector "${selector}".`
+  }
+
+  return undefined
+}
+
+const validateKeys = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): void => {
+  if (value === undefined) {
+    return
+  }
+
+  if (!Array.isArray(value)) {
+    pushIssue(issues, path, 'keys must be an array.')
+    return
+  }
+
+  value.forEach((entry, index) => {
+    const entryPath = `${path}[${index}]`
+
+    if (typeof entry !== 'string') {
+      pushIssue(issues, entryPath, 'key selectors must be strings.')
+      return
+    }
+
+    if (entry.length === 0) {
+      pushIssue(issues, entryPath, 'key selectors must not be empty.')
+      return
+    }
+
+    const unsupportedSelectorMessage = getUnsupportedKeySelectorMessage(entry)
+
+    if (unsupportedSelectorMessage !== undefined) {
+      pushIssue(issues, entryPath, unsupportedSelectorMessage)
+    }
+  })
+}
+
 const validatePathRule = (
   value: unknown,
   path: string,
   defaults: EffectiveRuleDefaults,
   issues: ValidationIssue[],
+  selectorCandidates: ExactPathSelectorCandidate[],
 ): void => {
   if (!isPlainObject(value)) {
     pushIssue(issues, path, `${path.split('.').at(-1) ?? 'entry'} must be a string selector or path-rule object.`)
@@ -119,6 +182,11 @@ const validatePathRule = (
 
   if (typeof value.path !== 'string') {
     pushIssue(issues, `${path}.path`, 'path must be a string.')
+  } else {
+    selectorCandidates.push({
+      configPath: `${path}.path`,
+      selector: value.path,
+    })
   }
 
   validateCensorOption(value.censor, path, issues)
@@ -140,6 +208,7 @@ const validatePaths = (
   path: string,
   defaults: EffectiveRuleDefaults,
   issues: ValidationIssue[],
+  selectorCandidates: ExactPathSelectorCandidate[],
 ): void => {
   if (value === undefined) {
     return
@@ -154,6 +223,10 @@ const validatePaths = (
     const entryPath = `${path}[${index}]`
 
     if (typeof entry === 'string') {
+      selectorCandidates.push({
+        configPath: entryPath,
+        selector: entry,
+      })
       return
     }
 
@@ -162,12 +235,13 @@ const validatePaths = (
       return
     }
 
-    validatePathRule(entry, entryPath, defaults, issues)
+    validatePathRule(entry, entryPath, defaults, issues, selectorCandidates)
   })
 }
 
 export const validateConfig = (options: unknown): ValidationReport => {
   const issues: ValidationIssue[] = []
+  const selectorCandidates: ExactPathSelectorCandidate[] = []
 
   if (options === undefined) {
     return createValidationReport(issues)
@@ -180,6 +254,7 @@ export const validateConfig = (options: unknown): ValidationReport => {
 
   validateAllowedOptions(options, rootOptionNames, 'options', issues)
   validateCensorOption(options.censor, 'options', issues)
+  validateKeys(options.keys, 'options.keys', issues)
   validateBooleanOption(options.remove, 'options', 'remove', issues)
   validateBooleanOption(options.retainStructure, 'options', 'retainStructure', issues)
   validateSerialiseOption(options.serialise, 'options', issues)
@@ -193,7 +268,9 @@ export const validateConfig = (options: unknown): ValidationReport => {
       retainStructure: options.retainStructure === true,
     },
     issues,
+    selectorCandidates,
   )
+  validateExactPathSelectors(selectorCandidates, issues)
 
   return createValidationReport(issues)
 }

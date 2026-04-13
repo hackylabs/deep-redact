@@ -4,6 +4,7 @@ export type SerialiseOption = boolean | ((value: unknown) => string)
 
 export interface DeepRedactOptions {
   readonly censor?: Censor
+  readonly keys?: readonly string[]
   readonly paths?: readonly PathEntry[]
   readonly remove?: boolean
   readonly retainStructure?: boolean

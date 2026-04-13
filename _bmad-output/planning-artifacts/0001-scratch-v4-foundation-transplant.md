@@ -6,7 +6,7 @@ Accepted on `2026-04-13`.
 
 ## Scratch Reference
 
-Story `1.1` generated a scratch reference scaffold with:
+The initial v4 foundation work generated a scratch reference scaffold with:
 
 ```bash
 pnpm create tsdown@latest /tmp/deep-redact-v4 --template minimal
@@ -40,7 +40,7 @@ The scratch template selected:
 - The package metadata is generated through `scripts/generate-exports.ts` so the root surface stays deterministic and reviewable.
 - README generation now runs through `scripts/generate-readme.ts` and `scripts/verify-generated-files.ts`.
 - The contributor baseline was lifted to Node `24.14.1`, `pnpm@10.33.0`, `Vitest`, and `xo`.
-- `xo` remains the linting baseline, but Story `1.1` currently scopes it to the JS toolchain config while `tsc --noEmit` enforces the TypeScript surface, because the latest `xo` TypeScript path crashes under this exact stack instead of reporting normal lint output.
+- `xo` remains the linting baseline, but the current foundation scaffold scopes it to the JS toolchain config while `tsc --noEmit` enforces the TypeScript surface, because the latest `xo` TypeScript path crashes under this exact stack instead of reporting normal lint output.
 - The root package surface was narrowed to the v4 factory facade only: `deepRedact` and `createRedactor`.
 - Contract tests for clean `import`, `require`, and type-resolution consumers were added under `test/contract/`.
 
@@ -48,7 +48,7 @@ The scratch template selected:
 
 - The scratch sample implementation (`fn()`) was rejected in favour of a compile-safe placeholder redactor.
 - The scratch package name, version, and `private` defaults were rejected in favour of Deep Redact package metadata.
-- The scratch scaffold's lack of README/export verification was rejected because Story `1.1` requires generated artefacts to stay explicit and reviewable.
+- The scratch scaffold's lack of README/export verification was rejected because the initial v4 foundation requires generated artefacts to stay explicit and reviewable.
 
 ## Retained Brownfield Files
 

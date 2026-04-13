@@ -1,6 +1,7 @@
 import deepRedactPackage = require('@hackylabs/deep-redact')
 
 const redact = deepRedactPackage.deepRedact({
+  keys: ['password'],
   paths: [
     'user.password',
     { path: 'user.token', remove: true },
@@ -15,6 +16,8 @@ const serialisedResult = alias({ ok: true })
 
 // @ts-expect-error v4 does not expose the American-English serialisation alias
 deepRedactPackage.deepRedact({ serialize: true })
+// @ts-expect-error v4 does not expose the legacy v3 key option
+deepRedactPackage.deepRedact({ blacklistedKeys: ['password'] })
 
 void structuredResult
 void serialisedResult
