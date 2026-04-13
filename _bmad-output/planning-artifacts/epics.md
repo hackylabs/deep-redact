@@ -86,7 +86,7 @@ NFR19: Published documentation must align with the verified installation and com
 - The core package should remain zero-runtime-dependency.
 - Generated `README` and export-map workflows must be retained and enforced as generated artefacts rather than hand-maintained files.
 - The primary public API should be function-first: `deepRedact(options)` returning a callable redactor, with `createRedactor(options)` as an ergonomic alias.
-- The public configuration surface should preserve `fast-redact` familiarity where appropriate, using `paths`, `censor`, and `remove` as primary options; `serialise` is the primary serialisation option and `serialize` is a compatibility alias only.
+- The public configuration surface should preserve `fast-redact` familiarity where appropriate, using `paths`, `censor`, `remove`, and `serialise` as the public options. `serialise` accepts `boolean | ((value: unknown) => string)` and defaults to structured output when omitted.
 - Invalid configuration combinations, including `remove + censor` and `remove + retainStructure`, must fail initialisation at both global and per-path levels.
 - Configuration should be compiled once at initialisation into an immutable rule plan separating exact path rules, dynamic path rules, key rules, substring rules, transformer rules, diagnostics configuration, and output-shaping rules.
 - The runtime should use a two-lane design: an exact static path fast lane plus a generic iterative traversal fallback, with both lanes required to produce identical observable behaviour.
@@ -250,20 +250,36 @@ So that I can standardise redaction setup once per service and reuse it without 
 **Then** it returns the same callable redactor behaviour as `deepRedact(validOptions)`
 **And** both factories are available from the public entrypoint
 
-**Given** an invalid configuration shape or unsupported option value
+**Given** an invalid configuration shape, unsupported option value, or unsupported public option name
 **When** either factory is called
 **Then** initialisation fails immediately with a validation error
 **And** no redaction function is returned
 
+**Given** startup configuration includes `paths`
+**When** the public config is typed and validated for this story
+**Then** each entry is either a string selector or a path-rule object with `path` plus optional `censor`, `remove`, and `retainStructure` overrides
+**And** selector execution beyond this story's init-time contract remains deferred to later stories in Epic `1`
+
 **Given** invalid option combinations for this story
-**When** `remove` is combined with `censor` or `retainStructure`
+**When** `remove` is combined with `censor` or `retainStructure` at the global config level or inside a path-rule object
 **Then** factory creation is rejected during initialisation
 **And** the validation error identifies the conflicting option or combination
 
 **Given** a TypeScript consumer
 **When** the factory functions are imported from the public entrypoint
 **Then** the package exposes typed signatures for supported startup options
+**And** `serialise` is the only public serialisation option, accepts `boolean | ((value: unknown) => string)`, and defaults to structured output when omitted
 **And** the returned redactor is editor-discoverable as a callable function
+
+**Given** a validly initialised redactor in this story before runtime targeting is implemented
+**When** the consumer invokes it with a payload compatible with the configured `serialise` setting
+**Then** it returns the payload unchanged apart from optional serialisation configured at initialisation
+**And** it does not throw solely because later targeting stories have not landed yet
+
+**Given** clean ESM and CommonJS consumer fixtures
+**When** the built package exports are imported and either factory is invoked
+**Then** each returns a callable redactor
+**And** the built root surface still exposes only `deepRedact` and `createRedactor`
 
 **Given** this story’s scope
 **When** the implementation is reviewed
@@ -1434,7 +1450,7 @@ So that I can judge migration effort before changing production services.
   **Then** it shows the original `fast-redact` configuration, the rewritten v4 configuration, and the exact rewrite required for that row
 - **Given** the mechanical-rewrite row set
   **When** it is reviewed before release
-  **Then** it explicitly includes at least one admitted scenario covering `serialize` to `serialise`
+  **Then** it explicitly includes at least one admitted scenario covering the serialisation-option spelling difference between source and target configurations
 
 **Intentional-divergence rows**
 - **Given** a row classified as `intentional-divergence`

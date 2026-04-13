@@ -130,7 +130,7 @@ The starter does not remove the need for Deep Redact-specific automation. The v4
 ### Decision Priority Analysis
 
 **Critical Decisions (Block Implementation):**
-- Public API contract: v4 replaces the class API with a function-first factory. The primary API should be `deepRedact(options)` returning a callable redactor, with an optional named alias such as `createRedactor(options)` for TypeScript ergonomics. The public configuration surface should preserve `fast-redact` familiarity where it fits, using `paths`, `censor`, and `remove` as primary option names. `serialise` is the primary serialisation option, with `serialize` retained as a compatibility alias only. Path entries may be plain selectors or path-rule objects with per-path overrides. `strict` is not supported. No restore capability is exposed. Invalid combinations such as `remove + censor` and `remove + retainStructure` must fail initialisation at both global and per-path levels.
+- Public API contract: v4 replaces the class API with a function-first factory. The primary API should be `deepRedact(options)` returning a callable redactor, with an optional named alias such as `createRedactor(options)` for TypeScript ergonomics. The public configuration surface should preserve `fast-redact` familiarity where it fits, using `paths`, `censor`, `remove`, and `serialise` as public option names. `serialise` defaults to structured output when omitted. Path entries may be plain selectors or path-rule objects with per-path overrides. `strict` is not supported. No restore capability is exposed. Invalid combinations such as `remove + censor` and `remove + retainStructure` must fail initialisation at both global and per-path levels.
 - Policy compilation model: configuration is compiled once at initialisation into an immutable internal rule plan that separates exact string path rules, structured path rules, deep key rules, substring rules, transformer rules, diagnostics configuration, and output-shaping rules. Global options are compiled as defaults once at initialisation, and per-rule options are merged over those defaults for the matched rule only, with any remaining unset values falling back to library defaults.
 - Runtime execution model: redaction uses a benchmark-led hybrid engine with no user-visible mutation mode. Exact static absolute string-path rules run through a compiled fast lane first. Structured selectors, matcher objects, recursive wildcards, ignore segments, and remaining dynamic cases fall back to a generic iterative traversal engine. The fast lane is an optimisation only and must not change observable behaviour. Both paths must produce the same observable behaviour for matching, censoring, diagnostics, precedence, and `[UNSUPPORTED]` output. Object-identity tracking is scoped to a single call to `redact` and must distinguish between in-progress traversal and completed traversal. Re-encountering an in-progress identity during the same call follows the circular-reference handling path. Re-encountering a fully traversed object or array during the same call must not trigger a second descent; the runtime should reuse the already resolved transformed result where safe, or otherwise deterministically skip re-entry. A sanitised warning may be emitted optionally, but repeated completed identities are otherwise treated as benign. Each subsequent call to `redact` resets traversal state while retaining the already initialised and compiled configuration in memory.
 - Security, resilience, and diagnostics contract: after successful initialisation, supported inputs must not throw during redaction. If a specific nested value cannot be processed safely, only that value or subtree degrades to `[UNSUPPORTED]`, while the rest of the payload continues through normal redaction processing. Internal diagnostic logging must record sanitised metadata only, such as value type, object path, and error details, and must never include sensitive source values or redacted originals. In Node contexts, the default internal diagnostics transport may use `console.error`, but it must bypass any optional console-redaction hook and include a re-entrancy guard so Deep Redact's own diagnostics can never recursively redact themselves.
@@ -143,7 +143,7 @@ The starter does not remove the need for Deep Redact-specific automation. The v4
 - The core package remains zero-runtime-dependency to preserve portability, supply-chain simplicity, and current product positioning.
 - Generated `exports` and generated `README` remain deterministic artefacts enforced in CI.
 - Existing v3 tests are retained as the initial red-phase contract suite, with new v4-focused unit and contract tests added alongside them.
-- `fast-redact` parity is surface-level and deliberate rather than exact. Common `paths`, `censor`, and `remove` cases should migrate mechanically, while divergences such as `serialise` as the primary option name, lack of `strict`, lack of restore behaviour, structured selectors, and per-path rule objects must be codemodded and documented explicitly.
+- `fast-redact` parity is surface-level and deliberate rather than exact. Common `paths`, `censor`, and `remove` cases should migrate mechanically, while divergences such as the `serialise` option name and structured-output default, lack of `strict`, lack of restore behaviour, structured selectors, and per-path rule objects must be codemodded and documented explicitly.
 - Migration tooling is elevated from a nice-to-have to an important release-track concern. A codemod or migration-assist tool should be planned for `fast-redact` and Deep Redact v3 adoption, even if it is not a hard implementation blocker.
 - Migration tooling must be validated against a golden corpus covering representative `fast-redact` and v3 examples, with intentional divergences explicitly documented.
 - Release documentation must include separate migration tracks for `fast-redact` and Deep Redact v3, plus worked examples covering the final supported API surface.
@@ -190,7 +190,7 @@ The project's communication surface is its public library API and its internal p
 - Identity tracking is object-based using `WeakMap` and `WeakSet`, not path-only bookkeeping, so aliases and circular references are handled correctly.
 - Once an object or array has been fully traversed, subsequent encounters of that same identity must not trigger another full descent. Revisited completed identities are either resolved through the already produced transformed result or ignored deterministically, with optional sanitised warning diagnostics only.
 - `censor` is the primary public censor option and defaults to `[REDACTED]`. Public censor functions accept the original matched value as the first argument and an optional context object as the second argument.
-- `serialise` is the primary public serialisation option and accepts the same type shape as `fast-redact` `serialize`, namely `boolean | ((value: unknown) => string)`. `serialize` is retained as a compatibility alias only, and migration tooling should rewrite `serialize` to `serialise`.
+- `serialise` is the public serialisation option and accepts `boolean | ((value: unknown) => string)`.
 - Structured and serialised output are both first-class. Serialisation remains a final output-adapter step rather than a separate traversal mode.
 - When `serialise` is disabled and structured output is returned, alias preservation is conditional. If the same input identity is reached through equivalent effective rule context, the returned structured result may preserve shared identity. If the same input identity is reached through different effective rule context, path-correct output takes priority over alias preservation and the returned result may contain distinct output objects derived from the same original identity.
 - Rule precedence is explicit: more specific exact string-path rules outrank less specific exact string-path rules; exact string-path rules outrank structured dynamic path rules; path rules outrank key rules; exact key rules outrank regex or matcher-object key rules; whole-value censor or removal outranks substring replacement.
@@ -348,12 +348,12 @@ When `fuzzy: true`, containment is evaluated after canonicalisation if `caseSens
 
 - Common `fast-redact` path strings should map directly to string selectors where possible.
 - `paths`, `censor`, and `remove` are preserved as primary public concepts for portability.
-- `serialise` is the primary Deep Redact option name, while `serialize` is retained as a compatibility alias only.
+- `serialise` is the Deep Redact serialisation option.
 - Deep Redact preserves the `fast-redact` serialisation type shape but deliberately diverges on the default value: `serialise` defaults to `false` rather than `JSON.stringify`, to avoid unnecessary hot-path serialisation cost and to support structured-output workflows by default.
 - `strict` is intentionally not supported.
 - restore behaviour is intentionally not supported.
 - Deep Redact extends the surface with per-path rule objects, structured selectors, deep key targeting, substring targeting, transformer controls, and graceful degradation.
-- The `fast-redact` migration codemod and migration guide must mechanically account for option-name differences such as `serialize` to `serialise`, and legacy Deep Redact migration material should account for option renames such as `replacement` to `censor` where required. Every intentional behavioural divergence must be documented explicitly.
+- The `fast-redact` migration codemod and migration guide must mechanically account for serialisation-option spelling differences, and legacy Deep Redact migration material should account for option renames such as `replacement` to `censor` where required. Every intentional behavioural divergence must be documented explicitly.
 
 ### Frontend Architecture
 
@@ -403,7 +403,7 @@ Frontend architecture is not applicable as an application concern.
 - DoS and hostile-input tests must cover depth limits, traversal budgets, selector complexity, regex abuse, and large mixed structures.
 - Censor contract tests must prove global-default compilation, per-path merge behaviour, optional context delivery, invalid combination rejection, and same-length replacement behaviour.
 - Transformer contract tests must fix precedence, define behaviour on transformer failure, and prove no post-init throws for supported inputs.
-- Migration validation must cover representative `fast-redact` and v3 fixtures, including documented divergences, `serialize` to `serialise` rewrites, legacy `replacement` to `censor` rewrites where needed, and per-path rule-object cases.
+- Migration validation must cover representative `fast-redact` and v3 fixtures, including documented divergences, serialisation-option rewrites where needed, legacy `replacement` to `censor` rewrites where needed, and per-path rule-object cases.
 - Conflict tests must prove duplicate canonical selector rejection and unreachable-child-rule handling.
 
 ## Implementation Patterns & Consistency Rules
@@ -429,7 +429,7 @@ Frontend architecture is not applicable as an application concern.
 **Public API Naming Conventions:**
 - Public configuration keys use `camelCase`.
 - British English is the default for project-owned names, comments, docs, and internal identifiers.
-- American-English aliases are allowed only where they are an explicit compatibility feature or product requirement, for example `serialize` alongside `serialise`.
+- Public API names do not expose duplicate spelling aliases unless a future product requirement explicitly introduces one.
 - Public factory and helper names use `camelCase`.
 - Public types, interfaces, and exported classes use `PascalCase`.
 - Internal constants use `UPPER_SNAKE_CASE`.
@@ -440,7 +440,6 @@ Frontend architecture is not applicable as an application concern.
 - `censor`
 - `paths`
 - `serialise`
-- `serialize` as explicit alias only
 - `replaceStringByLength`
 - `DeepRedactOptions`
 - `TransformerRegistry`
@@ -498,7 +497,7 @@ Frontend architecture is not applicable as an application concern.
 - Path strings use one canonical grammar form across docs, fixtures, diagnostics, and examples, while structured selectors are used for advanced matcher cases.
 - JSON examples in docs must use the same field names as the actual API.
 - Dates in diagnostics and reports use ISO 8601 strings.
-- Structured and serialised output are both first-class; serialisation is a final formatting step only. `serialise` is the primary option name and `serialize` is an explicit compatibility alias.
+- Structured and serialised output are both first-class; serialisation is a final formatting step only. `serialise` is the public option name.
 
 **Diagnostics Payload Format:**
 All internal diagnostic events should follow one shape:
@@ -589,7 +588,7 @@ Initialisation validation should return or emit structured findings with consist
 **Good Examples:**
 - `src/compile-policy.ts` defines compilation logic, while `src/adapters/console-adapter.ts` isolates console integration
 - `test/security/redos.test.ts` contains regex abuse cases, not `test/unit/`
-- `serialise` is the documented primary option and `serialize` is a compatibility alias, both covered by contract tests
+- `serialise` is the documented serialisation option, covered by contract tests
 - `censor` is the primary public censor option, while migration tooling rewrites legacy option names where needed
 - a new public helper is added through source entry metadata and the export-generation script, then reflected in generated outputs
 

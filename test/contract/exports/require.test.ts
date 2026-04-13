@@ -18,7 +18,11 @@ describe('CommonJS consumer contract', () => {
     const result = JSON.parse(stdout)
 
     expect(result).toEqual({
+      createRedactorReturnsCallable: true,
+      createRedactorSerialises: true,
       createRedactorType: 'function',
+      deepRedactReturnsCallable: true,
+      deepRedactReturnsPayload: true,
       deepRedactType: 'function',
       exposesLegacyClass: false,
       exportNames: ['createRedactor', 'deepRedact'],
