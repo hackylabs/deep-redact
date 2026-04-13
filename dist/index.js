@@ -112,8 +112,8 @@ const validateConfig = (options) => {
 	validateConflictingOptions(options, "options", issues);
 	validatePaths(options.paths, "options.paths", {
 		censor: options.censor,
-		remove: options.remove ?? false,
-		retainStructure: options.retainStructure ?? false
+		remove: options.remove === true,
+		retainStructure: options.retainStructure === true
 	}, issues);
 	return createValidationReport(issues);
 };

@@ -76,7 +76,6 @@ const applySerialisation = (value: unknown, serialise?: SerialiseOption): unknow
 
 const createCallableRedactor = (plan: InitialisedRedactorPlan): Redactor => {
   return function redact(value: unknown): unknown {
-    void plan
     return applySerialisation(value, plan.serialise)
   }
 }

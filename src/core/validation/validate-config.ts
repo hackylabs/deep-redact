@@ -189,8 +189,8 @@ export const validateConfig = (options: unknown): ValidationReport => {
     'options.paths',
     {
       censor: options.censor,
-      remove: options.remove ?? false,
-      retainStructure: options.retainStructure ?? false,
+      remove: options.remove === true,
+      retainStructure: options.retainStructure === true,
     },
     issues,
   )
