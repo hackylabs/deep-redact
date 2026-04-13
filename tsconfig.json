@@ -1,19 +1,27 @@
 {
   "compilerOptions": {
-    "lib": [
-      "esnext"
-    ],
-    "target": "ES2015",
-    "declaration": true,
-    "declarationDir": "./dist/types",
+    "target": "ES2024",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "strict": true,
-    "esModuleInterop": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "moduleResolution": "NodeNext",
-    "module": "NodeNext",
-    "baseUrl": "."
+    "verbatimModuleSyntax": true,
+    "types": [
+      "node",
+      "vitest/globals"
+    ]
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/index.ts",
+    "scripts/**/*.ts",
+    "test/build.test.ts",
+    "test/contract/**/*.ts",
+    "tsdown.config.ts",
+    "vitest*.config.ts"
+  ]
 }

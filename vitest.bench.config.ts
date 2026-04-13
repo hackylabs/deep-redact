@@ -2,11 +2,11 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
-    testTimeout: 15000,
-    reporters: ['default', 'verbose'],
-    include: ['test/build.test.ts', 'test/contract/**/*.test.ts'],
     benchmark: {
       outputJson: 'benchmark.json',
     },
+    include: ['test/bench/**/*.bench.ts'],
+    reporters: ['default'],
+    testTimeout: 15000,
   },
 })

@@ -1,58 +1,26 @@
-import type { DeepRedactConfig, RedactorUtilsConfig, BlacklistKeyConfig, Types, Transformer, ComplexStringTest, BaseDeepRedactConfig, OrganisedTransformers, TransformerConfig } from './types.js'
-import { organisedStandardTransformers, standardTransformers } from './utils/standardTransformers/index.js'
-import RedactorUtils from './utils/index.js'
+export type Redactor = (value: unknown) => unknown
 
-class DeepRedact {
-  /**
-   * The redactorUtils instance to handle the redaction.
-   * @private
-   */
-  private redactorUtils: RedactorUtils
+export interface DeepRedactOptions {
+  readonly censor?: string | ((value: unknown) => unknown)
+  readonly paths?: readonly string[]
+  readonly remove?: boolean
+  readonly serialise?: boolean
+  readonly serialize?: boolean
+}
 
-  /**
-   * The configuration for the redaction.
-   * @private
-   */
-  private readonly config = {
-    serialise: false,
-  }
+export type RedactorFactory = (options?: DeepRedactOptions) => Redactor
 
-  /**
-   * Create a new DeepRedact instance with the provided configuration.
-   * The configuration will be merged with the default configuration.
-   * `blacklistedKeys` will be normalised to an array inherited from the default configuration as the default values.
-   * @param {DeepRedactConfig} config. The configuration for the redaction.
-   */
-  constructor(config: DeepRedactConfig) {
-    const { serialise, serialize, ...rest } = config
-    const englishSerialise = serialise ?? serialize
-    if (typeof englishSerialise === 'boolean') this.config.serialise = englishSerialise
-    this.redactorUtils = new RedactorUtils({ ...rest })
-  }
+const foundationPlaceholderMessage
+  = 'Deep Redact v4 foundation placeholder: the runtime redactor is not implemented yet.'
 
-  /**
-   * Redact the provided value. The value will be stripped of any circular references and other unsupported data types, before being redacted according to the configuration and finally serialised if required.
-   * @param {unknown} value The value to redact.
-   * @returns {unknown} The redacted value.
-   * @throws {Error} If the value cannot be serialised to JSON and serialise is true.
-   */
-  redact = (value: unknown): unknown => {
-    const redacted = this.redactorUtils.traverse(value)
-    return this.config.serialise ? JSON.stringify(redacted) : redacted
+const createPlaceholderRedactor = (): Redactor => {
+  return function redact(_value: unknown): never {
+    throw new Error(foundationPlaceholderMessage)
   }
 }
 
-export {
-  DeepRedact,
-  DeepRedact as default,
-  type BaseDeepRedactConfig,
-  type RedactorUtilsConfig,
-  type BlacklistKeyConfig,
-  type ComplexStringTest,
-  type Transformer,
-  type Types,
-  type OrganisedTransformers,
-  type TransformerConfig,
-  standardTransformers,
-  organisedStandardTransformers,
+export const deepRedact: RedactorFactory = (_options = {}) => {
+  return createPlaceholderRedactor()
 }
+
+export const createRedactor = deepRedact

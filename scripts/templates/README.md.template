@@ -4,8 +4,8 @@ Deep Redact v4 is currently in its foundation phase. Story `1.1` establishes the
 
 ## Contributor Baseline
 
-- Node `24.14.1`
-- `pnpm@10.33.0`
+- Node `{{CONTRIBUTOR_NODE_VERSION}}`
+- `{{PACKAGE_MANAGER}}`
 - `tsdown`
 - `Vitest`
 - `xo`
@@ -13,7 +13,7 @@ Deep Redact v4 is currently in its foundation phase. Story `1.1` establishes the
 ## Public API
 
 ```ts
-import { createRedactor, deepRedact } from '@hackylabs/deep-redact'
+import { createRedactor, deepRedact } from '{{PACKAGE_NAME}}'
 
 const redact = deepRedact()
 const sameFactory = createRedactor()

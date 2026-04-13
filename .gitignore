@@ -3,6 +3,7 @@ node_modules
 coverage
 benchmark.json
 load-test-results.json
+dist
 _bmad
 .agents
 .claude

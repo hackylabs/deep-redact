@@ -1,80 +1,27 @@
 {
   "name": "@hackylabs/deep-redact",
   "version": "3.0.5",
-  "description": "A fast, safe and configurable zero-dependency library for redacting strings or deeply redacting arrays and objects.",
+  "description": "The function-first v4 foundation for Deep Redact.",
   "private": false,
   "license": "MIT",
   "author": "Benjamin Green (https://bengreen.dev)",
   "funding": "https://ko-fi.com/hackylabs",
-  "types": "./dist/types/index.d.ts",
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js",
-      "types": "./dist/types/index.d.ts"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
     },
-    "./index.ts": {
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js",
-      "types": "./dist/types/index.d.ts"
-    },
-    "./types.ts": {
-      "import": "./dist/types.mjs",
-      "require": "./dist/types.js",
-      "types": "./dist/types/types.d.ts"
-    },
-    "./utils/TransformerRegistry.ts": {
-      "import": "./dist/utils/TransformerRegistry.mjs",
-      "require": "./dist/utils/TransformerRegistry.js",
-      "types": "./dist/types/utils/TransformerRegistry.d.ts"
-    },
-    "./utils/index.ts": {
-      "import": "./dist/utils/index.mjs",
-      "require": "./dist/utils/index.js",
-      "types": "./dist/types/utils/index.d.ts"
-    },
-    "./utils/standardTransformers/bigint.ts": {
-      "import": "./dist/utils/standardTransformers/bigint.mjs",
-      "require": "./dist/utils/standardTransformers/bigint.js",
-      "types": "./dist/types/utils/standardTransformers/bigint.d.ts"
-    },
-    "./utils/standardTransformers/date.ts": {
-      "import": "./dist/utils/standardTransformers/date.mjs",
-      "require": "./dist/utils/standardTransformers/date.js",
-      "types": "./dist/types/utils/standardTransformers/date.d.ts"
-    },
-    "./utils/standardTransformers/error.ts": {
-      "import": "./dist/utils/standardTransformers/error.mjs",
-      "require": "./dist/utils/standardTransformers/error.js",
-      "types": "./dist/types/utils/standardTransformers/error.d.ts"
-    },
-    "./utils/standardTransformers/index.ts": {
-      "import": "./dist/utils/standardTransformers/index.mjs",
-      "require": "./dist/utils/standardTransformers/index.js",
-      "types": "./dist/types/utils/standardTransformers/index.d.ts"
-    },
-    "./utils/standardTransformers/map.ts": {
-      "import": "./dist/utils/standardTransformers/map.mjs",
-      "require": "./dist/utils/standardTransformers/map.js",
-      "types": "./dist/types/utils/standardTransformers/map.d.ts"
-    },
-    "./utils/standardTransformers/regex.ts": {
-      "import": "./dist/utils/standardTransformers/regex.mjs",
-      "require": "./dist/utils/standardTransformers/regex.js",
-      "types": "./dist/types/utils/standardTransformers/regex.d.ts"
-    },
-    "./utils/standardTransformers/set.ts": {
-      "import": "./dist/utils/standardTransformers/set.mjs",
-      "require": "./dist/utils/standardTransformers/set.js",
-      "types": "./dist/types/utils/standardTransformers/set.d.ts"
-    },
-    "./utils/standardTransformers/url.ts": {
-      "import": "./dist/utils/standardTransformers/url.mjs",
-      "require": "./dist/utils/standardTransformers/url.js",
-      "types": "./dist/types/utils/standardTransformers/url.d.ts"
-    }
+    "./package.json": "./package.json"
   },
   "files": [
     "dist"
@@ -105,24 +52,16 @@
     "url": "git+https://github.com/hackylabs/deep-redact"
   },
   "scripts": {
-    "lint": "eslint",
-    "build": "npm run lint && npm run test && npm run bench && npm run build:esm && npm run build:cjs && npm run update-exports && npm run test:build && npm run update-readme && npm run update-license",
-    "build:dev": "rm -rf dist && npm run build:esm && npm run build:cjs && npm run update-exports",
-    "build:esm": "tsc --project tsconfig.esm.json && ./scripts/js-to-mjs.sh",
-    "build:cjs": "tsc --project tsconfig.cjs.json",
-    "bench": "npx vitest bench --watch=false",
-    "bench:dev": "npx vitest bench",
-    "test:dev": "npx vitest",
-    "test": "npx vitest run",
-    "test:build": "npx vitest run test/build.test.ts --reporter=basic --coverage=false",
-    "test:build:dev": "npm run build:cjs && npm run build:esm && npm run update-exports && npx vitest test/build.test.ts --coverage=false --reporter=basic",
-    "test:load": "npx vitest run test/load/redact.test.ts --reporter=basic --coverage=false",
-    "test:load:dev": "npx vitest test/load/redact.test.ts --coverage=false --reporter=basic",
-    "test:unit": "npx vitest run test/unit --reporter=verbose",
-    "test:unit:dev": "npx vitest test/unit --coverage=false --reporter=verbose",
-    "update-readme": "npx ts-node ./scripts/update-readme.ts",
-    "update-license": "npx ts-node ./scripts/update-license.ts",
-    "update-exports": "npx ts-node ./scripts/update-exports.ts"
+    "bench": "pnpm exec vitest bench --config vitest.bench.config.ts --run",
+    "build": "pnpm run verify-generated-files && pnpm exec tsdown",
+    "generate": "pnpm run generate-exports && pnpm run generate-readme",
+    "generate-exports": "node --experimental-strip-types ./scripts/generate-exports.ts",
+    "generate-readme": "node --experimental-strip-types ./scripts/generate-readme.ts",
+    "lint": "pnpm exec xo xo.config.js && pnpm exec tsc --noEmit",
+    "test": "pnpm run build && pnpm run test:contract",
+    "test:contract": "pnpm exec vitest run test/build.test.ts test/contract/**/*.test.ts --reporter=verbose",
+    "test:red-phase": "pnpm exec vitest run --config vitest.red-phase.config.ts",
+    "verify-generated-files": "node --experimental-strip-types ./scripts/verify-generated-files.ts"
   },
   "//": [
     "autocannon, fast-redact and obglob are installed only as internal benchmark comparisons and are not used in the library",
@@ -130,23 +69,16 @@
   ],
   "devDependencies": {
     "@hackylabs/obglob": "1.1.2",
-    "@memlab/core": "1.1.34",
-    "@types/autocannon": "7.12.6",
+    "@memlab/core": "2.0.0",
+    "@types/autocannon": "7.12.7",
     "@types/fast-redact": "3.0.4",
-    "@types/node": "20.14.12",
-    "@typescript-eslint/eslint-plugin": "7.14.1",
-    "@typescript-eslint/parser": "7.14.1",
-    "@vitest/coverage-v8": "2.0.4",
+    "@types/node": "25.6.0",
     "autocannon": "8.0.0",
-    "eslint": "8.57.0",
-    "eslint-config-airbnb-base": "15.0.0",
-    "eslint-config-airbnb-typescript": "18.0.0",
-    "eslint-plugin-import": "2.29.1",
-    "eslint-plugin-n": "17.9.0",
-    "eslint-plugin-promise": "7.0.0",
     "fast-redact": "3.5.0",
-    "typescript": "5.6.2",
-    "vitest": "2.0.4"
+    "tsdown": "0.21.7",
+    "typescript": "6.0.2",
+    "vitest": "4.1.4",
+    "xo": "2.0.2"
   },
   "editor.formatOnSave": true,
   "editor.formatOnPaste": true,
