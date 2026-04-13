@@ -1,0 +1,91 @@
+# generated: 2026-04-13T09:43:13+0100
+# last_updated: 2026-04-13T10:01:12+0100
+# project: deep-redact
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: /Users/ben.green/Code/deep-redact/_bmad-output/implementation-artifacts
+#
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in the epic completed
+#
+# Epic Status Transitions:
+#   - backlog -> in-progress: Automatically when the first story is created
+#   - in-progress -> done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in the epic file
+#   - ready-for-dev: Story file created in the implementation artefacts folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but is not required
+#   - done: Retrospective completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epics move to 'in-progress' automatically when the first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Scrum Master typically creates the next story after the previous one is 'done'
+
+generated: 2026-04-13T09:43:13+0100
+last_updated: 2026-04-13T10:01:12+0100
+project: deep-redact
+project_key: NOKEY
+tracking_system: file-system
+story_location: /Users/ben.green/Code/deep-redact/_bmad-output/implementation-artifacts
+
+development_status:
+  epic-1: backlog
+  1-1-establish-the-scratch-v4-foundation-and-brownfield-transplant-scaffold: backlog
+  1-2-create-and-validate-a-reusable-service-redactor: backlog
+  1-3-redact-exact-keys-and-canonical-exact-paths-in-nested-payloads: backlog
+  1-4-support-wildcard-and-exclusion-selectors-for-repeated-nested-structures: backlog
+  1-5-match-sensitive-fields-by-regex-based-property-names: backlog
+  1-6-match-sensitive-fields-by-regex-based-path-segments: backlog
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-apply-literal-replacement-removal-and-retain-structure-handling: backlog
+  2-2-support-function-censors-and-same-length-string-replacement: backlog
+  2-3-redact-matched-substrings-in-nested-string-values: backlog
+  2-4-redact-matching-root-primitive-string-inputs: backlog
+  2-5-deterministic-precedence-across-exact-path-structured-path-exact-key-regex-property-and-substring-rules: backlog
+  2-6-enable-optional-fuzzy-and-case-insensitive-matching-for-literal-string-key-rules: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-redact-a-canonical-nested-mixed-payload-without-post-init-runtime-throws: backlog
+  3-2-handle-circular-references-and-revisited-identities-safely: backlog
+  3-3-resolve-built-in-and-custom-transformers-deterministically: backlog
+  3-4-exclude-ignored-value-types-from-descendant-redaction-while-preserving-safe-output: backlog
+  3-5-degrade-nested-runtime-failures-to-unsupported-with-deterministic-diagnostics: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-return-deterministic-structured-output-across-repeated-runs: backlog
+  4-2-return-deterministic-serialised-output-across-repeated-runs: backlog
+  4-3-prove-exact-path-fast-lane-and-generic-traversal-are-behaviourally-equivalent: backlog
+  4-4-publish-and-prove-a-normative-precedence-matrix-for-overlapping-targeting-rules: backlog
+  4-5-enforce-a-one-way-redaction-deny-list-across-public-surface-and-outputs: backlog
+  4-6-provide-optional-console-redaction-through-an-explicit-guarded-adapter: backlog
+  epic-4-retrospective: optional
+
+  epic-5: backlog
+  5-1-define-the-canonical-installation-verification-matrix-and-baseline-fixtures: backlog
+  5-2-execute-node-package-manager-installation-verification-across-supported-node-runtimes: backlog
+  5-3-verify-the-deno-baseline-path-and-installation-documentation-lockstep: backlog
+  5-4-publish-a-verified-fast-redact-migration-matrix-for-documented-scenarios: backlog
+  5-5-publish-a-dedicated-deep-redact-v3-to-v4-migration-path: backlog
+  5-6-establish-the-worked-example-manifest-and-validation-harness: backlog
+  5-7-publish-verified-worked-examples-for-setup-targeting-replacement-output-runtime-and-console-behaviour: backlog
+  5-8-publish-verified-migration-worked-examples-and-enforce-example-documentation-lockstep: backlog
+  5-9-produce-canonical-benchmark-runs-and-publish-benchmark-artefacts: backlog
+  5-10-enforce-the-release-benchmark-gate-and-benchmark-documentation-lockstep: backlog
+  5-11-publish-platform-adoption-guidance-through-a-canonical-standardisation-guide: backlog
+  epic-5-retrospective: optional
