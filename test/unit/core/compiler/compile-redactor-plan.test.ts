@@ -51,6 +51,89 @@ describe('compiled exact-selector rule plan', () => {
     }))
   })
 
+  it('separates exact and dynamic path selectors during compilation', () => {
+    const plan = compileRedactorPlan({
+      paths: [
+        'users.0.email',
+        'users.*.email',
+        ['users', { ignore: 'admin' }, 'email'],
+      ],
+    })
+
+    expect(plan.exactPathRules['users.0.email']).toEqual(expect.objectContaining({
+      canonicalPath: 'users.0.email',
+    }))
+    expect(plan.dynamicPathRules).toHaveLength(2)
+    expect(plan.dynamicPathRules.map((rule) => rule.signature)).toEqual([
+      'users.*.email',
+      'users.{ignore:"admin"}.email',
+    ])
+  })
+
+  it('rejects duplicate dynamic selectors before compilation proceeds', () => {
+    const report = validateConfig({
+      paths: [
+        'users.*.email',
+        'users.*.email',
+      ],
+    })
+
+    expect(report.valid).toBe(false)
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.paths[1]',
+      message: expect.stringMatching(/duplicate dynamic selector "users\.\*\.email"/i),
+    }))
+  })
+
+  it('rejects exact structured selectors that duplicate canonical string selectors', () => {
+    const report = validateConfig({
+      paths: [
+        'users.0.email',
+        ['users', 0, 'email'],
+      ],
+    })
+
+    expect(report.valid).toBe(false)
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.paths[1]',
+      message: expect.stringMatching(/duplicate canonical selector "users\.0\.email"/i),
+    }))
+  })
+
+  it('rejects structured string selectors that duplicate equivalent quoted-property selectors', () => {
+    const report = validateConfig({
+      paths: [
+        'users["0"].email',
+        ['users', '0', 'email'],
+      ],
+    })
+
+    expect(report.valid).toBe(false)
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.paths[1]',
+      message: expect.stringMatching(/duplicate canonical selector "users\["0"\]\.email"/i),
+    }))
+  })
+
+  it('rejects invalid structured numeric segments before compilation proceeds', () => {
+    const report = validateConfig({
+      paths: [
+        ['users', -1, 'email'],
+        ['users', { ignore: 1.5 }, 'email'],
+      ],
+    })
+
+    expect(report.valid).toBe(false)
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.paths[0]',
+      message: expect.stringMatching(/structured numeric segments must be non-negative integers/i),
+    }))
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.paths[1]',
+      message: expect.stringMatching(/structured ignore indexes must be non-negative integers/i),
+    }))
+  })
+
   it.each([
     ['wildcard', '*', /unsupported wildcard key selector/i],
     ['recursive wildcard', '**', /unsupported recursive wildcard key selector/i],

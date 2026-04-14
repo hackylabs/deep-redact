@@ -1,4 +1,5 @@
 import type {
+  CompiledDynamicPathRule,
   CompiledExactPathRule,
   CompiledRedactionPolicy,
   CompiledRedactorPlan,
@@ -6,6 +7,8 @@ import type {
 import {
   createIndexPathSegment,
   createPropertyPathSegment,
+  type ExactPathSegment,
+  type PathSegment,
 } from '../matching/path-parser.js'
 import { appendCanonicalPathSegment } from '../matching/path-normaliser.js'
 import {
@@ -15,7 +18,7 @@ import {
 } from '../replacement/apply-redaction.js'
 
 type TraversableContainer = Record<string, unknown> | unknown[]
-type PolicySource = 'key' | 'path'
+type PolicySource = 'dynamic-path' | 'exact-path' | 'key'
 
 interface ActivePolicyMatch {
   readonly policy: CompiledRedactionPolicy
@@ -26,6 +29,7 @@ interface TraversalContext {
   readonly canonicalPath?: string
   readonly directKeyMatch: boolean
   readonly inheritedPolicy?: ActivePolicyMatch
+  readonly pathSegments: readonly ExactPathSegment[]
 }
 
 interface TraversalResult {
@@ -54,7 +58,7 @@ const hasLookupValue = <T>(
   return Object.hasOwn(table, key)
 }
 
-const resolvePathRule = (
+const resolveExactPathRule = (
   plan: CompiledRedactorPlan,
   canonicalPath: string | undefined,
 ): CompiledExactPathRule | undefined => {
@@ -67,20 +71,92 @@ const resolvePathRule = (
     : undefined
 }
 
+const matchesSingleSegment = (
+  selectorSegment: PathSegment,
+  pathSegment: ExactPathSegment,
+): boolean => {
+  if (selectorSegment.kind === 'wildcard') {
+    return true
+  }
+
+  if (selectorSegment.kind === 'recursive-wildcard') {
+    return false
+  }
+
+  if (selectorSegment.kind === 'ignore-index') {
+    return pathSegment.kind === 'index' && pathSegment.value !== selectorSegment.value
+  }
+
+  if (selectorSegment.kind === 'ignore-property') {
+    return pathSegment.kind === 'property' && pathSegment.value !== selectorSegment.value
+  }
+
+  if (selectorSegment.kind === 'index') {
+    return pathSegment.kind === 'index' && pathSegment.value === selectorSegment.value
+  }
+
+  return pathSegment.kind === 'property' && pathSegment.value === selectorSegment.value
+}
+
+const matchesDynamicRule = (
+  selectorSegments: readonly PathSegment[],
+  pathSegments: readonly ExactPathSegment[],
+  selectorIndex = 0,
+  pathIndex = 0,
+): boolean => {
+  if (selectorIndex >= selectorSegments.length) {
+    return pathIndex === pathSegments.length
+  }
+
+  const selectorSegment = selectorSegments[selectorIndex]
+
+  if (selectorSegment.kind === 'recursive-wildcard') {
+    for (let nextPathIndex = pathIndex; nextPathIndex <= pathSegments.length; nextPathIndex += 1) {
+      if (matchesDynamicRule(selectorSegments, pathSegments, selectorIndex + 1, nextPathIndex)) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  if (pathIndex >= pathSegments.length) {
+    return false
+  }
+
+  return matchesSingleSegment(selectorSegment, pathSegments[pathIndex])
+    && matchesDynamicRule(selectorSegments, pathSegments, selectorIndex + 1, pathIndex + 1)
+}
+
+const resolveDynamicPathRule = (
+  plan: CompiledRedactorPlan,
+  pathSegments: readonly ExactPathSegment[],
+): CompiledDynamicPathRule | undefined => {
+  return plan.dynamicPathRules.find((rule) => matchesDynamicRule(rule.segments, pathSegments))
+}
+
 const selectActivePolicy = (
   plan: CompiledRedactorPlan,
-  pathRule: CompiledExactPathRule | undefined,
+  exactPathRule: CompiledExactPathRule | undefined,
+  dynamicPathRule: CompiledDynamicPathRule | undefined,
   directKeyMatch: boolean,
   inheritedPolicy: ActivePolicyMatch | undefined,
 ): ActivePolicyMatch | undefined => {
-  if (pathRule !== undefined) {
+  if (exactPathRule !== undefined) {
     return {
-      policy: pathRule.policy,
-      source: 'path',
+      policy: exactPathRule.policy,
+      source: 'exact-path',
     }
   }
 
-  if (inheritedPolicy?.source === 'path') {
+  if (dynamicPathRule !== undefined) {
+    return {
+      policy: dynamicPathRule.policy,
+      source: 'dynamic-path',
+    }
+  }
+
+  if (inheritedPolicy?.source === 'exact-path' || inheritedPolicy?.source === 'dynamic-path') {
     return inheritedPolicy
   }
 
@@ -99,6 +175,7 @@ const transformArray = (
   plan: CompiledRedactorPlan,
   inheritedPolicy: ActivePolicyMatch | undefined,
   canonicalPath: string | undefined,
+  pathSegments: readonly ExactPathSegment[],
 ): TraversalResult => {
   let transformedValue: unknown[] | undefined
   const removedIndexes: number[] = []
@@ -110,14 +187,13 @@ const transformArray = (
     }
 
     const item = value[index]
-    const itemPath = appendCanonicalPathSegment(
-      canonicalPath,
-      createIndexPathSegment(index),
-    )
+    const pathSegment = createIndexPathSegment(index)
+    const itemPath = appendCanonicalPathSegment(canonicalPath, pathSegment)
     const itemResult = transformNode(item, plan, {
       canonicalPath: itemPath,
       directKeyMatch: false,
       inheritedPolicy,
+      pathSegments: Object.freeze([...pathSegments, pathSegment]),
     })
 
     if (isRemovedValue(itemResult.value)) {
@@ -175,19 +251,19 @@ const transformObject = (
   plan: CompiledRedactorPlan,
   inheritedPolicy: ActivePolicyMatch | undefined,
   canonicalPath: string | undefined,
+  pathSegments: readonly ExactPathSegment[],
 ): TraversalResult => {
   let changed = false
   let transformedValue: Record<string, unknown> | undefined
 
   for (const [key, propertyValue] of Object.entries(value)) {
-    const propertyPath = appendCanonicalPathSegment(
-      canonicalPath,
-      createPropertyPathSegment(key),
-    )
+    const pathSegment = createPropertyPathSegment(key)
+    const propertyPath = appendCanonicalPathSegment(canonicalPath, pathSegment)
     const propertyResult = transformNode(propertyValue, plan, {
       canonicalPath: propertyPath,
       directKeyMatch: hasLookupValue(plan.exactKeyRules.keys, key),
       inheritedPolicy,
+      pathSegments: Object.freeze([...pathSegments, pathSegment]),
     })
 
     if (isRemovedValue(propertyResult.value)) {
@@ -225,7 +301,8 @@ const transformNode = (
 ): TraversalResult => {
   const activePolicy = selectActivePolicy(
     plan,
-    resolvePathRule(plan, context.canonicalPath),
+    resolveExactPathRule(plan, context.canonicalPath),
+    resolveDynamicPathRule(plan, context.pathSegments),
     context.directKeyMatch,
     context.inheritedPolicy,
   )
@@ -246,8 +323,8 @@ const transformNode = (
 
   const inheritedPolicy = activePolicy
   const result = Array.isArray(value)
-    ? transformArray(value, plan, inheritedPolicy, context.canonicalPath)
-    : transformObject(value, plan, inheritedPolicy, context.canonicalPath)
+    ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments)
+    : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments)
 
   return result
 }
@@ -260,6 +337,7 @@ export const redactValue = (
     canonicalPath: undefined,
     directKeyMatch: false,
     inheritedPolicy: undefined,
+    pathSegments: Object.freeze([]) as readonly ExactPathSegment[],
   })
 
   return isRemovedValue(result.value) ? undefined : result.value

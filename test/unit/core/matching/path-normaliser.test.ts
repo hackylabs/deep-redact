@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { normalisePathSelector } from '../../../../src/core/matching/path-normaliser.js'
+import {
+  normalisePathSelector,
+  renderSelectorSignature,
+} from '../../../../src/core/matching/path-normaliser.js'
 import { PathSyntaxError, parsePathSelector } from '../../../../src/core/matching/path-parser.js'
 
 describe('exact path selector parsing and normalisation', () => {
@@ -13,14 +16,37 @@ describe('exact path selector parsing and normalisation', () => {
     expect(normalisePathSelector('["0"].value').canonicalPath).toBe('["0"].value')
   })
 
+  it('renders canonical dynamic selector signatures for wildcard and ignore segments', () => {
+    expect(renderSelectorSignature(parsePathSelector('users.*.email').segments)).toBe('users.*.email')
+    expect(renderSelectorSignature(parsePathSelector('account.**.token').segments)).toBe('account.**.token')
+    expect(renderSelectorSignature(parsePathSelector(['users', { ignore: 'admin' }, 'email']).segments)).toBe(
+      'users.{ignore:"admin"}.email',
+    )
+  })
+
+  it('parses exact structured selectors so they canonicalise like equivalent string selectors', () => {
+    expect(normalisePathSelector(['users', 0, 'email']).canonicalPath).toBe('users.0.email')
+  })
+
+  it('treats structured string segments as literal properties even when dot syntax would parse them specially', () => {
+    expect(normalisePathSelector(['users', '0', 'email']).canonicalPath).toBe('users["0"].email')
+    expect(normalisePathSelector(['headers', 'x-api-key']).canonicalPath).toBe('headers["x-api-key"]')
+    expect(normalisePathSelector(['users', '*', 'email']).canonicalPath).toBe('users["*"].email')
+  })
+
   it.each([
     ['empty segment', 'users..email', /empty segments/i],
-    ['wildcard segment', 'users.*.email', /unsupported wildcard segment/i],
-    ['recursive wildcard segment', 'users.**.email', /unsupported recursive wildcard segment/i],
     ['regex-like segment', 'users./^email$/.value', /unsupported regex-like segment/i],
     ['unsafe bare special characters', 'headers.x-api-key', /quoted property syntax/i],
+    ['partial wildcard text', 'users.foo*bar.email', /unsupported wildcard syntax/i],
+    ['string exclusion syntax', 'users.!admin.email', /unsupported exclusion syntax/i],
+    ['multiple recursive wildcard segments', 'users.**.profile.**.email', /at most one recursive wildcard/i],
+    ['negative structured numeric segment', ['users', -1, 'email'], /structured numeric segments must be non-negative integers/i],
+    ['fractional structured numeric segment', ['users', 1.5, 'email'], /structured numeric segments must be non-negative integers/i],
+    ['negative structured ignore index', ['users', { ignore: -1 }, 'email'], /structured ignore indexes must be non-negative integers/i],
+    ['structured invalid matcher object', ['users', { match: 'email' }], /unsupported structured selector segment/i],
   ])('rejects %s', (_label, selector, expectedMessage) => {
-    expect(() => parsePathSelector(selector)).toThrowError(expectedMessage)
-    expect(() => parsePathSelector(selector)).toThrowError(PathSyntaxError)
+    expect(() => parsePathSelector(selector as never)).toThrowError(expectedMessage)
+    expect(() => parsePathSelector(selector as never)).toThrowError(PathSyntaxError)
   })
 })

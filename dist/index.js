@@ -22,20 +22,60 @@ const createIndexPathSegment = (value) => {
 		value
 	});
 };
-const createUnsupportedWildcardError = (selector, segment) => {
-	if (segment === "**") return new PathSyntaxError(selector, "Unsupported recursive wildcard segment \"**\".");
-	if (segment === "*") return new PathSyntaxError(selector, "Unsupported wildcard segment \"*\".");
-	return new PathSyntaxError(selector, `Unsupported wildcard syntax in segment "${segment}".`);
+const createWildcardPathSegment = () => {
+	return Object.freeze({ kind: "wildcard" });
 };
-const createBareSegment = (selector, value) => {
-	if (value.length === 0) throw new PathSyntaxError(selector, "Path selectors must not contain empty segments.");
+const createRecursiveWildcardPathSegment = () => {
+	return Object.freeze({ kind: "recursive-wildcard" });
+};
+const createIgnorePropertyPathSegment = (value) => {
+	return Object.freeze({
+		kind: "ignore-property",
+		value
+	});
+};
+const createIgnoreIndexPathSegment = (value) => {
+	return Object.freeze({
+		kind: "ignore-index",
+		value
+	});
+};
+const renderRawSelector = (selector) => {
+	return typeof selector === "string" ? selector : JSON.stringify(selector);
+};
+const createUnsupportedWildcardError = (selector, segment) => {
+	const rawSelector = renderRawSelector(selector);
+	if (segment === "**") return new PathSyntaxError(rawSelector, "Unsupported recursive wildcard segment \"**\".");
+	if (segment === "*") return new PathSyntaxError(rawSelector, "Unsupported wildcard segment \"*\".");
+	return new PathSyntaxError(rawSelector, `Unsupported wildcard syntax in segment "${segment}".`);
+};
+const createExactSegment = (selector, value) => {
+	if (typeof value === "number") return createIndexPathSegment(value);
+	if (value.length === 0) throw new PathSyntaxError(renderRawSelector(selector), "Path selectors must not contain empty segments.");
 	if (value.includes("*")) throw createUnsupportedWildcardError(selector, value);
-	if (regexLikeSegmentPattern.test(value)) throw new PathSyntaxError(selector, `Unsupported regex-like segment "${value}".`);
+	if (regexLikeSegmentPattern.test(value)) throw new PathSyntaxError(renderRawSelector(selector), `Unsupported regex-like segment "${value}".`);
+	if (value.startsWith("!")) throw new PathSyntaxError(renderRawSelector(selector), `Unsupported exclusion syntax in segment "${value}". Ignore selectors are structured-selector only.`);
 	if (indexSegmentPattern.test(value)) return createIndexPathSegment(Number(value));
 	if (barePropertyPattern.test(value)) return createPropertyPathSegment(value);
-	throw new PathSyntaxError(selector, `Unsupported exact path segment "${value}". Use bracket-quoted property syntax for literal special-character keys.`);
+	throw new PathSyntaxError(renderRawSelector(selector), `Unsupported exact path segment "${value}". Use bracket-quoted property syntax for literal special-character keys.`);
 };
-const parseQuotedProperty = (selector, startIndex) => {
+const createLiteralStructuredPropertySegment = (selector, value) => {
+	if (value.length === 0) throw new PathSyntaxError(renderRawSelector(selector), "Path selectors must not contain empty segments.");
+	return createPropertyPathSegment(value);
+};
+const createLiteralStructuredIndexSegment = (selector, value) => {
+	if (!Number.isInteger(value) || value < 0) throw new PathSyntaxError(renderRawSelector(selector), "Structured numeric segments must be non-negative integers.");
+	return createIndexPathSegment(value);
+};
+const createLiteralStructuredIgnorePropertySegment = (selector, value) => {
+	if (value.length === 0) throw new PathSyntaxError(renderRawSelector(selector), "Path selectors must not contain empty segments.");
+	return createIgnorePropertyPathSegment(value);
+};
+const createLiteralStructuredIgnoreIndexSegment = (selector, value) => {
+	if (!Number.isInteger(value) || value < 0) throw new PathSyntaxError(renderRawSelector(selector), "Structured ignore indexes must be non-negative integers.");
+	return createIgnoreIndexPathSegment(value);
+};
+const parseQuotedProperty = (selector, rawSelector, startIndex) => {
 	const quote = selector[startIndex];
 	let index = startIndex + 1;
 	let value = "";
@@ -43,13 +83,13 @@ const parseQuotedProperty = (selector, startIndex) => {
 		const character = selector[index];
 		if (character === "\\") {
 			index += 1;
-			if (index >= selector.length) throw new PathSyntaxError(selector, "Quoted property selector has an unfinished escape sequence.");
+			if (index >= selector.length) throw new PathSyntaxError(rawSelector, "Quoted property selector has an unfinished escape sequence.");
 			value += selector[index];
 			index += 1;
 			continue;
 		}
 		if (character === quote) {
-			if (value.length === 0) throw new PathSyntaxError(selector, "Path selectors must not contain empty segments.");
+			if (value.length === 0) throw new PathSyntaxError(rawSelector, "Path selectors must not contain empty segments.");
 			return {
 				nextIndex: index + 1,
 				segment: createPropertyPathSegment(value)
@@ -58,54 +98,67 @@ const parseQuotedProperty = (selector, startIndex) => {
 		value += character;
 		index += 1;
 	}
-	throw new PathSyntaxError(selector, "Quoted property selector is not closed.");
+	throw new PathSyntaxError(rawSelector, "Quoted property selector is not closed.");
 };
-const parseBracketSegment = (selector, startIndex) => {
+const parseBracketSegment = (selector, rawSelector, startIndex) => {
 	let index = startIndex + 1;
-	if (index >= selector.length) throw new PathSyntaxError(selector, "Bracket selector is not closed.");
+	if (index >= selector.length) throw new PathSyntaxError(rawSelector, "Bracket selector is not closed.");
 	if (selector[index] === "\"" || selector[index] === "'") {
-		const quotedProperty = parseQuotedProperty(selector, index);
-		if (selector[quotedProperty.nextIndex] !== "]") throw new PathSyntaxError(selector, "Quoted property selector must be closed with ].");
+		const quotedProperty = parseQuotedProperty(selector, rawSelector, index);
+		if (selector[quotedProperty.nextIndex] !== "]") throw new PathSyntaxError(rawSelector, "Quoted property selector must be closed with ].");
 		return {
 			nextIndex: quotedProperty.nextIndex + 1,
 			segment: quotedProperty.segment
 		};
 	}
 	const closingIndex = selector.indexOf("]", index);
-	if (closingIndex === -1) throw new PathSyntaxError(selector, "Bracket selector is not closed.");
+	if (closingIndex === -1) throw new PathSyntaxError(rawSelector, "Bracket selector is not closed.");
 	const value = selector.slice(index, closingIndex);
-	if (value.length === 0) throw new PathSyntaxError(selector, "Path selectors must not contain empty segments.");
-	if (value.includes("*")) throw createUnsupportedWildcardError(selector, value);
-	if (regexLikeSegmentPattern.test(value)) throw new PathSyntaxError(selector, `Unsupported regex-like segment "${value}".`);
-	if (!indexSegmentPattern.test(value)) throw new PathSyntaxError(selector, `Unsupported bracket segment "${value}". Use numeric indexes or quoted property selectors only.`);
+	if (value.length === 0) throw new PathSyntaxError(rawSelector, "Path selectors must not contain empty segments.");
+	if (value.includes("*")) throw createUnsupportedWildcardError(rawSelector, value);
+	if (regexLikeSegmentPattern.test(value)) throw new PathSyntaxError(rawSelector, `Unsupported regex-like segment "${value}".`);
+	if (!indexSegmentPattern.test(value)) throw new PathSyntaxError(rawSelector, `Unsupported bracket segment "${value}". Use numeric indexes or quoted property selectors only.`);
 	return {
 		nextIndex: closingIndex + 1,
 		segment: createIndexPathSegment(Number(value))
 	};
 };
-const parseBareSegment = (selector, startIndex) => {
+const parseBareSegment = (selector, rawSelector, startIndex) => {
 	let index = startIndex;
 	while (index < selector.length && selector[index] !== "." && selector[index] !== "[") {
-		if (selector[index] === "]") throw new PathSyntaxError(selector, "Unexpected ] in path selector.");
+		if (selector[index] === "]") throw new PathSyntaxError(rawSelector, "Unexpected ] in path selector.");
 		index += 1;
 	}
 	const value = selector.slice(startIndex, index);
+	if (value === "*") return {
+		nextIndex: index,
+		segment: createWildcardPathSegment()
+	};
+	if (value === "**") return {
+		nextIndex: index,
+		segment: createRecursiveWildcardPathSegment()
+	};
 	return {
 		nextIndex: index,
-		segment: createBareSegment(selector, value)
+		segment: createExactSegment(rawSelector, value)
 	};
 };
-const parsePathSelector = (selector) => {
+const parseStringPathSelector = (selector) => {
 	if (selector.length === 0) throw new PathSyntaxError(selector, "Path selectors must not be empty.");
 	const segments = [];
 	let index = 0;
+	let recursiveWildcardCount = 0;
 	while (index < selector.length) {
 		if (selector[index] === ".") throw new PathSyntaxError(selector, "Path selectors must not contain empty segments.");
-		const parsedSegment = selector[index] === "[" ? parseBracketSegment(selector, index) : parseBareSegment(selector, index);
+		const parsedSegment = selector[index] === "[" ? parseBracketSegment(selector, selector, index) : parseBareSegment(selector, selector, index);
 		segments.push(parsedSegment.segment);
+		if (parsedSegment.segment.kind === "recursive-wildcard") {
+			recursiveWildcardCount += 1;
+			if (recursiveWildcardCount > 1) throw new PathSyntaxError(selector, "Path selectors may contain at most one recursive wildcard segment \"**\".");
+		}
 		index = parsedSegment.nextIndex;
 		while (index < selector.length && selector[index] === "[") {
-			const bracketSegment = parseBracketSegment(selector, index);
+			const bracketSegment = parseBracketSegment(selector, selector, index);
 			segments.push(bracketSegment.segment);
 			index = bracketSegment.nextIndex;
 		}
@@ -119,6 +172,34 @@ const parsePathSelector = (selector) => {
 		segments: Object.freeze(segments)
 	});
 };
+const isIgnorePathSegment = (value) => {
+	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+	const keys = Object.keys(value);
+	return keys.length === 1 && keys[0] === "ignore";
+};
+const parseStructuredPathSelector = (selector) => {
+	if (selector.length === 0) throw new PathSyntaxError(renderRawSelector(selector), "Path selectors must not be empty.");
+	const segments = selector.map((segment) => {
+		if (typeof segment === "string" || typeof segment === "number") return typeof segment === "string" ? createLiteralStructuredPropertySegment(selector, segment) : createLiteralStructuredIndexSegment(selector, segment);
+		if (!isIgnorePathSegment(segment)) throw new PathSyntaxError(renderRawSelector(selector), `Unsupported structured selector segment ${JSON.stringify(segment)}.`);
+		if (typeof segment.ignore === "string") return createLiteralStructuredIgnorePropertySegment(selector, segment.ignore);
+		if (typeof segment.ignore === "number") return createLiteralStructuredIgnoreIndexSegment(selector, segment.ignore);
+		throw new PathSyntaxError(renderRawSelector(selector), `Unsupported structured selector segment ${JSON.stringify(segment)}.`);
+	});
+	return Object.freeze({
+		raw: selector,
+		segments: Object.freeze(segments)
+	});
+};
+const isExactPathSegment = (segment) => {
+	return segment.kind === "property" || segment.kind === "index";
+};
+const isDynamicPathSegment = (segment) => {
+	return !isExactPathSegment(segment);
+};
+const parsePathSelector = (selector) => {
+	return typeof selector === "string" ? parseStringPathSelector(selector) : parseStructuredPathSelector(selector);
+};
 //#endregion
 //#region src/core/matching/path-normaliser.ts
 const canonicalBarePropertyPattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -126,17 +207,28 @@ const renderPropertySegment = (value, isRoot) => {
 	if (canonicalBarePropertyPattern.test(value)) return `${isRoot ? "" : "."}${value}`;
 	return `[${JSON.stringify(value)}]`;
 };
-const renderPathSegment = (segment, isRoot) => {
+const renderExactPathSegment = (segment, isRoot) => {
 	if (segment.kind === "index") return `${isRoot ? "" : "."}${segment.value}`;
 	return renderPropertySegment(segment.value, isRoot);
 };
 const renderCanonicalPath = (segments) => {
-	return segments.map((segment, index) => renderPathSegment(segment, index === 0)).join("");
+	return segments.map((segment, index) => renderExactPathSegment(segment, index === 0)).join("");
 };
 const appendCanonicalPathSegment = (parentPath, segment) => {
-	return `${parentPath ?? ""}${renderPathSegment(segment, parentPath === void 0)}`;
+	return `${parentPath ?? ""}${renderExactPathSegment(segment, parentPath === void 0)}`;
+};
+const renderDynamicPathSegment = (segment, isRoot) => {
+	if (segment.kind === "wildcard") return `${isRoot ? "" : "."}*`;
+	if (segment.kind === "recursive-wildcard") return `${isRoot ? "" : "."}**`;
+	if (segment.kind === "ignore-index") return `${isRoot ? "" : "."}{ignore:${segment.value}}`;
+	if (segment.kind === "ignore-property") return `${isRoot ? "" : "."}{ignore:${JSON.stringify(segment.value)}}`;
+	return renderExactPathSegment(segment, isRoot);
+};
+const renderSelectorSignature = (segments) => {
+	return segments.map((segment, index) => renderDynamicPathSegment(segment, index === 0)).join("");
 };
 const normaliseParsedPath = (parsedPath) => {
+	if (!parsedPath.segments.every(isExactPathSegment)) throw new TypeError("Dynamic selectors cannot be canonicalised as exact paths.");
 	return Object.freeze({
 		canonicalPath: renderCanonicalPath(parsedPath.segments),
 		segments: parsedPath.segments
@@ -161,21 +253,42 @@ const mergePolicy = (defaults, overrides) => {
 		retainStructure: overrides.retainStructure ?? defaults.retainStructure
 	});
 };
+const isPathRule = (pathEntry) => {
+	return typeof pathEntry === "object" && pathEntry !== null && !Array.isArray(pathEntry) && "path" in pathEntry;
+};
+const toPathRule = (pathEntry) => {
+	return !isPathRule(pathEntry) ? { path: pathEntry } : pathEntry;
+};
 const compilePathRule = (pathEntry, defaults) => {
-	const normalisedPath = normaliseParsedPath(parsePathSelector((typeof pathEntry === "string" ? { path: pathEntry } : pathEntry).path));
+	const parsedPath = parsePathSelector(toPathRule(pathEntry).path);
+	const policy = mergePolicy(defaults, isPathRule(pathEntry) ? pathEntry : {});
+	if (parsedPath.segments.some(isDynamicPathSegment)) return Object.freeze({
+		signature: renderSelectorSignature(parsedPath.segments),
+		policy,
+		segments: parsedPath.segments
+	});
+	const normalisedPath = normaliseParsedPath(parsedPath);
 	return Object.freeze({
 		canonicalPath: normalisedPath.canonicalPath,
-		policy: mergePolicy(defaults, typeof pathEntry === "string" ? {} : pathEntry),
+		policy,
 		segments: normalisedPath.segments
 	});
 };
-const compileExactPathRules = (pathEntries, defaults) => {
+const compilePathRules = (pathEntries, defaults) => {
 	const exactPathRules = createLookupTable();
+	const dynamicPathRules = [];
 	for (const pathEntry of pathEntries) {
 		const compiledRule = compilePathRule(pathEntry, defaults);
-		exactPathRules[compiledRule.canonicalPath] = compiledRule;
+		if ("canonicalPath" in compiledRule) {
+			exactPathRules[compiledRule.canonicalPath] = compiledRule;
+			continue;
+		}
+		dynamicPathRules.push(compiledRule);
 	}
-	return Object.freeze(exactPathRules);
+	return Object.freeze({
+		dynamicPathRules: Object.freeze(dynamicPathRules),
+		exactPathRules: Object.freeze(exactPathRules)
+	});
 };
 const compileExactKeyRules = (keys, defaults) => {
 	const exactKeys = createLookupTable();
@@ -187,10 +300,12 @@ const compileExactKeyRules = (keys, defaults) => {
 };
 const compileRedactorPlan = (options = {}) => {
 	const defaults = createDefaultPolicy(options);
+	const compiledPathRules = compilePathRules(options.paths ?? [], defaults);
 	return Object.freeze({
 		defaults,
+		dynamicPathRules: compiledPathRules.dynamicPathRules,
 		exactKeyRules: compileExactKeyRules(options.keys ?? [], defaults),
-		exactPathRules: compileExactPathRules(options.paths ?? [], defaults),
+		exactPathRules: compiledPathRules.exactPathRules,
 		serialise: options.serialise
 	});
 };
@@ -219,33 +334,60 @@ const isTraversableContainer = (value) => {
 const hasLookupValue = (table, key) => {
 	return Object.hasOwn(table, key);
 };
-const resolvePathRule = (plan, canonicalPath) => {
+const resolveExactPathRule = (plan, canonicalPath) => {
 	if (canonicalPath === void 0) return;
 	return hasLookupValue(plan.exactPathRules, canonicalPath) ? plan.exactPathRules[canonicalPath] : void 0;
 };
-const selectActivePolicy = (plan, pathRule, directKeyMatch, inheritedPolicy) => {
-	if (pathRule !== void 0) return {
-		policy: pathRule.policy,
-		source: "path"
+const matchesSingleSegment = (selectorSegment, pathSegment) => {
+	if (selectorSegment.kind === "wildcard") return true;
+	if (selectorSegment.kind === "recursive-wildcard") return false;
+	if (selectorSegment.kind === "ignore-index") return pathSegment.kind === "index" && pathSegment.value !== selectorSegment.value;
+	if (selectorSegment.kind === "ignore-property") return pathSegment.kind === "property" && pathSegment.value !== selectorSegment.value;
+	if (selectorSegment.kind === "index") return pathSegment.kind === "index" && pathSegment.value === selectorSegment.value;
+	return pathSegment.kind === "property" && pathSegment.value === selectorSegment.value;
+};
+const matchesDynamicRule = (selectorSegments, pathSegments, selectorIndex = 0, pathIndex = 0) => {
+	if (selectorIndex >= selectorSegments.length) return pathIndex === pathSegments.length;
+	const selectorSegment = selectorSegments[selectorIndex];
+	if (selectorSegment.kind === "recursive-wildcard") {
+		for (let nextPathIndex = pathIndex; nextPathIndex <= pathSegments.length; nextPathIndex += 1) if (matchesDynamicRule(selectorSegments, pathSegments, selectorIndex + 1, nextPathIndex)) return true;
+		return false;
+	}
+	if (pathIndex >= pathSegments.length) return false;
+	return matchesSingleSegment(selectorSegment, pathSegments[pathIndex]) && matchesDynamicRule(selectorSegments, pathSegments, selectorIndex + 1, pathIndex + 1);
+};
+const resolveDynamicPathRule = (plan, pathSegments) => {
+	return plan.dynamicPathRules.find((rule) => matchesDynamicRule(rule.segments, pathSegments));
+};
+const selectActivePolicy = (plan, exactPathRule, dynamicPathRule, directKeyMatch, inheritedPolicy) => {
+	if (exactPathRule !== void 0) return {
+		policy: exactPathRule.policy,
+		source: "exact-path"
 	};
-	if (inheritedPolicy?.source === "path") return inheritedPolicy;
+	if (dynamicPathRule !== void 0) return {
+		policy: dynamicPathRule.policy,
+		source: "dynamic-path"
+	};
+	if (inheritedPolicy?.source === "exact-path" || inheritedPolicy?.source === "dynamic-path") return inheritedPolicy;
 	if (directKeyMatch) return {
 		policy: plan.exactKeyRules.policy,
 		source: "key"
 	};
 	return inheritedPolicy;
 };
-const transformArray = (value, plan, inheritedPolicy, canonicalPath) => {
+const transformArray = (value, plan, inheritedPolicy, canonicalPath, pathSegments) => {
 	let transformedValue;
 	const removedIndexes = [];
 	let changed = false;
 	for (let index = 0; index < value.length; index += 1) {
 		if (!(index in value)) continue;
 		const item = value[index];
+		const pathSegment = createIndexPathSegment(index);
 		const itemResult = transformNode(item, plan, {
-			canonicalPath: appendCanonicalPathSegment(canonicalPath, createIndexPathSegment(index)),
+			canonicalPath: appendCanonicalPathSegment(canonicalPath, pathSegment),
 			directKeyMatch: false,
-			inheritedPolicy
+			inheritedPolicy,
+			pathSegments: Object.freeze([...pathSegments, pathSegment])
 		});
 		if (isRemovedValue(itemResult.value)) {
 			if (transformedValue === void 0) transformedValue = value.slice();
@@ -277,14 +419,16 @@ const transformArray = (value, plan, inheritedPolicy, canonicalPath) => {
 		value: compactedValue
 	};
 };
-const transformObject = (value, plan, inheritedPolicy, canonicalPath) => {
+const transformObject = (value, plan, inheritedPolicy, canonicalPath, pathSegments) => {
 	let changed = false;
 	let transformedValue;
 	for (const [key, propertyValue] of Object.entries(value)) {
+		const pathSegment = createPropertyPathSegment(key);
 		const propertyResult = transformNode(propertyValue, plan, {
-			canonicalPath: appendCanonicalPathSegment(canonicalPath, createPropertyPathSegment(key)),
+			canonicalPath: appendCanonicalPathSegment(canonicalPath, pathSegment),
 			directKeyMatch: hasLookupValue(plan.exactKeyRules.keys, key),
-			inheritedPolicy
+			inheritedPolicy,
+			pathSegments: Object.freeze([...pathSegments, pathSegment])
 		});
 		if (isRemovedValue(propertyResult.value)) {
 			if (transformedValue === void 0) transformedValue = { ...value };
@@ -303,7 +447,7 @@ const transformObject = (value, plan, inheritedPolicy, canonicalPath) => {
 	};
 };
 const transformNode = (value, plan, context) => {
-	const activePolicy = selectActivePolicy(plan, resolvePathRule(plan, context.canonicalPath), context.directKeyMatch, context.inheritedPolicy);
+	const activePolicy = selectActivePolicy(plan, resolveExactPathRule(plan, context.canonicalPath), resolveDynamicPathRule(plan, context.pathSegments), context.directKeyMatch, context.inheritedPolicy);
 	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !isTraversableContainer(value))) return {
 		changed: true,
 		value: applyRedaction(value, activePolicy.policy)
@@ -313,13 +457,14 @@ const transformNode = (value, plan, context) => {
 		value
 	};
 	const inheritedPolicy = activePolicy;
-	return Array.isArray(value) ? transformArray(value, plan, inheritedPolicy, context.canonicalPath) : transformObject(value, plan, inheritedPolicy, context.canonicalPath);
+	return Array.isArray(value) ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments) : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments);
 };
 const redactValue = (value, plan) => {
 	const result = transformNode(value, plan, {
 		canonicalPath: void 0,
 		directKeyMatch: false,
-		inheritedPolicy: void 0
+		inheritedPolicy: void 0,
+		pathSegments: Object.freeze([])
 	});
 	return isRemovedValue(result.value) ? void 0 : result.value;
 };
@@ -353,10 +498,22 @@ const pushIssue$1 = (issues, path, message) => {
 		message
 	});
 };
-const validateExactPathSelectors = (selectorCandidates, issues) => {
+const validatePathSelectors = (selectorCandidates, issues) => {
 	const seenCanonicalPaths = /* @__PURE__ */ new Map();
+	const seenDynamicSelectors = /* @__PURE__ */ new Map();
 	for (const selectorCandidate of selectorCandidates) try {
-		const normalisedPath = normaliseParsedPath(parsePathSelector(selectorCandidate.selector));
+		const parsedPath = parsePathSelector(selectorCandidate.selector);
+		if (parsedPath.segments.some(isDynamicPathSegment)) {
+			const signature = renderSelectorSignature(parsedPath.segments);
+			const previousDefinitionPath = seenDynamicSelectors.get(signature);
+			if (previousDefinitionPath !== void 0) {
+				pushIssue$1(issues, selectorCandidate.configPath, `Duplicate dynamic selector "${signature}" already defined at ${previousDefinitionPath}.`);
+				continue;
+			}
+			seenDynamicSelectors.set(signature, selectorCandidate.configPath);
+			continue;
+		}
+		const normalisedPath = normaliseParsedPath(parsedPath);
 		const previousDefinitionPath = seenCanonicalPaths.get(normalisedPath.canonicalPath);
 		if (previousDefinitionPath !== void 0) {
 			pushIssue$1(issues, selectorCandidate.configPath, `Duplicate canonical selector "${normalisedPath.canonicalPath}" already defined at ${previousDefinitionPath}.`);
@@ -364,7 +521,7 @@ const validateExactPathSelectors = (selectorCandidates, issues) => {
 		}
 		seenCanonicalPaths.set(normalisedPath.canonicalPath, selectorCandidate.configPath);
 	} catch (error) {
-		pushIssue$1(issues, selectorCandidate.configPath, error instanceof Error ? error.message : "Invalid exact path selector.");
+		pushIssue$1(issues, selectorCandidate.configPath, error instanceof Error ? error.message : "Invalid path selector.");
 	}
 };
 //#endregion
@@ -387,6 +544,9 @@ const isPlainObject = (value) => {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
 	const prototype = Object.getPrototypeOf(value);
 	return prototype === Object.prototype || prototype === null;
+};
+const isPathSelector = (value) => {
+	return typeof value === "string" || Array.isArray(value);
 };
 const pushIssue = (issues, path, message) => {
 	issues.push({
@@ -447,7 +607,7 @@ const validatePathRule = (value, path, defaults, issues, selectorCandidates) => 
 		return;
 	}
 	validateAllowedOptions(value, pathRuleOptionNames, path, issues);
-	if (typeof value.path !== "string") pushIssue(issues, `${path}.path`, "path must be a string.");
+	if (!isPathSelector(value.path)) pushIssue(issues, `${path}.path`, "path must be a string or structured selector array.");
 	else selectorCandidates.push({
 		configPath: `${path}.path`,
 		selector: value.path
@@ -469,7 +629,7 @@ const validatePaths = (value, path, defaults, issues, selectorCandidates) => {
 	}
 	value.forEach((entry, index) => {
 		const entryPath = `${path}[${index}]`;
-		if (typeof entry === "string") {
+		if (isPathSelector(entry)) {
 			selectorCandidates.push({
 				configPath: entryPath,
 				selector: entry
@@ -503,7 +663,7 @@ const validateConfig = (options) => {
 		remove: options.remove === true,
 		retainStructure: options.retainStructure === true
 	}, issues, selectorCandidates);
-	validateExactPathSelectors(selectorCandidates, issues);
+	validatePathSelectors(selectorCandidates, issues);
 	return createValidationReport(issues);
 };
 //#endregion

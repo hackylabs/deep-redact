@@ -3,10 +3,16 @@ import type {
   DeepRedactOptions,
   PathEntry,
   PathRule,
+  PathSelector,
   SerialiseOption,
 } from '../../types/public.js'
-import { parsePathSelector, type PathSegment } from '../matching/path-parser.js'
-import { normaliseParsedPath } from '../matching/path-normaliser.js'
+import {
+  isDynamicPathSegment,
+  parsePathSelector,
+  type ExactPathSegment,
+  type PathSegment,
+} from '../matching/path-parser.js'
+import { normaliseParsedPath, renderSelectorSignature } from '../matching/path-normaliser.js'
 
 export interface CompiledRedactionPolicy {
   readonly censor?: Censor
@@ -16,6 +22,12 @@ export interface CompiledRedactionPolicy {
 
 export interface CompiledExactPathRule {
   readonly canonicalPath: string
+  readonly policy: CompiledRedactionPolicy
+  readonly segments: readonly ExactPathSegment[]
+}
+
+export interface CompiledDynamicPathRule {
+  readonly signature: string
   readonly policy: CompiledRedactionPolicy
   readonly segments: readonly PathSegment[]
 }
@@ -27,6 +39,7 @@ export interface CompiledExactKeyRules {
 
 export interface CompiledRedactorPlan {
   readonly defaults: CompiledRedactionPolicy
+  readonly dynamicPathRules: readonly CompiledDynamicPathRule[]
   readonly exactPathRules: Readonly<Record<string, CompiledExactPathRule>>
   readonly exactKeyRules: CompiledExactKeyRules
   readonly serialise?: SerialiseOption
@@ -55,34 +68,68 @@ const mergePolicy = (
   })
 }
 
+const isPathRule = (pathEntry: PathEntry): pathEntry is PathRule => {
+  return typeof pathEntry === 'object' && pathEntry !== null && !Array.isArray(pathEntry) && 'path' in pathEntry
+}
+
+const toPathRule = (pathEntry: PathEntry): PathRule => {
+  return !isPathRule(pathEntry)
+    ? { path: pathEntry }
+    : pathEntry
+}
+
+type CompiledPathRule = CompiledExactPathRule | CompiledDynamicPathRule
+
 const compilePathRule = (
   pathEntry: PathEntry,
   defaults: CompiledRedactionPolicy,
-): CompiledExactPathRule => {
-  const rule = typeof pathEntry === 'string'
-    ? { path: pathEntry }
-    : pathEntry
-  const normalisedPath = normaliseParsedPath(parsePathSelector(rule.path))
+): CompiledPathRule => {
+  const rule = toPathRule(pathEntry)
+  const parsedPath = parsePathSelector(rule.path)
+  const policy = mergePolicy(defaults, isPathRule(pathEntry) ? pathEntry : {})
+
+  if (parsedPath.segments.some(isDynamicPathSegment)) {
+    return Object.freeze({
+      signature: renderSelectorSignature(parsedPath.segments),
+      policy,
+      segments: parsedPath.segments,
+    })
+  }
+
+  const normalisedPath = normaliseParsedPath(parsedPath)
 
   return Object.freeze({
     canonicalPath: normalisedPath.canonicalPath,
-    policy: mergePolicy(defaults, typeof pathEntry === 'string' ? {} : pathEntry),
+    policy,
     segments: normalisedPath.segments,
   })
 }
 
-const compileExactPathRules = (
+const compilePathRules = (
   pathEntries: readonly PathEntry[],
   defaults: CompiledRedactionPolicy,
-): Readonly<Record<string, CompiledExactPathRule>> => {
+): {
+  readonly dynamicPathRules: readonly CompiledDynamicPathRule[]
+  readonly exactPathRules: Readonly<Record<string, CompiledExactPathRule>>
+} => {
   const exactPathRules = createLookupTable<CompiledExactPathRule>()
+  const dynamicPathRules: CompiledDynamicPathRule[] = []
 
   for (const pathEntry of pathEntries) {
     const compiledRule = compilePathRule(pathEntry, defaults)
-    exactPathRules[compiledRule.canonicalPath] = compiledRule
+
+    if ('canonicalPath' in compiledRule) {
+      exactPathRules[compiledRule.canonicalPath] = compiledRule
+      continue
+    }
+
+    dynamicPathRules.push(compiledRule)
   }
 
-  return Object.freeze(exactPathRules)
+  return Object.freeze({
+    dynamicPathRules: Object.freeze(dynamicPathRules),
+    exactPathRules: Object.freeze(exactPathRules),
+  })
 }
 
 const compileExactKeyRules = (
@@ -103,11 +150,13 @@ const compileExactKeyRules = (
 
 export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRedactorPlan => {
   const defaults = createDefaultPolicy(options)
+  const compiledPathRules = compilePathRules(options.paths ?? [], defaults)
 
   return Object.freeze({
     defaults,
+    dynamicPathRules: compiledPathRules.dynamicPathRules,
     exactKeyRules: compileExactKeyRules(options.keys ?? [], defaults),
-    exactPathRules: compileExactPathRules(options.paths ?? [], defaults),
+    exactPathRules: compiledPathRules.exactPathRules,
     serialise: options.serialise,
   })
 }

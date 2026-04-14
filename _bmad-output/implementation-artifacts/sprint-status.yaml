@@ -34,7 +34,7 @@
 # - Scrum Master typically creates the next story after the previous one is 'done'
 
 generated: 2026-04-13T09:43:13+0100
-last_updated: 2026-04-13T15:24:10+0100
+last_updated: 2026-04-14T05:40:59+0100
 project: deep-redact
 project_key: NOKEY
 tracking_system: file-system
@@ -45,7 +45,7 @@ development_status:
   1-1-establish-the-scratch-v4-foundation-and-brownfield-transplant-scaffold: done
   1-2-create-and-validate-a-reusable-service-redactor: done
   1-3-redact-exact-keys-and-canonical-exact-paths-in-nested-payloads: review
-  1-4-support-wildcard-and-exclusion-selectors-for-repeated-nested-structures: backlog
+  1-4-support-wildcard-and-exclusion-selectors-for-repeated-nested-structures: done
   1-5-match-sensitive-fields-by-regex-based-property-names: backlog
   1-6-match-sensitive-fields-by-regex-based-path-segments: backlog
   epic-1-retrospective: optional

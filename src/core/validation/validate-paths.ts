@@ -1,25 +1,46 @@
-import { parsePathSelector } from '../matching/path-parser.js'
-import { normaliseParsedPath } from '../matching/path-normaliser.js'
+import type { PathSelector } from '../../types/paths.js'
+import { isDynamicPathSegment, parsePathSelector } from '../matching/path-parser.js'
+import { normaliseParsedPath, renderSelectorSignature } from '../matching/path-normaliser.js'
 import type { ValidationIssue } from './validation-report.js'
 
-export interface ExactPathSelectorCandidate {
+export interface PathSelectorCandidate {
   readonly configPath: string
-  readonly selector: string
+  readonly selector: PathSelector
 }
 
 const pushIssue = (issues: ValidationIssue[], path: string, message: string): void => {
   issues.push({ path, message })
 }
 
-export const validateExactPathSelectors = (
-  selectorCandidates: readonly ExactPathSelectorCandidate[],
+export const validatePathSelectors = (
+  selectorCandidates: readonly PathSelectorCandidate[],
   issues: ValidationIssue[],
 ): void => {
   const seenCanonicalPaths = new Map<string, string>()
+  const seenDynamicSelectors = new Map<string, string>()
 
   for (const selectorCandidate of selectorCandidates) {
     try {
-      const normalisedPath = normaliseParsedPath(parsePathSelector(selectorCandidate.selector))
+      const parsedPath = parsePathSelector(selectorCandidate.selector)
+
+      if (parsedPath.segments.some(isDynamicPathSegment)) {
+        const signature = renderSelectorSignature(parsedPath.segments)
+        const previousDefinitionPath = seenDynamicSelectors.get(signature)
+
+        if (previousDefinitionPath !== undefined) {
+          pushIssue(
+            issues,
+            selectorCandidate.configPath,
+            `Duplicate dynamic selector "${signature}" already defined at ${previousDefinitionPath}.`,
+          )
+          continue
+        }
+
+        seenDynamicSelectors.set(signature, selectorCandidate.configPath)
+        continue
+      }
+
+      const normalisedPath = normaliseParsedPath(parsedPath)
       const previousDefinitionPath = seenCanonicalPaths.get(normalisedPath.canonicalPath)
 
       if (previousDefinitionPath !== undefined) {
@@ -36,7 +57,7 @@ export const validateExactPathSelectors = (
       pushIssue(
         issues,
         selectorCandidate.configPath,
-        error instanceof Error ? error.message : 'Invalid exact path selector.',
+        error instanceof Error ? error.message : 'Invalid path selector.',
       )
     }
   }

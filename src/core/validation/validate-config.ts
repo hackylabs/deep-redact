@@ -1,9 +1,9 @@
-import type { PathRule } from '../../types/paths.js'
+import type { PathRule, PathSelector } from '../../types/paths.js'
 import type { DeepRedactOptions, SerialiseOption } from '../../types/public.js'
 import { createValidationReport, type ValidationIssue, type ValidationReport } from './validation-report.js'
 import {
-  validateExactPathSelectors,
-  type ExactPathSelectorCandidate,
+  validatePathSelectors,
+  type PathSelectorCandidate,
 } from './validate-paths.js'
 
 const rootOptionNames = new Set<keyof DeepRedactOptions>([
@@ -32,6 +32,10 @@ const isPlainObject = (value: unknown): value is ConfigRecord => {
   const prototype = Object.getPrototypeOf(value)
 
   return prototype === Object.prototype || prototype === null
+}
+
+const isPathSelector = (value: unknown): value is PathSelector => {
+  return typeof value === 'string' || Array.isArray(value)
 }
 
 const pushIssue = (issues: ValidationIssue[], path: string, message: string): void => {
@@ -171,7 +175,7 @@ const validatePathRule = (
   path: string,
   defaults: EffectiveRuleDefaults,
   issues: ValidationIssue[],
-  selectorCandidates: ExactPathSelectorCandidate[],
+  selectorCandidates: PathSelectorCandidate[],
 ): void => {
   if (!isPlainObject(value)) {
     pushIssue(issues, path, `${path.split('.').at(-1) ?? 'entry'} must be a string selector or path-rule object.`)
@@ -180,8 +184,8 @@ const validatePathRule = (
 
   validateAllowedOptions(value, pathRuleOptionNames, path, issues)
 
-  if (typeof value.path !== 'string') {
-    pushIssue(issues, `${path}.path`, 'path must be a string.')
+  if (!isPathSelector(value.path)) {
+    pushIssue(issues, `${path}.path`, 'path must be a string or structured selector array.')
   } else {
     selectorCandidates.push({
       configPath: `${path}.path`,
@@ -208,7 +212,7 @@ const validatePaths = (
   path: string,
   defaults: EffectiveRuleDefaults,
   issues: ValidationIssue[],
-  selectorCandidates: ExactPathSelectorCandidate[],
+  selectorCandidates: PathSelectorCandidate[],
 ): void => {
   if (value === undefined) {
     return
@@ -222,7 +226,7 @@ const validatePaths = (
   value.forEach((entry, index) => {
     const entryPath = `${path}[${index}]`
 
-    if (typeof entry === 'string') {
+    if (isPathSelector(entry)) {
       selectorCandidates.push({
         configPath: entryPath,
         selector: entry,
@@ -241,7 +245,7 @@ const validatePaths = (
 
 export const validateConfig = (options: unknown): ValidationReport => {
   const issues: ValidationIssue[] = []
-  const selectorCandidates: ExactPathSelectorCandidate[] = []
+  const selectorCandidates: PathSelectorCandidate[] = []
 
   if (options === undefined) {
     return createValidationReport(issues)
@@ -270,7 +274,7 @@ export const validateConfig = (options: unknown): ValidationReport => {
     issues,
     selectorCandidates,
   )
-  validateExactPathSelectors(selectorCandidates, issues)
+  validatePathSelectors(selectorCandidates, issues)
 
   return createValidationReport(issues)
 }

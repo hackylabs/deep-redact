@@ -65,9 +65,13 @@ describe('Reusable redactor factory contract', () => {
     ['invalid serialise value', { serialise: 'json' }, /serialise must be a boolean or function/i],
     ['invalid paths container', { paths: 'user.password' }, /paths must be an array/i],
     ['invalid path entry', { paths: [42] }, /paths\[0\] must be a string selector or path-rule object/i],
-    ['missing path on path rule', { paths: [{ remove: true }] }, /paths\[0\]\.path: path must be a string/i],
-    ['unsupported wildcard path', { paths: ['users.*.password'] }, /unsupported wildcard segment/i],
-    ['unsupported recursive wildcard path', { paths: ['users.**.password'] }, /unsupported recursive wildcard segment/i],
+    ['missing path on path rule', { paths: [{ remove: true }] }, /paths\[0\]\.path: path must be a string or structured selector array/i],
+    ['partial wildcard path', { paths: ['users.foo*bar.password'] }, /unsupported wildcard syntax/i],
+    ['multiple recursive wildcards', { paths: ['users.**.profile.**.password'] }, /at most one recursive wildcard/i],
+    ['unsupported string exclusion syntax', { paths: ['users.!admin.password'] }, /unsupported exclusion syntax/i],
+    ['unsupported structured matcher object', { paths: [['users', { match: 'password' }]] }, /unsupported structured selector segment/i],
+    ['negative structured numeric segment', { paths: [['users', -1, 'password']] }, /structured numeric segments must be non-negative integers/i],
+    ['negative structured ignore index', { paths: [['users', { ignore: -1 }, 'password']] }, /structured ignore indexes must be non-negative integers/i],
   ])('fails fast for %s', (_label, options, expectedMessage) => {
     expect(() => deepRedact(options as never)).toThrowError(expectedMessage)
   })
@@ -165,6 +169,53 @@ describe('Reusable redactor factory contract', () => {
     expect(deepRedact({ paths: ['users.0.email'] })(payload)).toEqual(expectedPayload)
   })
 
+  it('accepts exact structured selectors and treats them like equivalent canonical exact paths', () => {
+    const payload = {
+      users: [
+        { email: 'first@example.com', safe: 'keep' },
+        { email: 'second@example.com', safe: 'keep-too' },
+      ],
+    }
+
+    expect(deepRedact({
+      paths: [
+        ['users', 0, 'email'],
+      ],
+    })(payload)).toEqual({
+      users: [
+        { email: '[REDACTED]', safe: 'keep' },
+        { email: 'second@example.com', safe: 'keep-too' },
+      ],
+    })
+  })
+
+  it('treats structured string segments as literal property keys, including numeric-looking and punctuation keys', () => {
+    expect(deepRedact({
+      paths: [
+        ['users', '0', 'email'],
+        ['headers', 'x-api-key'],
+      ],
+    })({
+      users: {
+        0: { email: 'zero@example.com', safe: 'keep-zero' },
+        1: { email: 'one@example.com', safe: 'keep-one' },
+      },
+      headers: {
+        'x-api-key': 'secret-token',
+        safe: 'still-visible',
+      },
+    })).toEqual({
+      users: {
+        0: { email: '[REDACTED]', safe: 'keep-zero' },
+        1: { email: 'one@example.com', safe: 'keep-one' },
+      },
+      headers: {
+        'x-api-key': '[REDACTED]',
+        safe: 'still-visible',
+      },
+    })
+  })
+
   it('rejects duplicate canonical exact-path selectors during initialisation', () => {
     expect(() => deepRedact({
       paths: [
@@ -172,6 +223,126 @@ describe('Reusable redactor factory contract', () => {
         'users.0.email',
       ],
     })).toThrowError(/duplicate canonical selector "users\.0\.email"/i)
+  })
+
+  it('rejects structured string selectors that duplicate equivalent quoted-property string selectors', () => {
+    expect(() => deepRedact({
+      paths: [
+        'users["0"].email',
+        ['users', '0', 'email'],
+      ],
+    })).toThrowError(/duplicate canonical selector "users\["0"\]\.email"/i)
+  })
+
+  it('rejects duplicate dynamic selectors during initialisation', () => {
+    expect(() => deepRedact({
+      paths: [
+        'users.*.email',
+        'users.*.email',
+      ],
+    })).toThrowError(/duplicate dynamic selector "users\.\*\.email"/i)
+  })
+
+  it('redacts one-level wildcard matches without touching deeper non-matching branches', () => {
+    const redact = deepRedact({
+      paths: ['users.*.email'],
+    })
+
+    expect(redact({
+      users: {
+        alice: { email: 'alice@example.com', safe: 'keep' },
+        bob: { email: 'bob@example.com', safe: 'keep-too' },
+        profile: {
+          contact: {
+            email: 'nested@example.com',
+          },
+        },
+      },
+    })).toEqual({
+      users: {
+        alice: { email: '[REDACTED]', safe: 'keep' },
+        bob: { email: '[REDACTED]', safe: 'keep-too' },
+        profile: {
+          contact: {
+            email: 'nested@example.com',
+          },
+        },
+      },
+    })
+  })
+
+  it('redacts recursive wildcard matches across zero, one, and many intermediate segments', () => {
+    const redact = deepRedact({
+      paths: ['account.**.token'],
+    })
+
+    expect(redact({
+      account: {
+        token: 'root-token',
+        session: {
+          token: 'session-token',
+        },
+        audit: {
+          session: {
+            token: 'audit-token',
+          },
+        },
+        safe: true,
+      },
+    })).toEqual({
+      account: {
+        token: '[REDACTED]',
+        session: {
+          token: '[REDACTED]',
+        },
+        audit: {
+          session: {
+            token: '[REDACTED]',
+          },
+        },
+        safe: true,
+      },
+    })
+  })
+
+  it('treats array indices as selector segments for wildcard rules', () => {
+    const redact = deepRedact({
+      paths: ['orders.*.cardNumber'],
+    })
+
+    expect(redact({
+      orders: [
+        { cardNumber: '4111111111111111', safe: true },
+        { cardNumber: '5555555555554444', safe: false },
+      ],
+    })).toEqual({
+      orders: [
+        { cardNumber: '[REDACTED]', safe: true },
+        { cardNumber: '[REDACTED]', safe: false },
+      ],
+    })
+  })
+
+  it('supports structured ignore selectors without redacting excluded siblings', () => {
+    const redact = deepRedact({
+      paths: [
+        ['users', { ignore: 'admin' }, 'email'],
+      ],
+    })
+
+    expect(redact({
+      users: {
+        admin: { email: 'admin@example.com', safe: 'keep-admin' },
+        alice: { email: 'alice@example.com', safe: 'keep-alice' },
+        0: { email: 'zero@example.com', safe: 'keep-zero' },
+      },
+    })).toEqual({
+      users: {
+        admin: { email: 'admin@example.com', safe: 'keep-admin' },
+        alice: { email: '[REDACTED]', safe: 'keep-alice' },
+        0: { email: '[REDACTED]', safe: 'keep-zero' },
+      },
+    })
   })
 
   it('gives exact-path rules precedence over exact-key rules on the same leaf', () => {
@@ -193,6 +364,33 @@ describe('Reusable redactor factory contract', () => {
     })).toEqual({
       user: {
         token: '[PATH]',
+      },
+    })
+  })
+
+  it('gives exact-path rules precedence over wildcard matches on the same leaf', () => {
+    const redact = deepRedact({
+      paths: [
+        {
+          path: 'users.admin.email',
+          censor: '[EXACT]',
+        },
+        {
+          path: 'users.*.email',
+          censor: '[WILDCARD]',
+        },
+      ],
+    })
+
+    expect(redact({
+      users: {
+        admin: { email: 'admin@example.com' },
+        alice: { email: 'alice@example.com' },
+      },
+    })).toEqual({
+      users: {
+        admin: { email: '[EXACT]' },
+        alice: { email: '[WILDCARD]' },
       },
     })
   })

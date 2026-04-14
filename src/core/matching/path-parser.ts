@@ -1,3 +1,5 @@
+import type { IgnorePathSegment, PathSelector, StructuredPathSelector } from '../../types/paths.js'
+
 const barePropertyPattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 const indexSegmentPattern = /^(0|[1-9]\d*)$/
 const regexLikeSegmentPattern = /^\/.+\/[A-Za-z]*$/
@@ -12,10 +14,34 @@ export interface IndexPathSegment {
   readonly value: number
 }
 
-export type PathSegment = PropertyPathSegment | IndexPathSegment
+export interface WildcardPathSegment {
+  readonly kind: 'wildcard'
+}
+
+export interface RecursiveWildcardPathSegment {
+  readonly kind: 'recursive-wildcard'
+}
+
+export interface IgnorePropertyPathSegment {
+  readonly kind: 'ignore-property'
+  readonly value: string
+}
+
+export interface IgnoreIndexPathSegment {
+  readonly kind: 'ignore-index'
+  readonly value: number
+}
+
+export type ExactPathSegment = PropertyPathSegment | IndexPathSegment
+export type DynamicPathSegment =
+  | WildcardPathSegment
+  | RecursiveWildcardPathSegment
+  | IgnorePropertyPathSegment
+  | IgnoreIndexPathSegment
+export type PathSegment = ExactPathSegment | DynamicPathSegment
 
 export interface ParsedPathSelector {
-  readonly raw: string
+  readonly raw: PathSelector
   readonly segments: readonly PathSegment[]
 }
 
@@ -43,21 +69,57 @@ export const createIndexPathSegment = (value: number): IndexPathSegment => {
   })
 }
 
-const createUnsupportedWildcardError = (selector: string, segment: string): PathSyntaxError => {
+export const createWildcardPathSegment = (): WildcardPathSegment => {
+  return Object.freeze({
+    kind: 'wildcard',
+  })
+}
+
+export const createRecursiveWildcardPathSegment = (): RecursiveWildcardPathSegment => {
+  return Object.freeze({
+    kind: 'recursive-wildcard',
+  })
+}
+
+export const createIgnorePropertyPathSegment = (value: string): IgnorePropertyPathSegment => {
+  return Object.freeze({
+    kind: 'ignore-property',
+    value,
+  })
+}
+
+export const createIgnoreIndexPathSegment = (value: number): IgnoreIndexPathSegment => {
+  return Object.freeze({
+    kind: 'ignore-index',
+    value,
+  })
+}
+
+const renderRawSelector = (selector: PathSelector): string => {
+  return typeof selector === 'string' ? selector : JSON.stringify(selector)
+}
+
+const createUnsupportedWildcardError = (selector: PathSelector, segment: string): PathSyntaxError => {
+  const rawSelector = renderRawSelector(selector)
+
   if (segment === '**') {
-    return new PathSyntaxError(selector, 'Unsupported recursive wildcard segment "**".')
+    return new PathSyntaxError(rawSelector, 'Unsupported recursive wildcard segment "**".')
   }
 
   if (segment === '*') {
-    return new PathSyntaxError(selector, 'Unsupported wildcard segment "*".')
+    return new PathSyntaxError(rawSelector, 'Unsupported wildcard segment "*".')
   }
 
-  return new PathSyntaxError(selector, `Unsupported wildcard syntax in segment "${segment}".`)
+  return new PathSyntaxError(rawSelector, `Unsupported wildcard syntax in segment "${segment}".`)
 }
 
-const createBareSegment = (selector: string, value: string): PathSegment => {
+const createExactSegment = (selector: PathSelector, value: string | number): ExactPathSegment => {
+  if (typeof value === 'number') {
+    return createIndexPathSegment(value)
+  }
+
   if (value.length === 0) {
-    throw new PathSyntaxError(selector, 'Path selectors must not contain empty segments.')
+    throw new PathSyntaxError(renderRawSelector(selector), 'Path selectors must not contain empty segments.')
   }
 
   if (value.includes('*')) {
@@ -65,7 +127,14 @@ const createBareSegment = (selector: string, value: string): PathSegment => {
   }
 
   if (regexLikeSegmentPattern.test(value)) {
-    throw new PathSyntaxError(selector, `Unsupported regex-like segment "${value}".`)
+    throw new PathSyntaxError(renderRawSelector(selector), `Unsupported regex-like segment "${value}".`)
+  }
+
+  if (value.startsWith('!')) {
+    throw new PathSyntaxError(
+      renderRawSelector(selector),
+      `Unsupported exclusion syntax in segment "${value}". Ignore selectors are structured-selector only.`,
+    )
   }
 
   if (indexSegmentPattern.test(value)) {
@@ -77,13 +146,64 @@ const createBareSegment = (selector: string, value: string): PathSegment => {
   }
 
   throw new PathSyntaxError(
-    selector,
+    renderRawSelector(selector),
     `Unsupported exact path segment "${value}". Use bracket-quoted property syntax for literal special-character keys.`,
   )
 }
 
+const createLiteralStructuredPropertySegment = (
+  selector: StructuredPathSelector,
+  value: string,
+): PropertyPathSegment => {
+  if (value.length === 0) {
+    throw new PathSyntaxError(renderRawSelector(selector), 'Path selectors must not contain empty segments.')
+  }
+
+  return createPropertyPathSegment(value)
+}
+
+const createLiteralStructuredIndexSegment = (
+  selector: StructuredPathSelector,
+  value: number,
+): IndexPathSegment => {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new PathSyntaxError(
+      renderRawSelector(selector),
+      'Structured numeric segments must be non-negative integers.',
+    )
+  }
+
+  return createIndexPathSegment(value)
+}
+
+const createLiteralStructuredIgnorePropertySegment = (
+  selector: StructuredPathSelector,
+  value: string,
+): IgnorePropertyPathSegment => {
+  if (value.length === 0) {
+    throw new PathSyntaxError(renderRawSelector(selector), 'Path selectors must not contain empty segments.')
+  }
+
+  return createIgnorePropertyPathSegment(value)
+}
+
+const createLiteralStructuredIgnoreIndexSegment = (
+  selector: StructuredPathSelector,
+  value: number,
+): IgnoreIndexPathSegment => {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new PathSyntaxError(
+      renderRawSelector(selector),
+      'Structured ignore indexes must be non-negative integers.',
+    )
+  }
+
+  return createIgnoreIndexPathSegment(value)
+}
+
 const parseQuotedProperty = (
   selector: string,
+  rawSelector: string,
   startIndex: number,
 ): {
   readonly nextIndex: number
@@ -100,7 +220,7 @@ const parseQuotedProperty = (
       index += 1
 
       if (index >= selector.length) {
-        throw new PathSyntaxError(selector, 'Quoted property selector has an unfinished escape sequence.')
+        throw new PathSyntaxError(rawSelector, 'Quoted property selector has an unfinished escape sequence.')
       }
 
       value += selector[index]
@@ -110,7 +230,7 @@ const parseQuotedProperty = (
 
     if (character === quote) {
       if (value.length === 0) {
-        throw new PathSyntaxError(selector, 'Path selectors must not contain empty segments.')
+        throw new PathSyntaxError(rawSelector, 'Path selectors must not contain empty segments.')
       }
 
       return {
@@ -123,27 +243,28 @@ const parseQuotedProperty = (
     index += 1
   }
 
-  throw new PathSyntaxError(selector, 'Quoted property selector is not closed.')
+  throw new PathSyntaxError(rawSelector, 'Quoted property selector is not closed.')
 }
 
 const parseBracketSegment = (
   selector: string,
+  rawSelector: string,
   startIndex: number,
 ): {
   readonly nextIndex: number
-  readonly segment: PathSegment
+  readonly segment: ExactPathSegment
 } => {
   let index = startIndex + 1
 
   if (index >= selector.length) {
-    throw new PathSyntaxError(selector, 'Bracket selector is not closed.')
+    throw new PathSyntaxError(rawSelector, 'Bracket selector is not closed.')
   }
 
   if (selector[index] === '"' || selector[index] === '\'') {
-    const quotedProperty = parseQuotedProperty(selector, index)
+    const quotedProperty = parseQuotedProperty(selector, rawSelector, index)
 
     if (selector[quotedProperty.nextIndex] !== ']') {
-      throw new PathSyntaxError(selector, 'Quoted property selector must be closed with ].')
+      throw new PathSyntaxError(rawSelector, 'Quoted property selector must be closed with ].')
     }
 
     return {
@@ -155,26 +276,26 @@ const parseBracketSegment = (
   const closingIndex = selector.indexOf(']', index)
 
   if (closingIndex === -1) {
-    throw new PathSyntaxError(selector, 'Bracket selector is not closed.')
+    throw new PathSyntaxError(rawSelector, 'Bracket selector is not closed.')
   }
 
   const value = selector.slice(index, closingIndex)
 
   if (value.length === 0) {
-    throw new PathSyntaxError(selector, 'Path selectors must not contain empty segments.')
+    throw new PathSyntaxError(rawSelector, 'Path selectors must not contain empty segments.')
   }
 
   if (value.includes('*')) {
-    throw createUnsupportedWildcardError(selector, value)
+    throw createUnsupportedWildcardError(rawSelector, value)
   }
 
   if (regexLikeSegmentPattern.test(value)) {
-    throw new PathSyntaxError(selector, `Unsupported regex-like segment "${value}".`)
+    throw new PathSyntaxError(rawSelector, `Unsupported regex-like segment "${value}".`)
   }
 
   if (!indexSegmentPattern.test(value)) {
     throw new PathSyntaxError(
-      selector,
+      rawSelector,
       `Unsupported bracket segment "${value}". Use numeric indexes or quoted property selectors only.`,
     )
   }
@@ -187,6 +308,7 @@ const parseBracketSegment = (
 
 const parseBareSegment = (
   selector: string,
+  rawSelector: string,
   startIndex: number,
 ): {
   readonly nextIndex: number
@@ -196,7 +318,7 @@ const parseBareSegment = (
 
   while (index < selector.length && selector[index] !== '.' && selector[index] !== '[') {
     if (selector[index] === ']') {
-      throw new PathSyntaxError(selector, 'Unexpected ] in path selector.')
+      throw new PathSyntaxError(rawSelector, 'Unexpected ] in path selector.')
     }
 
     index += 1
@@ -204,19 +326,34 @@ const parseBareSegment = (
 
   const value = selector.slice(startIndex, index)
 
+  if (value === '*') {
+    return {
+      nextIndex: index,
+      segment: createWildcardPathSegment(),
+    }
+  }
+
+  if (value === '**') {
+    return {
+      nextIndex: index,
+      segment: createRecursiveWildcardPathSegment(),
+    }
+  }
+
   return {
     nextIndex: index,
-    segment: createBareSegment(selector, value),
+    segment: createExactSegment(rawSelector, value),
   }
 }
 
-export const parsePathSelector = (selector: string): ParsedPathSelector => {
+const parseStringPathSelector = (selector: string): ParsedPathSelector => {
   if (selector.length === 0) {
     throw new PathSyntaxError(selector, 'Path selectors must not be empty.')
   }
 
   const segments: PathSegment[] = []
   let index = 0
+  let recursiveWildcardCount = 0
 
   while (index < selector.length) {
     if (selector[index] === '.') {
@@ -224,14 +361,23 @@ export const parsePathSelector = (selector: string): ParsedPathSelector => {
     }
 
     const parsedSegment = selector[index] === '['
-      ? parseBracketSegment(selector, index)
-      : parseBareSegment(selector, index)
+      ? parseBracketSegment(selector, selector, index)
+      : parseBareSegment(selector, selector, index)
 
     segments.push(parsedSegment.segment)
+
+    if (parsedSegment.segment.kind === 'recursive-wildcard') {
+      recursiveWildcardCount += 1
+
+      if (recursiveWildcardCount > 1) {
+        throw new PathSyntaxError(selector, 'Path selectors may contain at most one recursive wildcard segment "**".')
+      }
+    }
+
     index = parsedSegment.nextIndex
 
     while (index < selector.length && selector[index] === '[') {
-      const bracketSegment = parseBracketSegment(selector, index)
+      const bracketSegment = parseBracketSegment(selector, selector, index)
       segments.push(bracketSegment.segment)
       index = bracketSegment.nextIndex
     }
@@ -258,4 +404,67 @@ export const parsePathSelector = (selector: string): ParsedPathSelector => {
     raw: selector,
     segments: Object.freeze(segments),
   })
+}
+
+const isIgnorePathSegment = (value: unknown): value is IgnorePathSegment => {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  const keys = Object.keys(value)
+
+  return keys.length === 1 && keys[0] === 'ignore'
+}
+
+const parseStructuredPathSelector = (selector: StructuredPathSelector): ParsedPathSelector => {
+  if (selector.length === 0) {
+    throw new PathSyntaxError(renderRawSelector(selector), 'Path selectors must not be empty.')
+  }
+
+  const segments = selector.map((segment) => {
+    if (typeof segment === 'string' || typeof segment === 'number') {
+      return typeof segment === 'string'
+        ? createLiteralStructuredPropertySegment(selector, segment)
+        : createLiteralStructuredIndexSegment(selector, segment)
+    }
+
+    if (!isIgnorePathSegment(segment)) {
+      throw new PathSyntaxError(
+        renderRawSelector(selector),
+        `Unsupported structured selector segment ${JSON.stringify(segment)}.`,
+      )
+    }
+
+    if (typeof segment.ignore === 'string') {
+      return createLiteralStructuredIgnorePropertySegment(selector, segment.ignore)
+    }
+
+    if (typeof segment.ignore === 'number') {
+      return createLiteralStructuredIgnoreIndexSegment(selector, segment.ignore)
+    }
+
+    throw new PathSyntaxError(
+      renderRawSelector(selector),
+      `Unsupported structured selector segment ${JSON.stringify(segment)}.`,
+    )
+  })
+
+  return Object.freeze({
+    raw: selector,
+    segments: Object.freeze(segments),
+  })
+}
+
+export const isExactPathSegment = (segment: PathSegment): segment is ExactPathSegment => {
+  return segment.kind === 'property' || segment.kind === 'index'
+}
+
+export const isDynamicPathSegment = (segment: PathSegment): segment is DynamicPathSegment => {
+  return !isExactPathSegment(segment)
+}
+
+export const parsePathSelector = (selector: PathSelector): ParsedPathSelector => {
+  return typeof selector === 'string'
+    ? parseStringPathSelector(selector)
+    : parseStructuredPathSelector(selector)
 }

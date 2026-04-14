@@ -3,11 +3,15 @@ import { createRedactor as createReusableRedactor } from './core/create-redactor
 export type {
   Censor,
   DeepRedactOptions,
+  IgnorePathSegment,
   PathEntry,
   PathRule,
+  PathSelector,
   Redactor,
   RedactorFactory,
   SerialiseOption,
+  StructuredPathSegment,
+  StructuredPathSelector,
 } from './types/public.js'
 
 export const deepRedact = createReusableRedactor

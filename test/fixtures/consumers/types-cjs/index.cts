@@ -4,6 +4,8 @@ const redact = deepRedactPackage.deepRedact({
   keys: ['password'],
   paths: [
     'user.password',
+    ['users', 0, 'email'],
+    ['users', { ignore: 'admin' }, 'email'],
     { path: 'user.token', remove: true },
   ],
 })
