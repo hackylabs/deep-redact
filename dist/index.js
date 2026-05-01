@@ -1,3 +1,81 @@
+//#region src/core/validation/regex-safety.ts
+const maxRegexSourceLength = 256;
+const nestedQuantifierRegexPattern = /\((?:\?:|\?=|\?!|\?<=|\?<!|\?<[^>]+>)?(?:\\.|[^()[\]\\]|\[[^\]]*])*(?:[+*]|\{\d+(?:,\d*)?\})(?:\\.|[^()[\]\\]|\[[^\]]*])*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
+const quantifiedGroupRegexPattern = /\((?:\?:|\?=|\?!|\?<=|\?<!|\?<[^>]+>)?((?:\\.|[^()[\]\\]|\[[^\]]*])*)\)(?:[+*]|\{\d+(?:,\d*)?\})/g;
+const isRegExp = (value) => {
+	return value instanceof RegExp;
+};
+const splitRegexAlternatives = (source) => {
+	const alternatives = [""];
+	let inCharacterClass = false;
+	let groupDepth = 0;
+	let escaped = false;
+	for (const character of source) {
+		if (escaped) {
+			alternatives[alternatives.length - 1] += character;
+			escaped = false;
+			continue;
+		}
+		if (character === "\\") {
+			alternatives[alternatives.length - 1] += character;
+			escaped = true;
+			continue;
+		}
+		if (character === "[") {
+			inCharacterClass = true;
+			alternatives[alternatives.length - 1] += character;
+			continue;
+		}
+		if (character === "]" && inCharacterClass) {
+			inCharacterClass = false;
+			alternatives[alternatives.length - 1] += character;
+			continue;
+		}
+		if (!inCharacterClass) {
+			if (character === "(") {
+				groupDepth++;
+				alternatives[alternatives.length - 1] += character;
+				continue;
+			}
+			if (character === ")") {
+				groupDepth--;
+				alternatives[alternatives.length - 1] += character;
+				continue;
+			}
+			if (character === "|" && groupDepth === 0) {
+				alternatives.push("");
+				continue;
+			}
+		}
+		alternatives[alternatives.length - 1] += character;
+	}
+	return alternatives;
+};
+const hasPrefixOverlappingAlternatives = (alternatives) => {
+	const nonEmptyAlternatives = alternatives.filter((alternative) => alternative.length > 0);
+	return nonEmptyAlternatives.some((alternative, index) => {
+		return nonEmptyAlternatives.some((otherAlternative, otherIndex) => {
+			return index !== otherIndex && otherAlternative.startsWith(alternative);
+		});
+	});
+};
+const hasUnsafeOverlappingAlternation = (source) => {
+	for (const match of source.matchAll(quantifiedGroupRegexPattern)) {
+		const alternatives = splitRegexAlternatives(match[1] ?? "");
+		if (alternatives.length > 1 && hasPrefixOverlappingAlternatives(alternatives)) return true;
+	}
+	return false;
+};
+const lowercaseInitial = (value) => {
+	return `${value.charAt(0).toLowerCase()}${value.slice(1)}`;
+};
+const getUnsupportedRegexMessage = (selector, label) => {
+	if (selector.global || selector.sticky) return `${label} must not use global or sticky flags.`;
+	if ([...selector.source].length > maxRegexSourceLength) return `${label} source must be at most ${maxRegexSourceLength} characters.`;
+	if (nestedQuantifierRegexPattern.test(selector.source)) return `Unsafe ${lowercaseInitial(label)} uses a nested quantified pattern.`;
+	if (hasUnsafeOverlappingAlternation(selector.source)) return `Unsafe ${lowercaseInitial(label)} uses an overlapping alternation pattern.`;
+};
+//#endregion
 //#region src/core/matching/path-parser.ts
 const barePropertyPattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const indexSegmentPattern = /^(0|[1-9]\d*)$/;
@@ -40,6 +118,21 @@ const createIgnoreIndexPathSegment = (value) => {
 		value
 	});
 };
+const cloneRegexMatcher = (matcher) => {
+	return new RegExp(matcher.source, matcher.flags);
+};
+const createRegexPathSegment = (matcher) => {
+	return Object.freeze({
+		kind: "regex",
+		matcher: cloneRegexMatcher(matcher)
+	});
+};
+const createIgnoreRegexPathSegment = (matcher) => {
+	return Object.freeze({
+		kind: "ignore-regex",
+		matcher: cloneRegexMatcher(matcher)
+	});
+};
 const renderRawSelector = (selector) => {
 	return typeof selector === "string" ? selector : JSON.stringify(selector);
 };
@@ -61,6 +154,7 @@ const createExactSegment = (selector, value) => {
 };
 const createLiteralStructuredPropertySegment = (selector, value) => {
 	if (value.length === 0) throw new PathSyntaxError(renderRawSelector(selector), "Path selectors must not contain empty segments.");
+	if (regexLikeSegmentPattern.test(value)) throw new PathSyntaxError(renderRawSelector(selector), `Unsupported regex-like segment "${value}".`);
 	return createPropertyPathSegment(value);
 };
 const createLiteralStructuredIndexSegment = (selector, value) => {
@@ -69,6 +163,7 @@ const createLiteralStructuredIndexSegment = (selector, value) => {
 };
 const createLiteralStructuredIgnorePropertySegment = (selector, value) => {
 	if (value.length === 0) throw new PathSyntaxError(renderRawSelector(selector), "Path selectors must not contain empty segments.");
+	if (regexLikeSegmentPattern.test(value)) throw new PathSyntaxError(renderRawSelector(selector), `Unsupported regex-like segment "${value}".`);
 	return createIgnorePropertyPathSegment(value);
 };
 const createLiteralStructuredIgnoreIndexSegment = (selector, value) => {
@@ -180,10 +275,12 @@ const isIgnorePathSegment = (value) => {
 const parseStructuredPathSelector = (selector) => {
 	if (selector.length === 0) throw new PathSyntaxError(renderRawSelector(selector), "Path selectors must not be empty.");
 	const segments = selector.map((segment) => {
+		if (isRegExp(segment)) return createRegexPathSegment(segment);
 		if (typeof segment === "string" || typeof segment === "number") return typeof segment === "string" ? createLiteralStructuredPropertySegment(selector, segment) : createLiteralStructuredIndexSegment(selector, segment);
 		if (!isIgnorePathSegment(segment)) throw new PathSyntaxError(renderRawSelector(selector), `Unsupported structured selector segment ${JSON.stringify(segment)}.`);
 		if (typeof segment.ignore === "string") return createLiteralStructuredIgnorePropertySegment(selector, segment.ignore);
 		if (typeof segment.ignore === "number") return createLiteralStructuredIgnoreIndexSegment(selector, segment.ignore);
+		if (isRegExp(segment.ignore)) return createIgnoreRegexPathSegment(segment.ignore);
 		throw new PathSyntaxError(renderRawSelector(selector), `Unsupported structured selector segment ${JSON.stringify(segment)}.`);
 	});
 	return Object.freeze({
@@ -222,6 +319,14 @@ const renderDynamicPathSegment = (segment, isRoot) => {
 	if (segment.kind === "recursive-wildcard") return `${isRoot ? "" : "."}**`;
 	if (segment.kind === "ignore-index") return `${isRoot ? "" : "."}{ignore:${segment.value}}`;
 	if (segment.kind === "ignore-property") return `${isRoot ? "" : "."}{ignore:${JSON.stringify(segment.value)}}`;
+	if (segment.kind === "regex") return `${isRoot ? "" : "."}{regex:${JSON.stringify({
+		source: segment.matcher.source,
+		flags: segment.matcher.flags
+	})}}`;
+	if (segment.kind === "ignore-regex") return `${isRoot ? "" : "."}{ignore-regex:${JSON.stringify({
+		source: segment.matcher.source,
+		flags: segment.matcher.flags
+	})}}`;
 	return renderExactPathSegment(segment, isRoot);
 };
 const renderSelectorSignature = (segments) => {
@@ -346,6 +451,9 @@ const hasLookupValue = (table, key) => {
 const matchesRegexKey = (matchers, key) => {
 	return matchers.some((matcher) => matcher.test(key));
 };
+const renderPathSegmentText = (pathSegment) => {
+	return pathSegment.kind === "index" ? String(pathSegment.value) : pathSegment.value;
+};
 const resolveDirectKeyMatch = (plan, key) => {
 	if (hasLookupValue(plan.exactKeyRules.keys, key)) return "exact-key";
 	return matchesRegexKey(plan.regexKeyRules.matchers, key) ? "regex-key" : void 0;
@@ -359,6 +467,8 @@ const matchesSingleSegment = (selectorSegment, pathSegment) => {
 	if (selectorSegment.kind === "recursive-wildcard") return false;
 	if (selectorSegment.kind === "ignore-index") return pathSegment.kind === "index" && pathSegment.value !== selectorSegment.value;
 	if (selectorSegment.kind === "ignore-property") return pathSegment.kind === "property" && pathSegment.value !== selectorSegment.value;
+	if (selectorSegment.kind === "regex") return selectorSegment.matcher.test(renderPathSegmentText(pathSegment));
+	if (selectorSegment.kind === "ignore-regex") return !selectorSegment.matcher.test(renderPathSegmentText(pathSegment));
 	if (selectorSegment.kind === "index") return pathSegment.kind === "index" && pathSegment.value === selectorSegment.value;
 	return pathSegment.kind === "property" && pathSegment.value === selectorSegment.value;
 };
@@ -516,11 +626,24 @@ const pushIssue$1 = (issues, path, message) => {
 		message
 	});
 };
+const validateRegexPathSegments = (segments, path, issues) => {
+	let valid = true;
+	for (const segment of segments) {
+		if (segment.kind !== "regex" && segment.kind !== "ignore-regex") continue;
+		const unsupportedRegexMessage = getUnsupportedRegexMessage(segment.matcher, "Regex path segment");
+		if (unsupportedRegexMessage !== void 0) {
+			pushIssue$1(issues, path, unsupportedRegexMessage);
+			valid = false;
+		}
+	}
+	return valid;
+};
 const validatePathSelectors = (selectorCandidates, issues) => {
 	const seenCanonicalPaths = /* @__PURE__ */ new Map();
 	const seenDynamicSelectors = /* @__PURE__ */ new Map();
 	for (const selectorCandidate of selectorCandidates) try {
 		const parsedPath = parsePathSelector(selectorCandidate.selector);
+		if (!validateRegexPathSegments(parsedPath.segments, selectorCandidate.configPath, issues)) continue;
 		if (parsedPath.segments.some(isDynamicPathSegment)) {
 			const signature = renderSelectorSignature(parsedPath.segments);
 			const previousDefinitionPath = seenDynamicSelectors.get(signature);
@@ -593,60 +716,6 @@ const validateConflictingOptions = (value, path, issues) => {
 	if (value.remove === true && value.retainStructure === true) pushIssue(issues, path, "remove cannot be combined with retainStructure.");
 };
 const regexLikeKeySelectorPattern = /^\/.+\/[A-Za-z]*$/;
-const maxKeyRegexSourceLength = 256;
-const nestedQuantifierKeyRegexPattern = /\((?:\?:|\?=|\?!|\?<=|\?<!|\?<[^>]+>)?(?:\\.|[^()[\]\\]|\[[^\]]*])*(?:[+*]|\{\d+(?:,\d*)?\})(?:\\.|[^()[\]\\]|\[[^\]]*])*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
-const quantifiedGroupKeyRegexPattern = /\((?:\?:|\?=|\?!|\?<=|\?<!|\?<[^>]+>)?((?:\\.|[^()[\]\\]|\[[^\]]*])*)\)(?:[+*]|\{\d+(?:,\d*)?\})/g;
-const isRegExp = (value) => {
-	return value instanceof RegExp;
-};
-const splitRegexAlternatives = (source) => {
-	const alternatives = [""];
-	let inCharacterClass = false;
-	let escaped = false;
-	for (const character of source) {
-		if (escaped) {
-			alternatives[alternatives.length - 1] += character;
-			escaped = false;
-			continue;
-		}
-		if (character === "\\") {
-			alternatives[alternatives.length - 1] += character;
-			escaped = true;
-			continue;
-		}
-		if (character === "[") {
-			inCharacterClass = true;
-			alternatives[alternatives.length - 1] += character;
-			continue;
-		}
-		if (character === "]" && inCharacterClass) {
-			inCharacterClass = false;
-			alternatives[alternatives.length - 1] += character;
-			continue;
-		}
-		if (character === "|" && !inCharacterClass) {
-			alternatives.push("");
-			continue;
-		}
-		alternatives[alternatives.length - 1] += character;
-	}
-	return alternatives;
-};
-const hasPrefixOverlappingAlternatives = (alternatives) => {
-	const nonEmptyAlternatives = alternatives.filter((alternative) => alternative.length > 0);
-	return nonEmptyAlternatives.some((alternative, index) => {
-		return nonEmptyAlternatives.some((otherAlternative, otherIndex) => {
-			return index !== otherIndex && otherAlternative.startsWith(alternative);
-		});
-	});
-};
-const hasUnsafeOverlappingAlternation = (source) => {
-	for (const match of source.matchAll(quantifiedGroupKeyRegexPattern)) {
-		const alternatives = splitRegexAlternatives(match[1] ?? "");
-		if (alternatives.length > 1 && hasPrefixOverlappingAlternatives(alternatives)) return true;
-	}
-	return false;
-};
 const getUnsupportedKeySelectorMessage = (selector) => {
 	if (selector.startsWith("!")) return `Unsupported exclusion key selector "${selector}". Ignore selectors must use structured selector objects and are not supported in this configuration format.`;
 	if (selector.includes("**")) return `Unsupported recursive wildcard key selector "${selector}".`;
@@ -654,10 +723,7 @@ const getUnsupportedKeySelectorMessage = (selector) => {
 	if (regexLikeKeySelectorPattern.test(selector)) return `Unsupported regex-like key selector "${selector}".`;
 };
 const getUnsupportedKeyRegexMessage = (selector) => {
-	if (selector.global || selector.sticky) return "Regex key selectors must not use global or sticky flags.";
-	if (selector.source.length > maxKeyRegexSourceLength) return `Regex key selector source must be at most ${maxKeyRegexSourceLength} characters.`;
-	if (nestedQuantifierKeyRegexPattern.test(selector.source)) return "Unsafe regex key selector uses a nested quantified pattern.";
-	if (hasUnsafeOverlappingAlternation(selector.source)) return "Unsafe regex key selector uses an overlapping alternation pattern.";
+	return getUnsupportedRegexMessage(selector, "Regex key selector");
 };
 const validateKeys = (value, path, issues) => {
 	if (value === void 0) return;

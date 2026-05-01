@@ -66,6 +66,10 @@ const matchesRegexKey = (
   return matchers.some((matcher) => matcher.test(key))
 }
 
+const renderPathSegmentText = (pathSegment: ExactPathSegment): string => {
+  return pathSegment.kind === 'index' ? String(pathSegment.value) : pathSegment.value
+}
+
 const resolveDirectKeyMatch = (
   plan: CompiledRedactorPlan,
   key: string,
@@ -108,6 +112,14 @@ const matchesSingleSegment = (
 
   if (selectorSegment.kind === 'ignore-property') {
     return pathSegment.kind === 'property' && pathSegment.value !== selectorSegment.value
+  }
+
+  if (selectorSegment.kind === 'regex') {
+    return selectorSegment.matcher.test(renderPathSegmentText(pathSegment))
+  }
+
+  if (selectorSegment.kind === 'ignore-regex') {
+    return !selectorSegment.matcher.test(renderPathSegmentText(pathSegment))
   }
 
   if (selectorSegment.kind === 'index') {

@@ -110,6 +110,41 @@ describe('compiled exact-selector rule plan', () => {
     ])
   })
 
+  it('compiles regex path segments into cloned dynamic rule matchers', () => {
+    const tenantPattern = /^tenant-\d+$/i
+    const internalPattern = /^internal/
+    const plan = compileRedactorPlan({
+      paths: [
+        ['users', tenantPattern, 'token'],
+        ['users', { ignore: internalPattern }, 'token'],
+      ],
+    })
+
+    expect(Object.keys(plan.exactPathRules)).toEqual([])
+    expect(plan.dynamicPathRules.map((rule) => rule.signature)).toEqual([
+      'users.{regex:{"source":"^tenant-\\\\d+$","flags":"i"}}.token',
+      'users.{ignore-regex:{"source":"^internal","flags":""}}.token',
+    ])
+    const directRegexSegment = plan.dynamicPathRules[0]?.segments[1]
+    const ignoreRegexSegment = plan.dynamicPathRules[1]?.segments[1]
+
+    expect(directRegexSegment).toMatchObject({
+      kind: 'regex',
+      matcher: expect.any(RegExp),
+    })
+    expect(ignoreRegexSegment).toMatchObject({
+      kind: 'ignore-regex',
+      matcher: expect.any(RegExp),
+    })
+
+    if (directRegexSegment?.kind !== 'regex' || ignoreRegexSegment?.kind !== 'ignore-regex') {
+      throw new Error('Expected compiled regex path segments.')
+    }
+
+    expect(directRegexSegment.matcher).not.toBe(tenantPattern)
+    expect(ignoreRegexSegment.matcher).not.toBe(internalPattern)
+  })
+
   it('rejects duplicate dynamic selectors before compilation proceeds', () => {
     const report = validateConfig({
       paths: [
@@ -122,6 +157,21 @@ describe('compiled exact-selector rule plan', () => {
     expect(report.issues).toContainEqual(expect.objectContaining({
       path: 'options.paths[1]',
       message: expect.stringMatching(/duplicate dynamic selector "users\.\*\.email"/i),
+    }))
+  })
+
+  it('rejects duplicate regex dynamic selectors before compilation proceeds', () => {
+    const report = validateConfig({
+      paths: [
+        ['users', /^tenant-\d+$/i, 'token'],
+        ['users', /^tenant-\d+$/i, 'token'],
+      ],
+    })
+
+    expect(report.valid).toBe(false)
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.paths[1]',
+      message: expect.stringMatching(/duplicate dynamic selector/i),
     }))
   })
 

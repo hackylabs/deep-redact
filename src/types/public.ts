@@ -7,6 +7,7 @@ export type {
   PathEntry,
   PathRule,
   PathSelector,
+  RegexPathSegment,
   StructuredPathSegment,
   StructuredPathSelector,
 } from './paths.js'

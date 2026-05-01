@@ -5,9 +5,12 @@ import {
   type IgnorePathSegment,
   type KeySelector,
   type PathEntry,
+  type RegexPathSegment,
   type PathSelector,
   type PathRule,
   type Redactor,
+  type StructuredPathSegment,
+  type StructuredPathSelector,
 } from '@hackylabs/deep-redact'
 
 const passwordRule: PathRule = {
@@ -19,7 +22,9 @@ const paths: PathEntry[] = [
   'user.token',
   passwordRule,
   ['users', 0, 'email'],
+  ['tenants', /^tenant-\d+$/, 'token'],
   ['users', { ignore: 'admin' }, 'email'],
+  ['users', { ignore: /^internal/ }, 'email'],
   {
     path: 'user.profile.secret',
     remove: true,
@@ -29,6 +34,9 @@ const paths: PathEntry[] = [
 const selector: PathSelector = ['users', { ignore: 'admin' }, 'email']
 const ignoredSegment: IgnorePathSegment = { ignore: 'admin' }
 const keySelector: KeySelector = /token$/i
+const regexPathSegment: RegexPathSegment = /^tenant-\d+$/
+const structuredSegment: StructuredPathSegment = /^tenant-\d+$/
+const structuredSelector: StructuredPathSelector = ['tenants', /^tenant-\d+$/, 'token']
 
 const options: DeepRedactOptions = {
   keys: ['password', /token$/i],
@@ -57,5 +65,8 @@ void aliasResult
 void selector
 void ignoredSegment
 void keySelector
+void regexPathSegment
+void structuredSegment
+void structuredSelector
 void invalidLegacyOption
 void invalidLegacyKeys

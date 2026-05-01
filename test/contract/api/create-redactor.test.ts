@@ -60,8 +60,8 @@ describe('Reusable redactor factory contract', () => {
     ['unsupported recursive wildcard key selector', { keys: ['**'] }, /unsupported recursive wildcard key selector/i],
     ['unsupported exclusion key selector', { keys: ['!password'] }, /unsupported exclusion key selector/i],
     ['unsupported regex-like key selector', { keys: ['/^password$/'] }, /unsupported regex-like key selector/i],
-    ['unsupported global regex key selector', { keys: [/password/g] }, /regex key selectors must not use global or sticky flags/i],
-    ['unsupported sticky regex key selector', { keys: [/password/y] }, /regex key selectors must not use global or sticky flags/i],
+    ['unsupported global regex key selector', { keys: [/password/g] }, /regex key selector must not use global or sticky flags/i],
+    ['unsupported sticky regex key selector', { keys: [/password/y] }, /regex key selector must not use global or sticky flags/i],
     ['unsafe nested-quantifier regex key selector', { keys: [/^(a+)+$/] }, /unsafe regex key selector/i],
     ['unsafe overlapping-alternation regex key selector', { keys: [/^(a|aa)+$/] }, /unsafe regex key selector/i],
     [
@@ -78,9 +78,31 @@ describe('Reusable redactor factory contract', () => {
     ['partial wildcard path', { paths: ['users.foo*bar.password'] }, /unsupported wildcard syntax/i],
     ['multiple recursive wildcards', { paths: ['users.**.profile.**.password'] }, /at most one recursive wildcard/i],
     ['unsupported string exclusion syntax', { paths: ['users.!admin.password'] }, /unsupported exclusion syntax/i],
+    ['unsupported structured regex-like string segment', { paths: [['users', '/^team-/i', 'token']] }, /unsupported regex-like segment/i],
     ['unsupported structured matcher object', { paths: [['users', { match: 'password' }]] }, /unsupported structured selector segment/i],
     ['negative structured numeric segment', { paths: [['users', -1, 'password']] }, /structured numeric segments must be non-negative integers/i],
     ['negative structured ignore index', { paths: [['users', { ignore: -1 }, 'password']] }, /structured ignore indexes must be non-negative integers/i],
+    ['unsupported global regex path segment', { paths: [['users', /^admin$/g, 'token']] }, /regex path segment must not use global or sticky flags/i],
+    ['unsupported sticky regex ignore segment', { paths: [['users', { ignore: /^internal/y }, 'token']] }, /regex path segment must not use global or sticky flags/i],
+    ['unsafe nested-quantifier regex path segment', { paths: [['users', /^(a+)+$/, 'token']] }, /unsafe regex path segment/i],
+    ['unsafe overlapping-alternation regex path segment', { paths: [['users', /^(a|aa)+$/, 'token']] }, /unsafe regex path segment/i],
+    [
+      'overlong regex path segment',
+      { paths: [['users', new RegExp('a'.repeat(257)), 'token']] },
+      /regex path segment source must be at most 256 characters/i,
+    ],
+    ['unsafe nested-quantifier regex ignore segment', { paths: [['users', { ignore: /^(a+)+$/ }, 'token']] }, /unsafe regex path segment/i],
+    ['unsafe overlapping-alternation regex ignore segment', { paths: [['users', { ignore: /^(a|aa)+$/ }, 'token']] }, /unsafe regex path segment/i],
+    [
+      'overlong regex ignore segment',
+      { paths: [['users', { ignore: new RegExp('a'.repeat(257)) }, 'token']] },
+      /regex path segment source must be at most 256 characters/i,
+    ],
+    [
+      'overlong regex path segment with supplementary-plane character (257 code points)',
+      { paths: [['users', new RegExp('a'.repeat(256) + '😀'), 'token']] },
+      /regex path segment source must be at most 256 characters/i,
+    ],
   ])('fails fast for %s', (_label, options, expectedMessage) => {
     expect(() => deepRedact(options as never)).toThrowError(expectedMessage)
   })
@@ -133,6 +155,12 @@ describe('Reusable redactor factory contract', () => {
   it('accepts non-stateful RegExp key selectors during initialisation', () => {
     expect(() => deepRedact({
       keys: [/password$/i],
+    })).not.toThrow()
+  })
+
+  it('accepts a regex path segment source of exactly 256 Unicode code points including supplementary characters', () => {
+    expect(() => deepRedact({
+      paths: [['users', new RegExp('a'.repeat(255) + '😀'), 'token']],
     })).not.toThrow()
   })
 
@@ -335,6 +363,15 @@ describe('Reusable redactor factory contract', () => {
     })).toThrowError(/duplicate dynamic selector "users\.\*\.email"/i)
   })
 
+  it('rejects duplicate regex dynamic selectors during initialisation', () => {
+    expect(() => deepRedact({
+      paths: [
+        ['users', /^tenant-\d+$/i, 'token'],
+        ['users', /^tenant-\d+$/i, 'token'],
+      ],
+    })).toThrowError(/duplicate dynamic selector/i)
+  })
+
   it('redacts one-level wildcard matches without touching deeper non-matching branches', () => {
     const redact = deepRedact({
       paths: ['users.*.email'],
@@ -437,6 +474,77 @@ describe('Reusable redactor factory contract', () => {
     })
   })
 
+  it('redacts direct regex path-segment matches while preserving non-matching siblings', () => {
+    const redact = deepRedact({
+      paths: [
+        ['tenants', /^tenant-\d+$/, 'token'],
+      ],
+    })
+
+    expect(redact({
+      tenants: {
+        'tenant-100': { token: 'matching-token', safe: 'keep-matching' },
+        'team-alpha': { token: 'team-token', safe: 'keep-team' },
+      },
+      safe: 'root-visible',
+    })).toEqual({
+      tenants: {
+        'tenant-100': { token: '[REDACTED]', safe: 'keep-matching' },
+        'team-alpha': { token: 'team-token', safe: 'keep-team' },
+      },
+      safe: 'root-visible',
+    })
+  })
+
+  it('matches regex path segments against array indexes and numeric-looking object keys as text', () => {
+    const redact = deepRedact({
+      paths: [
+        ['orders', /^\d+$/, 'cardNumber'],
+        ['orderLookup', /^\d+$/, 'cardNumber'],
+      ],
+    })
+
+    expect(redact({
+      orders: [
+        { cardNumber: '4111111111111111', safe: true },
+        { cardNumber: '5555555555554444', safe: false },
+      ],
+      orderLookup: {
+        0: { cardNumber: 'lookup-zero', safe: 'keep-zero' },
+        summary: { cardNumber: 'summary-card', safe: 'keep-summary' },
+      },
+    })).toEqual({
+      orders: [
+        { cardNumber: '[REDACTED]', safe: true },
+        { cardNumber: '[REDACTED]', safe: false },
+      ],
+      orderLookup: {
+        0: { cardNumber: '[REDACTED]', safe: 'keep-zero' },
+        summary: { cardNumber: 'summary-card', safe: 'keep-summary' },
+      },
+    })
+  })
+
+  it('supports regex ignore selectors without redacting excluded matching branches', () => {
+    const redact = deepRedact({
+      paths: [
+        ['users', { ignore: /^internal/ }, 'token'],
+      ],
+    })
+
+    expect(redact({
+      users: {
+        internalService: { token: 'internal-token', safe: 'keep-internal' },
+        alice: { token: 'alice-token', safe: 'keep-alice' },
+      },
+    })).toEqual({
+      users: {
+        internalService: { token: 'internal-token', safe: 'keep-internal' },
+        alice: { token: '[REDACTED]', safe: 'keep-alice' },
+      },
+    })
+  })
+
   it('gives exact-path rules precedence over exact-key rules on the same leaf', () => {
     const redact = deepRedact({
       censor: '[KEY]',
@@ -510,6 +618,33 @@ describe('Reusable redactor factory contract', () => {
     })
   })
 
+  it('gives exact-path rules precedence over regex path-segment matches on the same leaf', () => {
+    const redact = deepRedact({
+      paths: [
+        {
+          path: 'users.admin.token',
+          censor: '[EXACT]',
+        },
+        {
+          path: ['users', /^(admin|alice)$/, 'token'],
+          censor: '[REGEX-PATH]',
+        },
+      ],
+    })
+
+    expect(redact({
+      users: {
+        admin: { token: 'admin-token' },
+        alice: { token: 'alice-token' },
+      },
+    })).toEqual({
+      users: {
+        admin: { token: '[EXACT]' },
+        alice: { token: '[REGEX-PATH]' },
+      },
+    })
+  })
+
   it('gives dynamic path rules precedence over regex-key matches on the same leaf', () => {
     const redact = deepRedact({
       censor: '[KEY]',
@@ -533,6 +668,102 @@ describe('Reusable redactor factory contract', () => {
         alice: { password: '[PATH]', safe: 'keep-alice' },
       },
     })
+  })
+
+  it('gives regex path-segment rules precedence over regex-key matches on the same leaf', () => {
+    const redact = deepRedact({
+      censor: '[KEY]',
+      keys: [/token$/i],
+      paths: [
+        {
+          path: ['users', /^alice$/, 'accessToken'],
+          censor: '[REGEX-PATH]',
+        },
+      ],
+    })
+
+    expect(redact({
+      users: {
+        alice: { accessToken: 'alice-token' },
+        bob: { accessToken: 'bob-token' },
+      },
+    })).toEqual({
+      users: {
+        alice: { accessToken: '[REGEX-PATH]' },
+        bob: { accessToken: '[KEY]' },
+      },
+    })
+  })
+
+  it('lets a more specific regex path rule outrank an inherited retained parent path policy', () => {
+    const redact = deepRedact({
+      paths: [
+        {
+          path: 'accounts.*',
+          censor: '[PARENT]',
+          retainStructure: true,
+        },
+        {
+          path: ['accounts', /^tenant-\d+$/, 'token'],
+          censor: '[CHILD]',
+        },
+      ],
+    })
+
+    expect(redact({
+      accounts: {
+        'tenant-100': { token: 'tenant-token', safe: 'tenant-safe' },
+        public: { token: 'public-token', safe: 'public-safe' },
+      },
+    })).toEqual({
+      accounts: {
+        'tenant-100': { token: '[CHILD]', safe: '[PARENT]' },
+        public: { token: '[PARENT]', safe: '[PARENT]' },
+      },
+    })
+  })
+
+  it('does not mutate caller-owned non-stateful RegExp path selectors across repeated redaction', () => {
+    const tenantPattern = /^tenant-\d+$/i
+    const internalPattern = /^internal/
+    tenantPattern.lastIndex = 7
+    internalPattern.lastIndex = 5
+    const redact = deepRedact({
+      paths: [
+        ['tenants', tenantPattern, 'token'],
+        ['users', { ignore: internalPattern }, 'token'],
+      ],
+    })
+    const payload = {
+      tenants: {
+        'tenant-100': { token: 'tenant-token' },
+      },
+      users: {
+        internalService: { token: 'internal-token' },
+        alice: { token: 'alice-token' },
+      },
+    }
+
+    expect(redact(payload)).toEqual({
+      tenants: {
+        'tenant-100': { token: '[REDACTED]' },
+      },
+      users: {
+        internalService: { token: 'internal-token' },
+        alice: { token: '[REDACTED]' },
+      },
+    })
+    expect(redact(payload)).toEqual({
+      tenants: {
+        'tenant-100': { token: '[REDACTED]' },
+      },
+      users: {
+        internalService: { token: 'internal-token' },
+        alice: { token: '[REDACTED]' },
+      },
+    })
+    expect(tenantPattern.lastIndex).toBe(7)
+    expect(internalPattern.lastIndex).toBe(5)
   })
 
   it('preserves non-targeted siblings while applying exact paths and exact keys in one pass', () => {

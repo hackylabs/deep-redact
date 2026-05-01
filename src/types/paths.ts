@@ -1,10 +1,11 @@
 export type Censor = string | ((value: unknown) => unknown)
+export type RegexPathSegment = RegExp
 
 export interface IgnorePathSegment {
-  readonly ignore: string | number
+  readonly ignore: string | number | RegexPathSegment
 }
 
-export type StructuredPathSegment = string | number | IgnorePathSegment
+export type StructuredPathSegment = string | number | RegexPathSegment | IgnorePathSegment
 export type StructuredPathSelector = readonly StructuredPathSegment[]
 export type PathSelector = string | StructuredPathSelector
 

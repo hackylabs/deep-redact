@@ -60,6 +60,20 @@ const renderDynamicPathSegment = (segment: PathSegment, isRoot: boolean): string
     return `${isRoot ? '' : '.'}{ignore:${JSON.stringify(segment.value)}}`
   }
 
+  if (segment.kind === 'regex') {
+    return `${isRoot ? '' : '.'}{regex:${JSON.stringify({
+      source: segment.matcher.source,
+      flags: segment.matcher.flags,
+    })}}`
+  }
+
+  if (segment.kind === 'ignore-regex') {
+    return `${isRoot ? '' : '.'}{ignore-regex:${JSON.stringify({
+      source: segment.matcher.source,
+      flags: segment.matcher.flags,
+    })}}`
+  }
+
   return renderExactPathSegment(segment, isRoot)
 }
 

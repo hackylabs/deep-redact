@@ -24,6 +24,15 @@ describe('exact path selector parsing and normalisation', () => {
     )
   })
 
+  it('renders deterministic dynamic selector signatures for regex path segments', () => {
+    expect(renderSelectorSignature(parsePathSelector(['users', /^tenant-\d+$/i, 'token']).segments)).toBe(
+      'users.{regex:{"source":"^tenant-\\\\d+$","flags":"i"}}.token',
+    )
+    expect(renderSelectorSignature(parsePathSelector(['users', { ignore: /^internal/ }, 'token']).segments)).toBe(
+      'users.{ignore-regex:{"source":"^internal","flags":""}}.token',
+    )
+  })
+
   it('parses exact structured selectors so they canonicalise like equivalent string selectors', () => {
     expect(normalisePathSelector(['users', 0, 'email']).canonicalPath).toBe('users.0.email')
   })
@@ -45,6 +54,7 @@ describe('exact path selector parsing and normalisation', () => {
     ['fractional structured numeric segment', ['users', 1.5, 'email'], /structured numeric segments must be non-negative integers/i],
     ['negative structured ignore index', ['users', { ignore: -1 }, 'email'], /structured ignore indexes must be non-negative integers/i],
     ['structured invalid matcher object', ['users', { match: 'email' }], /unsupported structured selector segment/i],
+    ['structured regex-like string segment', ['users', '/^team-/i', 'token'], /unsupported regex-like segment/i],
   ])('rejects %s', (_label, selector, expectedMessage) => {
     expect(() => parsePathSelector(selector as never)).toThrowError(expectedMessage)
     expect(() => parsePathSelector(selector as never)).toThrowError(PathSyntaxError)

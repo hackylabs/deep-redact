@@ -1,4 +1,5 @@
 import type { IgnorePathSegment, PathSelector, StructuredPathSelector } from '../../types/paths.js'
+import { isRegExp } from '../validation/regex-safety.js'
 
 const barePropertyPattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 const indexSegmentPattern = /^(0|[1-9]\d*)$/
@@ -32,12 +33,24 @@ export interface IgnoreIndexPathSegment {
   readonly value: number
 }
 
+export interface ParsedRegexSegment {
+  readonly kind: 'regex'
+  readonly matcher: RegExp
+}
+
+export interface ParsedIgnoreRegexSegment {
+  readonly kind: 'ignore-regex'
+  readonly matcher: RegExp
+}
+
 export type ExactPathSegment = PropertyPathSegment | IndexPathSegment
 export type DynamicPathSegment =
   | WildcardPathSegment
   | RecursiveWildcardPathSegment
   | IgnorePropertyPathSegment
   | IgnoreIndexPathSegment
+  | ParsedRegexSegment
+  | ParsedIgnoreRegexSegment
 export type PathSegment = ExactPathSegment | DynamicPathSegment
 
 export interface ParsedPathSelector {
@@ -92,6 +105,24 @@ export const createIgnoreIndexPathSegment = (value: number): IgnoreIndexPathSegm
   return Object.freeze({
     kind: 'ignore-index',
     value,
+  })
+}
+
+const cloneRegexMatcher = (matcher: RegExp): RegExp => {
+  return new RegExp(matcher.source, matcher.flags)
+}
+
+export const createRegexPathSegment = (matcher: RegExp): ParsedRegexSegment => {
+  return Object.freeze({
+    kind: 'regex',
+    matcher: cloneRegexMatcher(matcher),
+  })
+}
+
+export const createIgnoreRegexPathSegment = (matcher: RegExp): ParsedIgnoreRegexSegment => {
+  return Object.freeze({
+    kind: 'ignore-regex',
+    matcher: cloneRegexMatcher(matcher),
   })
 }
 
@@ -159,6 +190,10 @@ const createLiteralStructuredPropertySegment = (
     throw new PathSyntaxError(renderRawSelector(selector), 'Path selectors must not contain empty segments.')
   }
 
+  if (regexLikeSegmentPattern.test(value)) {
+    throw new PathSyntaxError(renderRawSelector(selector), `Unsupported regex-like segment "${value}".`)
+  }
+
   return createPropertyPathSegment(value)
 }
 
@@ -182,6 +217,10 @@ const createLiteralStructuredIgnorePropertySegment = (
 ): IgnorePropertyPathSegment => {
   if (value.length === 0) {
     throw new PathSyntaxError(renderRawSelector(selector), 'Path selectors must not contain empty segments.')
+  }
+
+  if (regexLikeSegmentPattern.test(value)) {
+    throw new PathSyntaxError(renderRawSelector(selector), `Unsupported regex-like segment "${value}".`)
   }
 
   return createIgnorePropertyPathSegment(value)
@@ -422,6 +461,10 @@ const parseStructuredPathSelector = (selector: StructuredPathSelector): ParsedPa
   }
 
   const segments = selector.map((segment) => {
+    if (isRegExp(segment)) {
+      return createRegexPathSegment(segment)
+    }
+
     if (typeof segment === 'string' || typeof segment === 'number') {
       return typeof segment === 'string'
         ? createLiteralStructuredPropertySegment(selector, segment)
@@ -441,6 +484,10 @@ const parseStructuredPathSelector = (selector: StructuredPathSelector): ParsedPa
 
     if (typeof segment.ignore === 'number') {
       return createLiteralStructuredIgnoreIndexSegment(selector, segment.ignore)
+    }
+
+    if (isRegExp(segment.ignore)) {
+      return createIgnoreRegexPathSegment(segment.ignore)
     }
 
     throw new PathSyntaxError(

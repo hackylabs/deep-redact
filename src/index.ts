@@ -8,6 +8,7 @@ export type {
   PathEntry,
   PathRule,
   PathSelector,
+  RegexPathSegment,
   Redactor,
   RedactorFactory,
   SerialiseOption,

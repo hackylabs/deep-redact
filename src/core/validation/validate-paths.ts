@@ -1,6 +1,7 @@
 import type { PathSelector } from '../../types/paths.js'
-import { isDynamicPathSegment, parsePathSelector } from '../matching/path-parser.js'
+import { isDynamicPathSegment, parsePathSelector, type PathSegment } from '../matching/path-parser.js'
 import { normaliseParsedPath, renderSelectorSignature } from '../matching/path-normaliser.js'
+import { getUnsupportedRegexMessage } from './regex-safety.js'
 import type { ValidationIssue } from './validation-report.js'
 
 export interface PathSelectorCandidate {
@@ -10,6 +11,29 @@ export interface PathSelectorCandidate {
 
 const pushIssue = (issues: ValidationIssue[], path: string, message: string): void => {
   issues.push({ path, message })
+}
+
+const validateRegexPathSegments = (
+  segments: readonly PathSegment[],
+  path: string,
+  issues: ValidationIssue[],
+): boolean => {
+  let valid = true
+
+  for (const segment of segments) {
+    if (segment.kind !== 'regex' && segment.kind !== 'ignore-regex') {
+      continue
+    }
+
+    const unsupportedRegexMessage = getUnsupportedRegexMessage(segment.matcher, 'Regex path segment')
+
+    if (unsupportedRegexMessage !== undefined) {
+      pushIssue(issues, path, unsupportedRegexMessage)
+      valid = false
+    }
+  }
+
+  return valid
 }
 
 export const validatePathSelectors = (
@@ -22,6 +46,10 @@ export const validatePathSelectors = (
   for (const selectorCandidate of selectorCandidates) {
     try {
       const parsedPath = parsePathSelector(selectorCandidate.selector)
+
+      if (!validateRegexPathSegments(parsedPath.segments, selectorCandidate.configPath, issues)) {
+        continue
+      }
 
       if (parsedPath.segments.some(isDynamicPathSegment)) {
         const signature = renderSelectorSignature(parsedPath.segments)
