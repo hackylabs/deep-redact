@@ -1,6 +1,6 @@
 {
   "name": "@hackylabs/deep-redact",
-  "version": "3.0.5",
+  "version": "4.0.0",
   "description": "The function-first v4 foundation for Deep Redact.",
   "private": false,
   "license": "MIT",
