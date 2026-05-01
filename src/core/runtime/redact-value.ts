@@ -18,7 +18,8 @@ import {
 } from '../replacement/apply-redaction.js'
 
 type TraversableContainer = Record<string, unknown> | unknown[]
-type PolicySource = 'dynamic-path' | 'exact-path' | 'key'
+type PolicySource = 'dynamic-path' | 'exact-key' | 'exact-path' | 'regex-key'
+type DirectKeyMatch = Extract<PolicySource, 'exact-key' | 'regex-key'>
 
 interface ActivePolicyMatch {
   readonly policy: CompiledRedactionPolicy
@@ -27,7 +28,7 @@ interface ActivePolicyMatch {
 
 interface TraversalContext {
   readonly canonicalPath?: string
-  readonly directKeyMatch: boolean
+  readonly directKeyMatch?: DirectKeyMatch
   readonly inheritedPolicy?: ActivePolicyMatch
   readonly pathSegments: readonly ExactPathSegment[]
 }
@@ -56,6 +57,24 @@ const hasLookupValue = <T>(
   key: string,
 ): boolean => {
   return Object.hasOwn(table, key)
+}
+
+const matchesRegexKey = (
+  matchers: readonly RegExp[],
+  key: string,
+): boolean => {
+  return matchers.some((matcher) => matcher.test(key))
+}
+
+const resolveDirectKeyMatch = (
+  plan: CompiledRedactorPlan,
+  key: string,
+): DirectKeyMatch | undefined => {
+  if (hasLookupValue(plan.exactKeyRules.keys, key)) {
+    return 'exact-key'
+  }
+
+  return matchesRegexKey(plan.regexKeyRules.matchers, key) ? 'regex-key' : undefined
 }
 
 const resolveExactPathRule = (
@@ -139,7 +158,7 @@ const selectActivePolicy = (
   plan: CompiledRedactorPlan,
   exactPathRule: CompiledExactPathRule | undefined,
   dynamicPathRule: CompiledDynamicPathRule | undefined,
-  directKeyMatch: boolean,
+  directKeyMatch: DirectKeyMatch | undefined,
   inheritedPolicy: ActivePolicyMatch | undefined,
 ): ActivePolicyMatch | undefined => {
   if (exactPathRule !== undefined) {
@@ -160,10 +179,17 @@ const selectActivePolicy = (
     return inheritedPolicy
   }
 
-  if (directKeyMatch) {
+  if (directKeyMatch === 'exact-key') {
     return {
       policy: plan.exactKeyRules.policy,
-      source: 'key',
+      source: 'exact-key',
+    }
+  }
+
+  if (directKeyMatch === 'regex-key') {
+    return {
+      policy: plan.regexKeyRules.policy,
+      source: 'regex-key',
     }
   }
 
@@ -191,7 +217,6 @@ const transformArray = (
     const itemPath = appendCanonicalPathSegment(canonicalPath, pathSegment)
     const itemResult = transformNode(item, plan, {
       canonicalPath: itemPath,
-      directKeyMatch: false,
       inheritedPolicy,
       pathSegments: Object.freeze([...pathSegments, pathSegment]),
     })
@@ -261,7 +286,7 @@ const transformObject = (
     const propertyPath = appendCanonicalPathSegment(canonicalPath, pathSegment)
     const propertyResult = transformNode(propertyValue, plan, {
       canonicalPath: propertyPath,
-      directKeyMatch: hasLookupValue(plan.exactKeyRules.keys, key),
+      directKeyMatch: resolveDirectKeyMatch(plan, key),
       inheritedPolicy,
       pathSegments: Object.freeze([...pathSegments, pathSegment]),
     })
@@ -335,7 +360,6 @@ export const redactValue = (
 ): unknown => {
   const result = transformNode(value, plan, {
     canonicalPath: undefined,
-    directKeyMatch: false,
     inheritedPolicy: undefined,
     pathSegments: Object.freeze([]) as readonly ExactPathSegment[],
   })

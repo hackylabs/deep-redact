@@ -114,6 +114,77 @@ interface EffectiveRuleDefaults {
 }
 
 const regexLikeKeySelectorPattern = /^\/.+\/[A-Za-z]*$/
+const maxKeyRegexSourceLength = 256
+const nestedQuantifierKeyRegexPattern = /\((?:\?:|\?=|\?!|\?<=|\?<!|\?<[^>]+>)?(?:\\.|[^()[\]\\]|\[[^\]]*])*(?:[+*]|\{\d+(?:,\d*)?\})(?:\\.|[^()[\]\\]|\[[^\]]*])*\)(?:[+*]|\{\d+(?:,\d*)?\})/
+const quantifiedGroupKeyRegexPattern = /\((?:\?:|\?=|\?!|\?<=|\?<!|\?<[^>]+>)?((?:\\.|[^()[\]\\]|\[[^\]]*])*)\)(?:[+*]|\{\d+(?:,\d*)?\})/g
+
+const isRegExp = (value: unknown): value is RegExp => {
+  return value instanceof RegExp
+}
+
+const splitRegexAlternatives = (source: string): readonly string[] => {
+  const alternatives: string[] = ['']
+  let inCharacterClass = false
+  let escaped = false
+
+  for (const character of source) {
+    if (escaped) {
+      alternatives[alternatives.length - 1] += character
+      escaped = false
+      continue
+    }
+
+    if (character === '\\') {
+      alternatives[alternatives.length - 1] += character
+      escaped = true
+      continue
+    }
+
+    if (character === '[') {
+      inCharacterClass = true
+      alternatives[alternatives.length - 1] += character
+      continue
+    }
+
+    if (character === ']' && inCharacterClass) {
+      inCharacterClass = false
+      alternatives[alternatives.length - 1] += character
+      continue
+    }
+
+    if (character === '|' && !inCharacterClass) {
+      alternatives.push('')
+      continue
+    }
+
+    alternatives[alternatives.length - 1] += character
+  }
+
+  return alternatives
+}
+
+const hasPrefixOverlappingAlternatives = (alternatives: readonly string[]): boolean => {
+  const nonEmptyAlternatives = alternatives.filter((alternative) => alternative.length > 0)
+
+  return nonEmptyAlternatives.some((alternative, index) => {
+    return nonEmptyAlternatives.some((otherAlternative, otherIndex) => {
+      return index !== otherIndex
+        && otherAlternative.startsWith(alternative)
+    })
+  })
+}
+
+const hasUnsafeOverlappingAlternation = (source: string): boolean => {
+  for (const match of source.matchAll(quantifiedGroupKeyRegexPattern)) {
+    const alternatives = splitRegexAlternatives(match[1] ?? '')
+
+    if (alternatives.length > 1 && hasPrefixOverlappingAlternatives(alternatives)) {
+      return true
+    }
+  }
+
+  return false
+}
 
 const getUnsupportedKeySelectorMessage = (selector: string): string | undefined => {
   if (selector.startsWith('!')) {
@@ -130,6 +201,26 @@ const getUnsupportedKeySelectorMessage = (selector: string): string | undefined 
 
   if (regexLikeKeySelectorPattern.test(selector)) {
     return `Unsupported regex-like key selector "${selector}".`
+  }
+
+  return undefined
+}
+
+const getUnsupportedKeyRegexMessage = (selector: RegExp): string | undefined => {
+  if (selector.global || selector.sticky) {
+    return 'Regex key selectors must not use global or sticky flags.'
+  }
+
+  if (selector.source.length > maxKeyRegexSourceLength) {
+    return `Regex key selector source must be at most ${maxKeyRegexSourceLength} characters.`
+  }
+
+  if (nestedQuantifierKeyRegexPattern.test(selector.source)) {
+    return 'Unsafe regex key selector uses a nested quantified pattern.'
+  }
+
+  if (hasUnsafeOverlappingAlternation(selector.source)) {
+    return 'Unsafe regex key selector uses an overlapping alternation pattern.'
   }
 
   return undefined
@@ -152,8 +243,18 @@ const validateKeys = (
   value.forEach((entry, index) => {
     const entryPath = `${path}[${index}]`
 
+    if (isRegExp(entry)) {
+      const unsupportedRegexMessage = getUnsupportedKeyRegexMessage(entry)
+
+      if (unsupportedRegexMessage !== undefined) {
+        pushIssue(issues, entryPath, unsupportedRegexMessage)
+      }
+
+      return
+    }
+
     if (typeof entry !== 'string') {
-      pushIssue(issues, entryPath, 'key selectors must be strings.')
+      pushIssue(issues, entryPath, 'key selectors must be strings or RegExp instances.')
       return
     }
 

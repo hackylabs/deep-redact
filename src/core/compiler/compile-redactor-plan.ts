@@ -1,6 +1,7 @@
 import type {
   Censor,
   DeepRedactOptions,
+  KeySelector,
   PathEntry,
   PathRule,
   PathSelector,
@@ -37,11 +38,17 @@ export interface CompiledExactKeyRules {
   readonly policy: CompiledRedactionPolicy
 }
 
+export interface CompiledRegexKeyRules {
+  readonly matchers: readonly RegExp[]
+  readonly policy: CompiledRedactionPolicy
+}
+
 export interface CompiledRedactorPlan {
   readonly defaults: CompiledRedactionPolicy
   readonly dynamicPathRules: readonly CompiledDynamicPathRule[]
   readonly exactPathRules: Readonly<Record<string, CompiledExactPathRule>>
   readonly exactKeyRules: CompiledExactKeyRules
+  readonly regexKeyRules: CompiledRegexKeyRules
   readonly serialise?: SerialiseOption
 }
 
@@ -133,17 +140,37 @@ const compilePathRules = (
 }
 
 const compileExactKeyRules = (
-  keys: readonly string[],
+  keys: readonly KeySelector[],
   defaults: CompiledRedactionPolicy,
 ): CompiledExactKeyRules => {
   const exactKeys = createLookupTable<true>()
 
   for (const key of keys) {
-    exactKeys[key] = true
+    if (typeof key === 'string') {
+      exactKeys[key] = true
+    }
   }
 
   return Object.freeze({
     keys: Object.freeze(exactKeys),
+    policy: defaults,
+  })
+}
+
+const compileRegexKeyRules = (
+  keys: readonly KeySelector[],
+  defaults: CompiledRedactionPolicy,
+): CompiledRegexKeyRules => {
+  const matchers: RegExp[] = []
+
+  for (const key of keys) {
+    if (key instanceof RegExp) {
+      matchers.push(new RegExp(key.source, key.flags))
+    }
+  }
+
+  return Object.freeze({
+    matchers: Object.freeze(matchers),
     policy: defaults,
   })
 }
@@ -157,6 +184,7 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
     dynamicPathRules: compiledPathRules.dynamicPathRules,
     exactKeyRules: compileExactKeyRules(options.keys ?? [], defaults),
     exactPathRules: compiledPathRules.exactPathRules,
+    regexKeyRules: compileRegexKeyRules(options.keys ?? [], defaults),
     serialise: options.serialise,
   })
 }

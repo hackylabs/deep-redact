@@ -1,7 +1,9 @@
 import deepRedactPackage = require('@hackylabs/deep-redact')
 
+const keySelector: deepRedactPackage.KeySelector = /token$/i
+
 const redact = deepRedactPackage.deepRedact({
-  keys: ['password'],
+  keys: ['password', /token$/i],
   paths: [
     'user.password',
     ['users', 0, 'email'],
@@ -23,3 +25,4 @@ deepRedactPackage.deepRedact({ blacklistedKeys: ['password'] })
 
 void structuredResult
 void serialisedResult
+void keySelector

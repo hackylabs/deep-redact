@@ -36,6 +36,46 @@ describe('compiled exact-selector rule plan', () => {
     })
   })
 
+  it('separates exact and regex key selectors during compilation', () => {
+    const tokenPattern = /token$/i
+    const plan = compileRedactorPlan({
+      censor: '[GLOBAL]',
+      keys: ['password', tokenPattern],
+    })
+
+    expect(Object.getPrototypeOf(plan.exactKeyRules.keys)).toBeNull()
+    expect(plan.exactKeyRules.keys).toEqual({
+      password: true,
+    })
+    expect(plan.regexKeyRules.matchers).toHaveLength(1)
+    expect(plan.regexKeyRules.matchers[0]).not.toBe(tokenPattern)
+    expect(plan.regexKeyRules.matchers[0]?.source).toBe('token$')
+    expect(plan.regexKeyRules.matchers[0]?.flags).toBe('i')
+    expect(Object.isFrozen(plan.regexKeyRules.matchers)).toBe(true)
+    expect(plan.regexKeyRules.policy).toBe(plan.exactKeyRules.policy)
+    expect(plan.regexKeyRules.policy).toEqual({
+      censor: '[GLOBAL]',
+      remove: false,
+      retainStructure: false,
+    })
+  })
+
+  it('uses cloned non-stateful regex key matchers deterministically', () => {
+    const tokenPattern = /token$/i
+    const plan = compileRedactorPlan({
+      keys: [tokenPattern],
+    })
+    const matcher = plan.regexKeyRules.matchers[0]
+
+    tokenPattern.lastIndex = 99
+
+    expect(matcher?.test('accessToken')).toBe(true)
+    expect(matcher?.test('safe')).toBe(false)
+    expect(matcher?.test('refreshToken')).toBe(true)
+    expect(matcher?.lastIndex).toBe(0)
+    expect(tokenPattern.lastIndex).toBe(99)
+  })
+
   it('rejects duplicate canonical exact-path selectors before compilation proceeds', () => {
     const report = validateConfig({
       paths: [

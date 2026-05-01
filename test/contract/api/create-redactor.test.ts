@@ -55,11 +55,20 @@ describe('Reusable redactor factory contract', () => {
   it.each([
     ['null config', null, /options must be an object/i],
     ['invalid keys container', { keys: 'password' }, /keys must be an array/i],
-    ['invalid key selector', { keys: [/password/] }, /key selectors must be strings/i],
+    ['invalid key selector', { keys: [42] }, /key selectors must be strings or RegExp instances/i],
     ['unsupported wildcard key selector', { keys: ['*'] }, /unsupported wildcard key selector/i],
     ['unsupported recursive wildcard key selector', { keys: ['**'] }, /unsupported recursive wildcard key selector/i],
     ['unsupported exclusion key selector', { keys: ['!password'] }, /unsupported exclusion key selector/i],
     ['unsupported regex-like key selector', { keys: ['/^password$/'] }, /unsupported regex-like key selector/i],
+    ['unsupported global regex key selector', { keys: [/password/g] }, /regex key selectors must not use global or sticky flags/i],
+    ['unsupported sticky regex key selector', { keys: [/password/y] }, /regex key selectors must not use global or sticky flags/i],
+    ['unsafe nested-quantifier regex key selector', { keys: [/^(a+)+$/] }, /unsafe regex key selector/i],
+    ['unsafe overlapping-alternation regex key selector', { keys: [/^(a|aa)+$/] }, /unsafe regex key selector/i],
+    [
+      'overlong regex key selector',
+      { keys: [new RegExp('a'.repeat(257))] },
+      /regex key selector source must be at most 256 characters/i,
+    ],
     ['unsupported root option', { serialize: true }, /unsupported option "serialize"/i],
     ['unsupported legacy key option', { blacklistedKeys: ['password'] }, /unsupported option "blacklistedKeys"/i],
     ['invalid serialise value', { serialise: 'json' }, /serialise must be a boolean or function/i],
@@ -121,6 +130,12 @@ describe('Reusable redactor factory contract', () => {
     expect(() => deepRedact(options)).toThrowError(expectedMessage)
   })
 
+  it('accepts non-stateful RegExp key selectors during initialisation', () => {
+    expect(() => deepRedact({
+      keys: [/password$/i],
+    })).not.toThrow()
+  })
+
   it('redacts exact-key matches anywhere in nested payloads through keys', () => {
     const redact = deepRedact({
       keys: ['password'],
@@ -149,6 +164,83 @@ describe('Reusable redactor factory contract', () => {
       },
     })
     expect(payload.user.profile.password).toBe('leaf-secret')
+  })
+
+  it('redacts regex-key matches anywhere in nested payloads while preserving siblings', () => {
+    const redact = deepRedact({
+      keys: [/password$/i],
+    })
+    const payload = {
+      password: 'root-secret',
+      passcode: 'visible-code',
+      username: 'ben',
+      user: {
+        dbPassword: 'db-secret',
+        passcode: 'nested-code',
+        profile: {
+          temporaryPassword: 'temporary-secret',
+          safe: 'still-visible',
+        },
+      },
+    }
+
+    expect(redact(payload)).toEqual({
+      password: '[REDACTED]',
+      passcode: 'visible-code',
+      username: 'ben',
+      user: {
+        dbPassword: '[REDACTED]',
+        passcode: 'nested-code',
+        profile: {
+          temporaryPassword: '[REDACTED]',
+          safe: 'still-visible',
+        },
+      },
+    })
+    expect(payload.user.profile.temporaryPassword).toBe('temporary-secret')
+  })
+
+  it('applies regex-key selectors to object elements inside arrays without matching array indexes', () => {
+    const redact = deepRedact({
+      keys: [/^0$/],
+    })
+    const payload = [
+      'index-zero-secret',
+      {
+        0: 'property-zero-secret',
+        safe: 'still-visible',
+      },
+    ]
+
+    expect(redact(payload)).toEqual([
+      'index-zero-secret',
+      {
+        0: '[REDACTED]',
+        safe: 'still-visible',
+      },
+    ])
+  })
+
+  it('does not mutate caller-owned non-stateful RegExp key selectors across repeated redaction', () => {
+    const passwordKey = /password$/i
+    passwordKey.lastIndex = 7
+    const redact = deepRedact({
+      keys: [passwordKey],
+    })
+    const payload = {
+      accountPassword: 'secret',
+      safe: 'visible',
+    }
+
+    expect(redact(payload)).toEqual({
+      accountPassword: '[REDACTED]',
+      safe: 'visible',
+    })
+    expect(redact(payload)).toEqual({
+      accountPassword: '[REDACTED]',
+      safe: 'visible',
+    })
+    expect(passwordKey.lastIndex).toBe(7)
   })
 
   it('canonicalises exact array-index paths across dot and bracket syntax', () => {
@@ -368,6 +460,29 @@ describe('Reusable redactor factory contract', () => {
     })
   })
 
+  it('gives exact-path rules precedence over regex-key matches on the same leaf', () => {
+    const redact = deepRedact({
+      censor: '[KEY]',
+      keys: [/password/i],
+      paths: [
+        {
+          path: 'user.passwordHash',
+          censor: '[PATH]',
+        },
+      ],
+    })
+
+    expect(redact({
+      user: {
+        passwordHash: 'secret-hash',
+      },
+    })).toEqual({
+      user: {
+        passwordHash: '[PATH]',
+      },
+    })
+  })
+
   it('gives exact-path rules precedence over wildcard matches on the same leaf', () => {
     const redact = deepRedact({
       paths: [
@@ -391,6 +506,31 @@ describe('Reusable redactor factory contract', () => {
       users: {
         admin: { email: '[EXACT]' },
         alice: { email: '[WILDCARD]' },
+      },
+    })
+  })
+
+  it('gives dynamic path rules precedence over regex-key matches on the same leaf', () => {
+    const redact = deepRedact({
+      censor: '[KEY]',
+      keys: [/password/i],
+      paths: [
+        {
+          path: ['users', { ignore: 'admin' }, 'password'],
+          censor: '[PATH]',
+        },
+      ],
+    })
+
+    expect(redact({
+      users: {
+        admin: { password: 'admin-secret', safe: 'keep-admin' },
+        alice: { password: 'alice-secret', safe: 'keep-alice' },
+      },
+    })).toEqual({
+      users: {
+        admin: { password: '[KEY]', safe: 'keep-admin' },
+        alice: { password: '[PATH]', safe: 'keep-alice' },
       },
     })
   })

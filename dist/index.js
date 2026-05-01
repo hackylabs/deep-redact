@@ -292,9 +292,17 @@ const compilePathRules = (pathEntries, defaults) => {
 };
 const compileExactKeyRules = (keys, defaults) => {
 	const exactKeys = createLookupTable();
-	for (const key of keys) exactKeys[key] = true;
+	for (const key of keys) if (typeof key === "string") exactKeys[key] = true;
 	return Object.freeze({
 		keys: Object.freeze(exactKeys),
+		policy: defaults
+	});
+};
+const compileRegexKeyRules = (keys, defaults) => {
+	const matchers = [];
+	for (const key of keys) if (key instanceof RegExp) matchers.push(new RegExp(key.source, key.flags));
+	return Object.freeze({
+		matchers: Object.freeze(matchers),
 		policy: defaults
 	});
 };
@@ -306,6 +314,7 @@ const compileRedactorPlan = (options = {}) => {
 		dynamicPathRules: compiledPathRules.dynamicPathRules,
 		exactKeyRules: compileExactKeyRules(options.keys ?? [], defaults),
 		exactPathRules: compiledPathRules.exactPathRules,
+		regexKeyRules: compileRegexKeyRules(options.keys ?? [], defaults),
 		serialise: options.serialise
 	});
 };
@@ -333,6 +342,13 @@ const isTraversableContainer = (value) => {
 };
 const hasLookupValue = (table, key) => {
 	return Object.hasOwn(table, key);
+};
+const matchesRegexKey = (matchers, key) => {
+	return matchers.some((matcher) => matcher.test(key));
+};
+const resolveDirectKeyMatch = (plan, key) => {
+	if (hasLookupValue(plan.exactKeyRules.keys, key)) return "exact-key";
+	return matchesRegexKey(plan.regexKeyRules.matchers, key) ? "regex-key" : void 0;
 };
 const resolveExactPathRule = (plan, canonicalPath) => {
 	if (canonicalPath === void 0) return;
@@ -369,9 +385,13 @@ const selectActivePolicy = (plan, exactPathRule, dynamicPathRule, directKeyMatch
 		source: "dynamic-path"
 	};
 	if (inheritedPolicy?.source === "exact-path" || inheritedPolicy?.source === "dynamic-path") return inheritedPolicy;
-	if (directKeyMatch) return {
+	if (directKeyMatch === "exact-key") return {
 		policy: plan.exactKeyRules.policy,
-		source: "key"
+		source: "exact-key"
+	};
+	if (directKeyMatch === "regex-key") return {
+		policy: plan.regexKeyRules.policy,
+		source: "regex-key"
 	};
 	return inheritedPolicy;
 };
@@ -385,7 +405,6 @@ const transformArray = (value, plan, inheritedPolicy, canonicalPath, pathSegment
 		const pathSegment = createIndexPathSegment(index);
 		const itemResult = transformNode(item, plan, {
 			canonicalPath: appendCanonicalPathSegment(canonicalPath, pathSegment),
-			directKeyMatch: false,
 			inheritedPolicy,
 			pathSegments: Object.freeze([...pathSegments, pathSegment])
 		});
@@ -426,7 +445,7 @@ const transformObject = (value, plan, inheritedPolicy, canonicalPath, pathSegmen
 		const pathSegment = createPropertyPathSegment(key);
 		const propertyResult = transformNode(propertyValue, plan, {
 			canonicalPath: appendCanonicalPathSegment(canonicalPath, pathSegment),
-			directKeyMatch: hasLookupValue(plan.exactKeyRules.keys, key),
+			directKeyMatch: resolveDirectKeyMatch(plan, key),
 			inheritedPolicy,
 			pathSegments: Object.freeze([...pathSegments, pathSegment])
 		});
@@ -462,7 +481,6 @@ const transformNode = (value, plan, context) => {
 const redactValue = (value, plan) => {
 	const result = transformNode(value, plan, {
 		canonicalPath: void 0,
-		directKeyMatch: false,
 		inheritedPolicy: void 0,
 		pathSegments: Object.freeze([])
 	});
@@ -575,11 +593,71 @@ const validateConflictingOptions = (value, path, issues) => {
 	if (value.remove === true && value.retainStructure === true) pushIssue(issues, path, "remove cannot be combined with retainStructure.");
 };
 const regexLikeKeySelectorPattern = /^\/.+\/[A-Za-z]*$/;
+const maxKeyRegexSourceLength = 256;
+const nestedQuantifierKeyRegexPattern = /\((?:\?:|\?=|\?!|\?<=|\?<!|\?<[^>]+>)?(?:\\.|[^()[\]\\]|\[[^\]]*])*(?:[+*]|\{\d+(?:,\d*)?\})(?:\\.|[^()[\]\\]|\[[^\]]*])*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
+const quantifiedGroupKeyRegexPattern = /\((?:\?:|\?=|\?!|\?<=|\?<!|\?<[^>]+>)?((?:\\.|[^()[\]\\]|\[[^\]]*])*)\)(?:[+*]|\{\d+(?:,\d*)?\})/g;
+const isRegExp = (value) => {
+	return value instanceof RegExp;
+};
+const splitRegexAlternatives = (source) => {
+	const alternatives = [""];
+	let inCharacterClass = false;
+	let escaped = false;
+	for (const character of source) {
+		if (escaped) {
+			alternatives[alternatives.length - 1] += character;
+			escaped = false;
+			continue;
+		}
+		if (character === "\\") {
+			alternatives[alternatives.length - 1] += character;
+			escaped = true;
+			continue;
+		}
+		if (character === "[") {
+			inCharacterClass = true;
+			alternatives[alternatives.length - 1] += character;
+			continue;
+		}
+		if (character === "]" && inCharacterClass) {
+			inCharacterClass = false;
+			alternatives[alternatives.length - 1] += character;
+			continue;
+		}
+		if (character === "|" && !inCharacterClass) {
+			alternatives.push("");
+			continue;
+		}
+		alternatives[alternatives.length - 1] += character;
+	}
+	return alternatives;
+};
+const hasPrefixOverlappingAlternatives = (alternatives) => {
+	const nonEmptyAlternatives = alternatives.filter((alternative) => alternative.length > 0);
+	return nonEmptyAlternatives.some((alternative, index) => {
+		return nonEmptyAlternatives.some((otherAlternative, otherIndex) => {
+			return index !== otherIndex && otherAlternative.startsWith(alternative);
+		});
+	});
+};
+const hasUnsafeOverlappingAlternation = (source) => {
+	for (const match of source.matchAll(quantifiedGroupKeyRegexPattern)) {
+		const alternatives = splitRegexAlternatives(match[1] ?? "");
+		if (alternatives.length > 1 && hasPrefixOverlappingAlternatives(alternatives)) return true;
+	}
+	return false;
+};
 const getUnsupportedKeySelectorMessage = (selector) => {
 	if (selector.startsWith("!")) return `Unsupported exclusion key selector "${selector}". Ignore selectors must use structured selector objects and are not supported in this configuration format.`;
 	if (selector.includes("**")) return `Unsupported recursive wildcard key selector "${selector}".`;
 	if (selector.includes("*")) return `Unsupported wildcard key selector "${selector}".`;
 	if (regexLikeKeySelectorPattern.test(selector)) return `Unsupported regex-like key selector "${selector}".`;
+};
+const getUnsupportedKeyRegexMessage = (selector) => {
+	if (selector.global || selector.sticky) return "Regex key selectors must not use global or sticky flags.";
+	if (selector.source.length > maxKeyRegexSourceLength) return `Regex key selector source must be at most ${maxKeyRegexSourceLength} characters.`;
+	if (nestedQuantifierKeyRegexPattern.test(selector.source)) return "Unsafe regex key selector uses a nested quantified pattern.";
+	if (hasUnsafeOverlappingAlternation(selector.source)) return "Unsafe regex key selector uses an overlapping alternation pattern.";
 };
 const validateKeys = (value, path, issues) => {
 	if (value === void 0) return;
@@ -589,8 +667,13 @@ const validateKeys = (value, path, issues) => {
 	}
 	value.forEach((entry, index) => {
 		const entryPath = `${path}[${index}]`;
+		if (isRegExp(entry)) {
+			const unsupportedRegexMessage = getUnsupportedKeyRegexMessage(entry);
+			if (unsupportedRegexMessage !== void 0) pushIssue(issues, entryPath, unsupportedRegexMessage);
+			return;
+		}
 		if (typeof entry !== "string") {
-			pushIssue(issues, entryPath, "key selectors must be strings.");
+			pushIssue(issues, entryPath, "key selectors must be strings or RegExp instances.");
 			return;
 		}
 		if (entry.length === 0) {

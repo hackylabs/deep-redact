@@ -3,6 +3,7 @@ import {
   deepRedact,
   type DeepRedactOptions,
   type IgnorePathSegment,
+  type KeySelector,
   type PathEntry,
   type PathSelector,
   type PathRule,
@@ -27,9 +28,10 @@ const paths: PathEntry[] = [
 
 const selector: PathSelector = ['users', { ignore: 'admin' }, 'email']
 const ignoredSegment: IgnorePathSegment = { ignore: 'admin' }
+const keySelector: KeySelector = /token$/i
 
 const options: DeepRedactOptions = {
-  keys: ['password'],
+  keys: ['password', /token$/i],
   paths,
   serialise: (value) => JSON.stringify(value) ?? 'null',
 }
@@ -54,5 +56,6 @@ void structuredResult
 void aliasResult
 void selector
 void ignoredSegment
+void keySelector
 void invalidLegacyOption
 void invalidLegacyKeys

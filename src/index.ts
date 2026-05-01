@@ -4,6 +4,7 @@ export type {
   Censor,
   DeepRedactOptions,
   IgnorePathSegment,
+  KeySelector,
   PathEntry,
   PathRule,
   PathSelector,
