@@ -1,9 +1,11 @@
 import type {
   Censor,
   DeepRedactOptions,
+  FunctionCensorContext,
   KeySelector,
   PathEntry,
   PathRule,
+  PathSegments,
   PathSelector,
   SerialiseOption,
 } from '../../types/public.js'
@@ -15,21 +17,26 @@ import {
 } from '../matching/path-parser.js'
 import { normaliseParsedPath, renderSelectorSignature } from '../matching/path-normaliser.js'
 
+export type { FunctionCensorContext }
+
 export interface CompiledRedactionPolicy {
   readonly censor?: Censor
   readonly remove: boolean
   readonly retainStructure: boolean
+  readonly replaceStringByLength: boolean
 }
 
 export interface CompiledExactPathRule {
   readonly canonicalPath: string
   readonly policy: CompiledRedactionPolicy
+  readonly rulePath: PathSegments
   readonly segments: readonly ExactPathSegment[]
 }
 
 export interface CompiledDynamicPathRule {
   readonly signature: string
   readonly policy: CompiledRedactionPolicy
+  readonly rulePath: PathSegments
   readonly segments: readonly PathSegment[]
 }
 
@@ -56,21 +63,39 @@ const createLookupTable = <T>(): Record<string, T> => {
   return Object.create(null) as Record<string, T>
 }
 
+const toPublicPathSegment = (segment: PathSegment): PathSegments[number] => {
+  if (segment.kind === 'property') return segment.value
+  if (segment.kind === 'index') return segment.value
+  if (segment.kind === 'wildcard') return Object.freeze({ any: true as const })
+  if (segment.kind === 'recursive-wildcard') return Object.freeze({ anyDepth: true as const })
+  if (segment.kind === 'ignore-property') return Object.freeze({ ignore: segment.value })
+  if (segment.kind === 'ignore-index') return Object.freeze({ ignore: segment.value })
+  if (segment.kind === 'regex') return new RegExp(segment.matcher.source, segment.matcher.flags)
+  // ignore-regex
+  return Object.freeze({ ignore: new RegExp(segment.matcher.source, segment.matcher.flags) })
+}
+
+const compileRulePath = (segments: readonly PathSegment[]): PathSegments => {
+  return Object.freeze(segments.map(toPublicPathSegment))
+}
+
 const createDefaultPolicy = (options: DeepRedactOptions): CompiledRedactionPolicy => {
   return Object.freeze({
     censor: options.censor,
     remove: options.remove ?? false,
+    replaceStringByLength: options.replaceStringByLength ?? false,
     retainStructure: options.retainStructure ?? false,
   })
 }
 
 const mergePolicy = (
   defaults: CompiledRedactionPolicy,
-  overrides: Partial<Pick<PathRule, 'censor' | 'remove' | 'retainStructure'>>,
+  overrides: Partial<Pick<PathRule, 'censor' | 'remove' | 'retainStructure' | 'replaceStringByLength'>>,
 ): CompiledRedactionPolicy => {
   return Object.freeze({
     censor: overrides.censor ?? defaults.censor,
     remove: overrides.remove ?? defaults.remove,
+    replaceStringByLength: overrides.replaceStringByLength ?? defaults.replaceStringByLength,
     retainStructure: overrides.retainStructure ?? defaults.retainStructure,
   })
 }
@@ -94,11 +119,13 @@ const compilePathRule = (
   const rule = toPathRule(pathEntry)
   const parsedPath = parsePathSelector(rule.path)
   const policy = mergePolicy(defaults, isPathRule(pathEntry) ? pathEntry : {})
+  const rulePath = compileRulePath(parsedPath.segments)
 
   if (parsedPath.segments.some(isDynamicPathSegment)) {
     return Object.freeze({
       signature: renderSelectorSignature(parsedPath.segments),
       policy,
+      rulePath,
       segments: parsedPath.segments,
     })
   }
@@ -108,6 +135,7 @@ const compilePathRule = (
   return Object.freeze({
     canonicalPath: normalisedPath.canonicalPath,
     policy,
+    rulePath,
     segments: normalisedPath.segments,
   })
 }

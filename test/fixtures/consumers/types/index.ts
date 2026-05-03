@@ -1,21 +1,65 @@
 import {
   createRedactor,
   deepRedact,
+  type Censor,
   type DeepRedactOptions,
+  type FunctionCensorContext,
   type IgnorePathSegment,
   type KeySelector,
   type PathEntry,
-  type RegexPathSegment,
-  type PathSelector,
+  type PathSegments,
   type PathRule,
+  type PathSelector,
+  type PublicRecursiveWildcardSegment,
+  type PublicWildcardSegment,
   type Redactor,
+  type RegexPathSegment,
   type StructuredPathSegment,
   type StructuredPathSelector,
 } from '@hackylabs/deep-redact'
 
+// One-argument function censor remains assignable to Censor
+const oneArgCensor: Censor = (value: unknown) => String(value)
+
+// Two-argument function censor using FunctionCensorContext
+const twoArgCensor: Censor = (value: unknown, ctx: FunctionCensorContext) => {
+  const path: PathSegments = ctx.matchedPath
+  const rule: PathSegments = ctx.rulePath
+  const root: unknown = ctx.rootInput
+  const terminal: string | number | undefined = ctx.terminalKey
+
+  void path
+  void rule
+  void root
+  void terminal
+
+  return `[REDACTED:${String(value)}]`
+}
+
+// PathSegments can hold all public segment types
+const wildcardSegment: PublicWildcardSegment = { any: true }
+const recursiveWildcardSegment: PublicRecursiveWildcardSegment = { anyDepth: true }
+const exampleSegments: PathSegments = [
+  'users',
+  0,
+  /^tenant-\d+$/,
+  { ignore: 'admin' },
+  wildcardSegment,
+  recursiveWildcardSegment,
+]
+
+// Readonly properties on FunctionCensorContext
+const exampleCtx: FunctionCensorContext = {
+  matchedPath: ['users', 0, 'email'],
+  rulePath: ['users', wildcardSegment, 'email'],
+  rootInput: { users: [] },
+  terminalKey: 'email',
+}
+
 const passwordRule: PathRule = {
   path: 'user.password',
   censor: '[REDACTED]',
+  replaceStringByLength: false,
 }
 
 const paths: PathEntry[] = [
@@ -29,6 +73,11 @@ const paths: PathEntry[] = [
     path: 'user.profile.secret',
     remove: true,
   },
+  {
+    path: 'user.name',
+    censor: '*',
+    replaceStringByLength: true,
+  },
 ]
 
 const selector: PathSelector = ['users', { ignore: 'admin' }, 'email']
@@ -39,9 +88,11 @@ const structuredSegment: StructuredPathSegment = /^tenant-\d+$/
 const structuredSelector: StructuredPathSelector = ['tenants', /^tenant-\d+$/, 'token']
 
 const options: DeepRedactOptions = {
+  censor: twoArgCensor,
   keys: ['password', /token$/i],
   paths,
   serialise: (value) => JSON.stringify(value) ?? 'null',
+  replaceStringByLength: false,
 }
 
 const redact: Redactor = deepRedact(options)
@@ -60,6 +111,8 @@ const invalidLegacyKeys: DeepRedactOptions = { blacklistedKeys: ['password'] }
 // @ts-expect-error the reusable redactor accepts payload input only after initialisation
 redact({ ok: true }, options)
 
+void oneArgCensor
+void twoArgCensor
 void structuredResult
 void aliasResult
 void selector
@@ -68,5 +121,7 @@ void keySelector
 void regexPathSegment
 void structuredSegment
 void structuredSelector
+void exampleSegments
+void exampleCtx
 void invalidLegacyOption
 void invalidLegacyKeys

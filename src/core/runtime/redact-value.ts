@@ -3,7 +3,9 @@ import type {
   CompiledExactPathRule,
   CompiledRedactionPolicy,
   CompiledRedactorPlan,
+  FunctionCensorContext,
 } from '../compiler/compile-redactor-plan.js'
+import type { PathSegments } from '../../types/paths.js'
 import {
   createIndexPathSegment,
   createPropertyPathSegment,
@@ -19,18 +21,24 @@ import {
 
 type TraversableContainer = Record<string, unknown> | unknown[]
 type PolicySource = 'dynamic-path' | 'exact-key' | 'exact-path' | 'regex-key'
-type DirectKeyMatch = Extract<PolicySource, 'exact-key' | 'regex-key'>
 
 interface ActivePolicyMatch {
   readonly policy: CompiledRedactionPolicy
   readonly source: PolicySource
+  readonly rulePath: PathSegments
 }
 
 interface TraversalContext {
   readonly canonicalPath?: string
-  readonly directKeyMatch?: DirectKeyMatch
+  readonly directKeyMatch?: DirectKeyMatchResult
   readonly inheritedPolicy?: ActivePolicyMatch
   readonly pathSegments: readonly ExactPathSegment[]
+  readonly rootInput: unknown
+}
+
+interface DirectKeyMatchResult {
+  readonly source: 'exact-key' | 'regex-key'
+  readonly rulePath: PathSegments
 }
 
 interface TraversalResult {
@@ -59,11 +67,14 @@ const hasLookupValue = <T>(
   return Object.hasOwn(table, key)
 }
 
-const matchesRegexKey = (
+const findMatchingRegexKey = (
   matchers: readonly RegExp[],
   key: string,
-): boolean => {
-  return matchers.some((matcher) => matcher.test(key))
+): RegExp | undefined => {
+  return matchers.find((matcher) => {
+    matcher.lastIndex = 0
+    return matcher.test(key)
+  })
 }
 
 const renderPathSegmentText = (pathSegment: ExactPathSegment): string => {
@@ -73,12 +84,24 @@ const renderPathSegmentText = (pathSegment: ExactPathSegment): string => {
 const resolveDirectKeyMatch = (
   plan: CompiledRedactorPlan,
   key: string,
-): DirectKeyMatch | undefined => {
+): DirectKeyMatchResult | undefined => {
   if (hasLookupValue(plan.exactKeyRules.keys, key)) {
-    return 'exact-key'
+    return {
+      source: 'exact-key',
+      rulePath: Object.freeze([key]),
+    }
   }
 
-  return matchesRegexKey(plan.regexKeyRules.matchers, key) ? 'regex-key' : undefined
+  const matchingRegex = findMatchingRegexKey(plan.regexKeyRules.matchers, key)
+
+  if (matchingRegex !== undefined) {
+    return {
+      source: 'regex-key',
+      rulePath: Object.freeze([matchingRegex]),
+    }
+  }
+
+  return undefined
 }
 
 const resolveExactPathRule = (
@@ -170,13 +193,14 @@ const selectActivePolicy = (
   plan: CompiledRedactorPlan,
   exactPathRule: CompiledExactPathRule | undefined,
   dynamicPathRule: CompiledDynamicPathRule | undefined,
-  directKeyMatch: DirectKeyMatch | undefined,
+  directKeyMatch: DirectKeyMatchResult | undefined,
   inheritedPolicy: ActivePolicyMatch | undefined,
 ): ActivePolicyMatch | undefined => {
   if (exactPathRule !== undefined) {
     return {
       policy: exactPathRule.policy,
       source: 'exact-path',
+      rulePath: exactPathRule.rulePath,
     }
   }
 
@@ -184,6 +208,7 @@ const selectActivePolicy = (
     return {
       policy: dynamicPathRule.policy,
       source: 'dynamic-path',
+      rulePath: dynamicPathRule.rulePath,
     }
   }
 
@@ -191,21 +216,39 @@ const selectActivePolicy = (
     return inheritedPolicy
   }
 
-  if (directKeyMatch === 'exact-key') {
+  if (directKeyMatch?.source === 'exact-key') {
     return {
       policy: plan.exactKeyRules.policy,
       source: 'exact-key',
+      rulePath: directKeyMatch.rulePath,
     }
   }
 
-  if (directKeyMatch === 'regex-key') {
+  if (directKeyMatch?.source === 'regex-key') {
     return {
       policy: plan.regexKeyRules.policy,
       source: 'regex-key',
+      rulePath: directKeyMatch.rulePath,
     }
   }
 
   return inheritedPolicy
+}
+
+const buildFunctionCensorContext = (
+  pathSegments: readonly ExactPathSegment[],
+  rulePath: PathSegments,
+  rootInput: unknown,
+): FunctionCensorContext => {
+  const matchedPath = Object.freeze(pathSegments.map((seg) => seg.value)) as PathSegments
+  const rulePathCopy = Object.freeze([...rulePath]) as PathSegments
+  const terminalKey = matchedPath.length > 0
+    ? (matchedPath[matchedPath.length - 1] as string | number)
+    : undefined
+
+  return terminalKey !== undefined
+    ? { matchedPath, rulePath: rulePathCopy, rootInput, terminalKey }
+    : { matchedPath, rulePath: rulePathCopy, rootInput }
 }
 
 const transformArray = (
@@ -214,6 +257,7 @@ const transformArray = (
   inheritedPolicy: ActivePolicyMatch | undefined,
   canonicalPath: string | undefined,
   pathSegments: readonly ExactPathSegment[],
+  rootInput: unknown,
 ): TraversalResult => {
   let transformedValue: unknown[] | undefined
   const removedIndexes: number[] = []
@@ -231,6 +275,7 @@ const transformArray = (
       canonicalPath: itemPath,
       inheritedPolicy,
       pathSegments: Object.freeze([...pathSegments, pathSegment]),
+      rootInput,
     })
 
     if (isRemovedValue(itemResult.value)) {
@@ -289,6 +334,7 @@ const transformObject = (
   inheritedPolicy: ActivePolicyMatch | undefined,
   canonicalPath: string | undefined,
   pathSegments: readonly ExactPathSegment[],
+  rootInput: unknown,
 ): TraversalResult => {
   let changed = false
   let transformedValue: Record<string, unknown> | undefined
@@ -301,6 +347,7 @@ const transformObject = (
       directKeyMatch: resolveDirectKeyMatch(plan, key),
       inheritedPolicy,
       pathSegments: Object.freeze([...pathSegments, pathSegment]),
+      rootInput,
     })
 
     if (isRemovedValue(propertyResult.value)) {
@@ -345,9 +392,15 @@ const transformNode = (
   )
 
   if (activePolicy !== undefined && (!activePolicy.policy.retainStructure || !isTraversableContainer(value))) {
+    const fnContext = buildFunctionCensorContext(
+      context.pathSegments,
+      activePolicy.rulePath,
+      context.rootInput,
+    )
+
     return {
       changed: true,
-      value: applyRedaction(value, activePolicy.policy),
+      value: applyRedaction(value, activePolicy.policy, fnContext),
     }
   }
 
@@ -360,8 +413,8 @@ const transformNode = (
 
   const inheritedPolicy = activePolicy
   const result = Array.isArray(value)
-    ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments)
-    : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments)
+    ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput)
+    : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput)
 
   return result
 }
@@ -374,6 +427,7 @@ export const redactValue = (
     canonicalPath: undefined,
     inheritedPolicy: undefined,
     pathSegments: Object.freeze([]) as readonly ExactPathSegment[],
+    rootInput: value,
   })
 
   return isRemovedValue(result.value) ? undefined : result.value

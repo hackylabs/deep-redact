@@ -344,10 +344,24 @@ const normaliseParsedPath = (parsedPath) => {
 const createLookupTable = () => {
 	return Object.create(null);
 };
+const toPublicPathSegment = (segment) => {
+	if (segment.kind === "property") return segment.value;
+	if (segment.kind === "index") return segment.value;
+	if (segment.kind === "wildcard") return Object.freeze({ any: true });
+	if (segment.kind === "recursive-wildcard") return Object.freeze({ anyDepth: true });
+	if (segment.kind === "ignore-property") return Object.freeze({ ignore: segment.value });
+	if (segment.kind === "ignore-index") return Object.freeze({ ignore: segment.value });
+	if (segment.kind === "regex") return new RegExp(segment.matcher.source, segment.matcher.flags);
+	return Object.freeze({ ignore: new RegExp(segment.matcher.source, segment.matcher.flags) });
+};
+const compileRulePath = (segments) => {
+	return Object.freeze(segments.map(toPublicPathSegment));
+};
 const createDefaultPolicy = (options) => {
 	return Object.freeze({
 		censor: options.censor,
 		remove: options.remove ?? false,
+		replaceStringByLength: options.replaceStringByLength ?? false,
 		retainStructure: options.retainStructure ?? false
 	});
 };
@@ -355,6 +369,7 @@ const mergePolicy = (defaults, overrides) => {
 	return Object.freeze({
 		censor: overrides.censor ?? defaults.censor,
 		remove: overrides.remove ?? defaults.remove,
+		replaceStringByLength: overrides.replaceStringByLength ?? defaults.replaceStringByLength,
 		retainStructure: overrides.retainStructure ?? defaults.retainStructure
 	});
 };
@@ -367,15 +382,18 @@ const toPathRule = (pathEntry) => {
 const compilePathRule = (pathEntry, defaults) => {
 	const parsedPath = parsePathSelector(toPathRule(pathEntry).path);
 	const policy = mergePolicy(defaults, isPathRule(pathEntry) ? pathEntry : {});
+	const rulePath = compileRulePath(parsedPath.segments);
 	if (parsedPath.segments.some(isDynamicPathSegment)) return Object.freeze({
 		signature: renderSelectorSignature(parsedPath.segments),
 		policy,
+		rulePath,
 		segments: parsedPath.segments
 	});
 	const normalisedPath = normaliseParsedPath(parsedPath);
 	return Object.freeze({
 		canonicalPath: normalisedPath.canonicalPath,
 		policy,
+		rulePath,
 		segments: normalisedPath.segments
 	});
 };
@@ -430,10 +448,20 @@ const removedValue = Symbol("deep-redact.removed");
 const isRemovedValue = (value) => {
 	return value === removedValue;
 };
-const applyRedaction = (value, policy) => {
+const buildSameLengthReplacement = (token, targetLength) => {
+	if (targetLength === 0) return "";
+	const tokenLength = token.length;
+	if (tokenLength === 0) return "";
+	const quotient = Math.floor(targetLength / tokenLength);
+	const remainder = targetLength % tokenLength;
+	return token.repeat(quotient) + token.slice(0, remainder);
+};
+const applyRedaction = (value, policy, context) => {
 	if (policy.remove) return removedValue;
-	if (typeof policy.censor === "function") return policy.censor(value);
-	return policy.censor ?? defaultCensor;
+	if (typeof policy.censor === "function") return policy.censor.call(void 0, value, context);
+	const literalCensor = policy.censor ?? defaultCensor;
+	if (policy.replaceStringByLength && typeof value === "string") return buildSameLengthReplacement(literalCensor, value.length);
+	return literalCensor;
 };
 //#endregion
 //#region src/core/runtime/redact-value.ts
@@ -448,15 +476,25 @@ const isTraversableContainer = (value) => {
 const hasLookupValue = (table, key) => {
 	return Object.hasOwn(table, key);
 };
-const matchesRegexKey = (matchers, key) => {
-	return matchers.some((matcher) => matcher.test(key));
+const findMatchingRegexKey = (matchers, key) => {
+	return matchers.find((matcher) => {
+		matcher.lastIndex = 0;
+		return matcher.test(key);
+	});
 };
 const renderPathSegmentText = (pathSegment) => {
 	return pathSegment.kind === "index" ? String(pathSegment.value) : pathSegment.value;
 };
 const resolveDirectKeyMatch = (plan, key) => {
-	if (hasLookupValue(plan.exactKeyRules.keys, key)) return "exact-key";
-	return matchesRegexKey(plan.regexKeyRules.matchers, key) ? "regex-key" : void 0;
+	if (hasLookupValue(plan.exactKeyRules.keys, key)) return {
+		source: "exact-key",
+		rulePath: Object.freeze([key])
+	};
+	const matchingRegex = findMatchingRegexKey(plan.regexKeyRules.matchers, key);
+	if (matchingRegex !== void 0) return {
+		source: "regex-key",
+		rulePath: Object.freeze([matchingRegex])
+	};
 };
 const resolveExactPathRule = (plan, canonicalPath) => {
 	if (canonicalPath === void 0) return;
@@ -488,24 +526,43 @@ const resolveDynamicPathRule = (plan, pathSegments) => {
 const selectActivePolicy = (plan, exactPathRule, dynamicPathRule, directKeyMatch, inheritedPolicy) => {
 	if (exactPathRule !== void 0) return {
 		policy: exactPathRule.policy,
-		source: "exact-path"
+		source: "exact-path",
+		rulePath: exactPathRule.rulePath
 	};
 	if (dynamicPathRule !== void 0) return {
 		policy: dynamicPathRule.policy,
-		source: "dynamic-path"
+		source: "dynamic-path",
+		rulePath: dynamicPathRule.rulePath
 	};
 	if (inheritedPolicy?.source === "exact-path" || inheritedPolicy?.source === "dynamic-path") return inheritedPolicy;
-	if (directKeyMatch === "exact-key") return {
+	if (directKeyMatch?.source === "exact-key") return {
 		policy: plan.exactKeyRules.policy,
-		source: "exact-key"
+		source: "exact-key",
+		rulePath: directKeyMatch.rulePath
 	};
-	if (directKeyMatch === "regex-key") return {
+	if (directKeyMatch?.source === "regex-key") return {
 		policy: plan.regexKeyRules.policy,
-		source: "regex-key"
+		source: "regex-key",
+		rulePath: directKeyMatch.rulePath
 	};
 	return inheritedPolicy;
 };
-const transformArray = (value, plan, inheritedPolicy, canonicalPath, pathSegments) => {
+const buildFunctionCensorContext = (pathSegments, rulePath, rootInput) => {
+	const matchedPath = Object.freeze(pathSegments.map((seg) => seg.value));
+	const rulePathCopy = Object.freeze([...rulePath]);
+	const terminalKey = matchedPath.length > 0 ? matchedPath[matchedPath.length - 1] : void 0;
+	return terminalKey !== void 0 ? {
+		matchedPath,
+		rulePath: rulePathCopy,
+		rootInput,
+		terminalKey
+	} : {
+		matchedPath,
+		rulePath: rulePathCopy,
+		rootInput
+	};
+};
+const transformArray = (value, plan, inheritedPolicy, canonicalPath, pathSegments, rootInput) => {
 	let transformedValue;
 	const removedIndexes = [];
 	let changed = false;
@@ -516,7 +573,8 @@ const transformArray = (value, plan, inheritedPolicy, canonicalPath, pathSegment
 		const itemResult = transformNode(item, plan, {
 			canonicalPath: appendCanonicalPathSegment(canonicalPath, pathSegment),
 			inheritedPolicy,
-			pathSegments: Object.freeze([...pathSegments, pathSegment])
+			pathSegments: Object.freeze([...pathSegments, pathSegment]),
+			rootInput
 		});
 		if (isRemovedValue(itemResult.value)) {
 			if (transformedValue === void 0) transformedValue = value.slice();
@@ -548,7 +606,7 @@ const transformArray = (value, plan, inheritedPolicy, canonicalPath, pathSegment
 		value: compactedValue
 	};
 };
-const transformObject = (value, plan, inheritedPolicy, canonicalPath, pathSegments) => {
+const transformObject = (value, plan, inheritedPolicy, canonicalPath, pathSegments, rootInput) => {
 	let changed = false;
 	let transformedValue;
 	for (const [key, propertyValue] of Object.entries(value)) {
@@ -557,7 +615,8 @@ const transformObject = (value, plan, inheritedPolicy, canonicalPath, pathSegmen
 			canonicalPath: appendCanonicalPathSegment(canonicalPath, pathSegment),
 			directKeyMatch: resolveDirectKeyMatch(plan, key),
 			inheritedPolicy,
-			pathSegments: Object.freeze([...pathSegments, pathSegment])
+			pathSegments: Object.freeze([...pathSegments, pathSegment]),
+			rootInput
 		});
 		if (isRemovedValue(propertyResult.value)) {
 			if (transformedValue === void 0) transformedValue = { ...value };
@@ -577,22 +636,26 @@ const transformObject = (value, plan, inheritedPolicy, canonicalPath, pathSegmen
 };
 const transformNode = (value, plan, context) => {
 	const activePolicy = selectActivePolicy(plan, resolveExactPathRule(plan, context.canonicalPath), resolveDynamicPathRule(plan, context.pathSegments), context.directKeyMatch, context.inheritedPolicy);
-	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !isTraversableContainer(value))) return {
-		changed: true,
-		value: applyRedaction(value, activePolicy.policy)
-	};
+	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !isTraversableContainer(value))) {
+		const fnContext = buildFunctionCensorContext(context.pathSegments, activePolicy.rulePath, context.rootInput);
+		return {
+			changed: true,
+			value: applyRedaction(value, activePolicy.policy, fnContext)
+		};
+	}
 	if (!isTraversableContainer(value)) return {
 		changed: false,
 		value
 	};
 	const inheritedPolicy = activePolicy;
-	return Array.isArray(value) ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments) : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments);
+	return Array.isArray(value) ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput) : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput);
 };
 const redactValue = (value, plan) => {
 	const result = transformNode(value, plan, {
 		canonicalPath: void 0,
 		inheritedPolicy: void 0,
-		pathSegments: Object.freeze([])
+		pathSegments: Object.freeze([]),
+		rootInput: value
 	});
 	return isRemovedValue(result.value) ? void 0 : result.value;
 };
@@ -672,6 +735,7 @@ const rootOptionNames = new Set([
 	"keys",
 	"paths",
 	"remove",
+	"replaceStringByLength",
 	"retainStructure",
 	"serialise"
 ]);
@@ -679,6 +743,7 @@ const pathRuleOptionNames = new Set([
 	"path",
 	"censor",
 	"remove",
+	"replaceStringByLength",
 	"retainStructure"
 ]);
 const isPlainObject = (value) => {
@@ -714,6 +779,8 @@ const validateSerialiseOption = (value, path, issues) => {
 const validateConflictingOptions = (value, path, issues) => {
 	if (value.remove === true && value.censor !== void 0) pushIssue(issues, path, "remove cannot be combined with censor.");
 	if (value.remove === true && value.retainStructure === true) pushIssue(issues, path, "remove cannot be combined with retainStructure.");
+	if (value.remove === true && value.replaceStringByLength === true) pushIssue(issues, path, "remove cannot be combined with replaceStringByLength.");
+	if (value.replaceStringByLength === true && value.censor === "") pushIssue(issues, path, "replaceStringByLength cannot be combined with an empty string censor.");
 };
 const regexLikeKeySelectorPattern = /^\/.+\/[A-Za-z]*$/;
 const getUnsupportedKeySelectorMessage = (selector) => {
@@ -764,10 +831,13 @@ const validatePathRule = (value, path, defaults, issues, selectorCandidates) => 
 	validateCensorOption(value.censor, path, issues);
 	validateBooleanOption(value.remove, path, "remove", issues);
 	validateBooleanOption(value.retainStructure, path, "retainStructure", issues);
+	validateBooleanOption(value.replaceStringByLength, path, "replaceStringByLength", issues);
+	const effectiveReplaceStringByLength = typeof value.replaceStringByLength === "boolean" ? value.replaceStringByLength : defaults.replaceStringByLength;
 	validateConflictingOptions({
 		censor: value.censor ?? defaults.censor,
 		remove: value.remove ?? defaults.remove,
-		retainStructure: value.retainStructure ?? defaults.retainStructure
+		retainStructure: value.retainStructure ?? defaults.retainStructure,
+		replaceStringByLength: effectiveReplaceStringByLength
 	}, path, issues);
 };
 const validatePaths = (value, path, defaults, issues, selectorCandidates) => {
@@ -805,12 +875,19 @@ const validateConfig = (options) => {
 	validateKeys(options.keys, "options.keys", issues);
 	validateBooleanOption(options.remove, "options", "remove", issues);
 	validateBooleanOption(options.retainStructure, "options", "retainStructure", issues);
+	validateBooleanOption(options.replaceStringByLength, "options", "replaceStringByLength", issues);
 	validateSerialiseOption(options.serialise, "options", issues);
-	validateConflictingOptions(options, "options", issues);
+	validateConflictingOptions({
+		censor: options.censor,
+		remove: options.remove === true,
+		retainStructure: options.retainStructure === true,
+		replaceStringByLength: options.replaceStringByLength === true
+	}, "options", issues);
 	validatePaths(options.paths, "options.paths", {
 		censor: options.censor,
 		remove: options.remove === true,
-		retainStructure: options.retainStructure === true
+		retainStructure: options.retainStructure === true,
+		replaceStringByLength: options.replaceStringByLength === true
 	}, issues, selectorCandidates);
 	validatePathSelectors(selectorCandidates, issues);
 	return createValidationReport(issues);

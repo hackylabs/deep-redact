@@ -23,6 +23,7 @@ describe('compiled exact-selector rule plan', () => {
     expect(plan.exactKeyRules.policy).toEqual({
       censor: '[GLOBAL]',
       remove: false,
+      replaceStringByLength: false,
       retainStructure: false,
     })
     expect(plan.exactPathRules['user.password']).toEqual({
@@ -30,8 +31,10 @@ describe('compiled exact-selector rule plan', () => {
       policy: {
         censor: '[GLOBAL]',
         remove: false,
+        replaceStringByLength: false,
         retainStructure: true,
       },
+      rulePath: expect.any(Array),
       segments: expect.any(Array),
     })
   })
@@ -56,6 +59,7 @@ describe('compiled exact-selector rule plan', () => {
     expect(plan.defaults).toEqual({
       censor: '[GLOBAL]',
       remove: false,
+      replaceStringByLength: false,
       retainStructure: false,
     })
     expect(plan.exactKeyRules.policy).toBe(plan.defaults)
@@ -65,8 +69,10 @@ describe('compiled exact-selector rule plan', () => {
       policy: {
         censor: '[GLOBAL]',
         remove: false,
+        replaceStringByLength: false,
         retainStructure: false,
       },
+      rulePath: expect.any(Array),
       segments: expect.any(Array),
     })
     expect(plan.exactPathRules.audit).toEqual({
@@ -74,8 +80,10 @@ describe('compiled exact-selector rule plan', () => {
       policy: {
         censor: '[GLOBAL]',
         remove: false,
+        replaceStringByLength: false,
         retainStructure: true,
       },
+      rulePath: expect.any(Array),
       segments: expect.any(Array),
     })
     expect(plan.exactPathRules['user.token']).toEqual({
@@ -83,8 +91,10 @@ describe('compiled exact-selector rule plan', () => {
       policy: {
         censor: '[LOCAL]',
         remove: false,
+        replaceStringByLength: false,
         retainStructure: false,
       },
+      rulePath: expect.any(Array),
       segments: expect.any(Array),
     })
   })
@@ -109,6 +119,7 @@ describe('compiled exact-selector rule plan', () => {
     expect(plan.regexKeyRules.policy).toEqual({
       censor: '[GLOBAL]',
       remove: false,
+      replaceStringByLength: false,
       retainStructure: false,
     })
   })

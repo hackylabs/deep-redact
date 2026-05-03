@@ -12,6 +12,7 @@ const rootOptionNames = new Set<keyof DeepRedactOptions>([
   'keys',
   'paths',
   'remove',
+  'replaceStringByLength',
   'retainStructure',
   'serialise',
 ])
@@ -20,6 +21,7 @@ const pathRuleOptionNames = new Set<keyof PathRule>([
   'path',
   'censor',
   'remove',
+  'replaceStringByLength',
   'retainStructure',
 ])
 
@@ -95,6 +97,7 @@ const validateConflictingOptions = (
     readonly censor?: unknown
     readonly remove?: unknown
     readonly retainStructure?: unknown
+    readonly replaceStringByLength?: unknown
   },
   path: string,
   issues: ValidationIssue[],
@@ -106,12 +109,21 @@ const validateConflictingOptions = (
   if (value.remove === true && value.retainStructure === true) {
     pushIssue(issues, path, 'remove cannot be combined with retainStructure.')
   }
+
+  if (value.remove === true && value.replaceStringByLength === true) {
+    pushIssue(issues, path, 'remove cannot be combined with replaceStringByLength.')
+  }
+
+  if (value.replaceStringByLength === true && value.censor === '') {
+    pushIssue(issues, path, 'replaceStringByLength cannot be combined with an empty string censor.')
+  }
 }
 
 interface EffectiveRuleDefaults {
   readonly censor?: unknown
   readonly remove: boolean
   readonly retainStructure: boolean
+  readonly replaceStringByLength: boolean
 }
 
 const regexLikeKeySelectorPattern = /^\/.+\/[A-Za-z]*$/
@@ -211,11 +223,18 @@ const validatePathRule = (
   validateCensorOption(value.censor, path, issues)
   validateBooleanOption(value.remove, path, 'remove', issues)
   validateBooleanOption(value.retainStructure, path, 'retainStructure', issues)
+  validateBooleanOption(value.replaceStringByLength, path, 'replaceStringByLength', issues)
+
+  const effectiveReplaceStringByLength = typeof value.replaceStringByLength === 'boolean'
+    ? value.replaceStringByLength
+    : defaults.replaceStringByLength
+
   validateConflictingOptions(
     {
       censor: value.censor ?? defaults.censor,
       remove: value.remove ?? defaults.remove,
       retainStructure: value.retainStructure ?? defaults.retainStructure,
+      replaceStringByLength: effectiveReplaceStringByLength,
     },
     path,
     issues,
@@ -276,8 +295,18 @@ export const validateConfig = (options: unknown): ValidationReport => {
   validateKeys(options.keys, 'options.keys', issues)
   validateBooleanOption(options.remove, 'options', 'remove', issues)
   validateBooleanOption(options.retainStructure, 'options', 'retainStructure', issues)
+  validateBooleanOption(options.replaceStringByLength, 'options', 'replaceStringByLength', issues)
   validateSerialiseOption(options.serialise, 'options', issues)
-  validateConflictingOptions(options, 'options', issues)
+  validateConflictingOptions(
+    {
+      censor: options.censor,
+      remove: options.remove === true,
+      retainStructure: options.retainStructure === true,
+      replaceStringByLength: options.replaceStringByLength === true,
+    },
+    'options',
+    issues,
+  )
   validatePaths(
     options.paths,
     'options.paths',
@@ -285,6 +314,7 @@ export const validateConfig = (options: unknown): ValidationReport => {
       censor: options.censor,
       remove: options.remove === true,
       retainStructure: options.retainStructure === true,
+      replaceStringByLength: options.replaceStringByLength === true,
     },
     issues,
     selectorCandidates,

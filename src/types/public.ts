@@ -3,10 +3,14 @@ import type { DeepRedactOptions } from './config.js'
 export type { DeepRedactOptions, KeySelector, SerialiseOption } from './config.js'
 export type {
   Censor,
+  FunctionCensorContext,
   IgnorePathSegment,
   PathEntry,
   PathRule,
+  PathSegments,
   PathSelector,
+  PublicRecursiveWildcardSegment,
+  PublicWildcardSegment,
   RegexPathSegment,
   StructuredPathSegment,
   StructuredPathSelector,

@@ -1,0 +1,3 @@
+## Deferred from: code review of 2-2-support-function-censors-and-same-length-string-replacement (2026-05-03)
+
+- **Inherited key-rule policy overridden by deeper direct-key match when `retainStructure: true`** — `selectActivePolicy` protects inherited `exact-path`/`dynamic-path` source policies from being displaced by a child `directKeyMatch`, but `exact-key`/`regex-key` source policies have no equivalent guard. A key rule using `retainStructure: true` can have its inherited policy silently replaced for any descendant whose key independently matches a different key rule. Pre-existing precedence behaviour predating Story 2.2. Tracked in `src/core/runtime/redact-value.ts`.

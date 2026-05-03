@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createRedactor, deepRedact } from '../../../src/index.js'
+import { createRedactor, deepRedact, type FunctionCensorContext } from '../../../src/index.js'
 
 describe('Reusable redactor factory contract', () => {
   it('returns a callable redactor and defers serialisation work until invocation', () => {
@@ -1162,5 +1162,523 @@ describe('Reusable redactor factory contract', () => {
     expect(1 in result.users).toBe(false)
     expect(result.users[0]).toEqual({ token: '[REDACTED]' })
     expect(result.users[2]).toEqual({ safe: true })
+  })
+})
+
+describe('Story 2.2: function censors and same-length string replacement', () => {
+  // ── validation failures ─────────────────────────────────────────────────────
+
+  it.each([
+    [
+      'root replaceStringByLength with empty string censor',
+      { censor: '', replaceStringByLength: true },
+      /replaceStringByLength.*empty.*censor|empty.*censor.*replaceStringByLength/i,
+    ],
+    [
+      'root replaceStringByLength: true with remove: true',
+      { remove: true, replaceStringByLength: true },
+      /remove cannot be combined with replaceStringByLength/i,
+    ],
+    [
+      'path-rule replaceStringByLength with empty string censor',
+      { paths: [{ path: 'user.password', censor: '', replaceStringByLength: true }] },
+      /replaceStringByLength.*empty.*censor|empty.*censor.*replaceStringByLength/i,
+    ],
+    [
+      'path-rule replaceStringByLength: true with remove: true',
+      { paths: [{ path: 'user.password', remove: true, replaceStringByLength: true }] },
+      /paths\[0\].*remove cannot be combined with replaceStringByLength/i,
+    ],
+    [
+      'global censor empty string inherited by path replaceStringByLength',
+      { censor: '', paths: [{ path: 'user.password', replaceStringByLength: true }] },
+      /replaceStringByLength.*empty.*censor|empty.*censor.*replaceStringByLength/i,
+    ],
+    [
+      'global remove inherited by path replaceStringByLength',
+      { remove: true, paths: [{ path: 'user.password', replaceStringByLength: true }] },
+      /paths\[0\].*remove cannot be combined with replaceStringByLength/i,
+    ],
+    [
+      'global replaceStringByLength inherited by path remove',
+      { replaceStringByLength: true, paths: [{ path: 'user.password', remove: true }] },
+      /paths\[0\].*remove cannot be combined with replaceStringByLength/i,
+    ],
+    [
+      'non-boolean replaceStringByLength at root',
+      { replaceStringByLength: 'yes' },
+      /replaceStringByLength must be a boolean/i,
+    ],
+    [
+      'non-boolean replaceStringByLength at path rule',
+      { paths: [{ path: 'user.password', replaceStringByLength: 1 }] },
+      /replaceStringByLength must be a boolean/i,
+    ],
+  ])('fails fast for %s', (_label, options, expectedMessage) => {
+    expect(() => deepRedact(options as never)).toThrowError(expectedMessage)
+  })
+
+  it('accepts replaceStringByLength: false at root and path-rule without error', () => {
+    expect(() => deepRedact({ replaceStringByLength: false })).not.toThrow()
+    expect(() => deepRedact({ paths: [{ path: 'user.password', replaceStringByLength: false }] })).not.toThrow()
+  })
+
+  it('accepts function censor with replaceStringByLength: true without error', () => {
+    expect(() => deepRedact({ censor: () => '[FN]', replaceStringByLength: true })).not.toThrow()
+  })
+
+  // ── function censor – basic invocation ────────────────────────────────────
+
+  it('invokes global function censor on exact-key match with exactly two arguments', () => {
+    let capturedArgs: unknown[] = []
+    const redact = deepRedact({
+      censor: function (...args: unknown[]) {
+        capturedArgs = args
+        return '[FN]'
+      },
+      keys: ['password'],
+    })
+
+    redact({ password: 'secret' })
+
+    expect(capturedArgs).toHaveLength(2)
+    expect(capturedArgs[0]).toBe('secret')
+  })
+
+  it('provides correct FunctionCensorContext shape on exact-key match', () => {
+    const contexts: FunctionCensorContext[] = []
+    const rootPayload = { user: { password: 'secret', safe: 'keep' } }
+    const redact = deepRedact({
+      censor: (_value: unknown, ctx: FunctionCensorContext) => {
+        contexts.push(ctx)
+        return '[FN]'
+      },
+      keys: ['password'],
+    })
+
+    redact(rootPayload)
+
+    expect(contexts).toHaveLength(1)
+    expect(contexts[0]!.matchedPath).toEqual(['user', 'password'])
+    expect(contexts[0]!.rulePath).toEqual(['password'])
+    expect(contexts[0]!.rootInput).toBe(rootPayload)
+    expect(contexts[0]!.terminalKey).toBe('password')
+  })
+
+  it('provides correct FunctionCensorContext shape on regex-key match', () => {
+    const contexts: FunctionCensorContext[] = []
+    const rootPayload = { user: { dbPassword: 'secret', safe: 'keep' } }
+    const pattern = /password$/i
+    const redact = deepRedact({
+      censor: (_value: unknown, ctx: FunctionCensorContext) => {
+        contexts.push(ctx)
+        return '[FN]'
+      },
+      keys: [pattern],
+    })
+
+    redact(rootPayload)
+
+    expect(contexts).toHaveLength(1)
+    expect(contexts[0]!.matchedPath).toEqual(['user', 'dbPassword'])
+    expect(contexts[0]!.rulePath).toHaveLength(1)
+    expect(contexts[0]!.rulePath[0]).toBeInstanceOf(RegExp)
+    expect((contexts[0]!.rulePath[0] as RegExp).source).toBe(pattern.source)
+    expect(contexts[0]!.rootInput).toBe(rootPayload)
+    expect(contexts[0]!.terminalKey).toBe('dbPassword')
+  })
+
+  it('provides correct FunctionCensorContext shape on exact-path match', () => {
+    const contexts: FunctionCensorContext[] = []
+    const rootPayload = { account: { token: 'tok', safe: 'keep' } }
+    const redact = deepRedact({
+      paths: [{
+        path: 'account.token',
+        censor: (_value: unknown, ctx: FunctionCensorContext) => {
+          contexts.push(ctx)
+          return '[FN]'
+        },
+      }],
+    })
+
+    redact(rootPayload)
+
+    expect(contexts).toHaveLength(1)
+    expect(contexts[0]!.matchedPath).toEqual(['account', 'token'])
+    expect(contexts[0]!.rulePath).toEqual(['account', 'token'])
+    expect(contexts[0]!.rootInput).toBe(rootPayload)
+    expect(contexts[0]!.terminalKey).toBe('token')
+  })
+
+  it('provides correct FunctionCensorContext shape on dynamic-path wildcard match', () => {
+    const contexts: FunctionCensorContext[] = []
+    const rootPayload = { users: { alice: { token: 'alice-tok' }, bob: { token: 'bob-tok' } } }
+    const redact = deepRedact({
+      paths: [{
+        path: 'users.*.token',
+        censor: (_value: unknown, ctx: FunctionCensorContext) => {
+          contexts.push(ctx)
+          return '[FN]'
+        },
+      }],
+    })
+
+    redact(rootPayload)
+
+    expect(contexts).toHaveLength(2)
+    const aliceCtx = contexts.find((c) => c.terminalKey === 'token' && c.matchedPath[1] === 'alice')!
+    expect(aliceCtx).toBeDefined()
+    expect(aliceCtx.matchedPath).toEqual(['users', 'alice', 'token'])
+    expect(aliceCtx.rulePath).toEqual(['users', { any: true }, 'token'])
+    expect(aliceCtx.terminalKey).toBe('token')
+  })
+
+  it('provides correct FunctionCensorContext shape on array-index match', () => {
+    const contexts: FunctionCensorContext[] = []
+    const rootPayload = { users: [{ email: 'a@b.com', safe: 'keep' }] }
+    const redact = deepRedact({
+      paths: [{
+        path: 'users[0].email',
+        censor: (_value: unknown, ctx: FunctionCensorContext) => {
+          contexts.push(ctx)
+          return '[FN]'
+        },
+      }],
+    })
+
+    redact(rootPayload)
+
+    expect(contexts).toHaveLength(1)
+    expect(contexts[0]!.matchedPath).toEqual(['users', 0, 'email'])
+    expect(contexts[0]!.rulePath).toEqual(['users', 0, 'email'])
+    expect(contexts[0]!.terminalKey).toBe('email')
+  })
+
+  it('provides correct FunctionCensorContext shape on dynamic-path recursive-wildcard match', () => {
+    const contexts: FunctionCensorContext[] = []
+    const rootPayload = { account: { token: 'root-tok', session: { token: 'session-tok' } } }
+    const redact = deepRedact({
+      paths: [{
+        path: 'account.**.token',
+        censor: (_value: unknown, ctx: FunctionCensorContext) => {
+          contexts.push(ctx)
+          return '[FN]'
+        },
+      }],
+    })
+
+    redact(rootPayload)
+
+    expect(contexts).toHaveLength(2)
+    const rootTokCtx = contexts.find((c) => c.matchedPath.length === 2)!
+    expect(rootTokCtx.matchedPath).toEqual(['account', 'token'])
+    expect(rootTokCtx.rulePath).toEqual(['account', { anyDepth: true }, 'token'])
+  })
+
+  it('provides correct FunctionCensorContext for ignore-segment dynamic path', () => {
+    const contexts: FunctionCensorContext[] = []
+    const rootPayload = { users: { admin: { email: 'admin@x.com' }, alice: { email: 'a@x.com' } } }
+    const redact = deepRedact({
+      paths: [{
+        path: ['users', { ignore: 'admin' }, 'email'],
+        censor: (_value: unknown, ctx: FunctionCensorContext) => {
+          contexts.push(ctx)
+          return '[FN]'
+        },
+      }],
+    })
+
+    redact(rootPayload)
+
+    expect(contexts).toHaveLength(1)
+    expect(contexts[0]!.matchedPath).toEqual(['users', 'alice', 'email'])
+    const rp = contexts[0]!.rulePath
+    expect(rp[0]).toBe('users')
+    expect(rp[1]).toEqual({ ignore: 'admin' })
+    expect(rp[2]).toBe('email')
+  })
+
+  it('provides correct FunctionCensorContext for regex path-segment match', () => {
+    const contexts: FunctionCensorContext[] = []
+    const regex = /^tenant-\d+$/
+    const rootPayload = { tenants: { 'tenant-1': { token: 'tok', safe: 'keep' }, other: { token: 'other-tok' } } }
+    const redact = deepRedact({
+      paths: [{
+        path: ['tenants', regex, 'token'],
+        censor: (_value: unknown, ctx: FunctionCensorContext) => {
+          contexts.push(ctx)
+          return '[FN]'
+        },
+      }],
+    })
+
+    redact(rootPayload)
+
+    expect(contexts).toHaveLength(1)
+    expect(contexts[0]!.matchedPath).toEqual(['tenants', 'tenant-1', 'token'])
+    const rp = contexts[0]!.rulePath
+    expect(rp[0]).toBe('tenants')
+    expect(rp[1]).toBeInstanceOf(RegExp)
+    expect((rp[1] as RegExp).source).toBe(regex.source)
+    expect(rp[2]).toBe('token')
+  })
+
+  it('resolves the first matching configured regex-key rule as rulePath when multiple matchers match', () => {
+    const contexts: FunctionCensorContext[] = []
+    const pattern1 = /password$/i
+    const pattern2 = /password/
+    const redact = deepRedact({
+      censor: (_value: unknown, ctx: FunctionCensorContext) => {
+        contexts.push(ctx)
+        return '[FN]'
+      },
+      keys: [pattern1, pattern2],
+    })
+
+    redact({ dbPassword: 'secret' })
+
+    expect(contexts).toHaveLength(1)
+    const rp = contexts[0]!.rulePath
+    expect(rp).toHaveLength(1)
+    expect(rp[0]).toBeInstanceOf(RegExp)
+    expect((rp[0] as RegExp).source).toBe(pattern1.source)
+    expect((rp[0] as RegExp).flags).toBe(pattern1.flags)
+  })
+
+  it('rootInput is the exact original input reference, not a copy', () => {
+    let capturedRoot: unknown
+    const rootPayload = { nested: { secret: 'value' } }
+    const redact = deepRedact({
+      censor: (_value: unknown, ctx: FunctionCensorContext) => {
+        capturedRoot = ctx.rootInput
+        return '[FN]'
+      },
+      keys: ['secret'],
+    })
+
+    redact(rootPayload)
+
+    expect(capturedRoot).toBe(rootPayload)
+  })
+
+  it('local path-rule function censor beats a global literal censor for the matched rule only', () => {
+    const called: string[] = []
+    const redact = deepRedact({
+      censor: '[GLOBAL]',
+      paths: [
+        'accounts.public.token',
+        {
+          path: 'accounts.internal.token',
+          censor: (_value: unknown) => {
+            called.push('local')
+            return '[LOCAL-FN]'
+          },
+        },
+      ],
+    })
+
+    const result = redact({
+      accounts: {
+        public: { token: 'pub-tok', safe: 'pub-safe' },
+        internal: { token: 'int-tok', safe: 'int-safe' },
+      },
+    }) as Record<string, Record<string, Record<string, string>>>
+
+    expect(called).toEqual(['local'])
+    expect(result.accounts!.public!.token).toBe('[GLOBAL]')
+    expect(result.accounts!.internal!.token).toBe('[LOCAL-FN]')
+    expect(result.accounts!.public!.safe).toBe('pub-safe')
+    expect(result.accounts!.internal!.safe).toBe('int-safe')
+  })
+
+  it('local path-rule function censor beats a global function censor for the matched rule only', () => {
+    const globalCalled: string[] = []
+    const localCalled: string[] = []
+    const redact = deepRedact({
+      censor: () => {
+        globalCalled.push('global')
+        return '[GLOBAL-FN]'
+      },
+      paths: [
+        {
+          path: 'accounts.internal.token',
+          censor: () => {
+            localCalled.push('local')
+            return '[LOCAL-FN]'
+          },
+        },
+        'accounts.public.token',
+      ],
+    })
+
+    redact({
+      accounts: {
+        public: { token: 'pub-tok' },
+        internal: { token: 'int-tok' },
+      },
+    })
+
+    expect(localCalled).toHaveLength(1)
+    expect(globalCalled).toHaveLength(1)
+  })
+
+  it('function censor return value replaces only the matched target and preserves siblings', () => {
+    const redact = deepRedact({
+      censor: () => '[FN]',
+      keys: ['secret'],
+    })
+    const payload = { secret: 'value', safe: 'keep', nested: { secret: 'nested-value', other: 'visible' } }
+
+    const result = redact(payload) as typeof payload
+
+    expect(result.secret).toBe('[FN]')
+    expect(result.safe).toBe('keep')
+    expect(result.nested.secret).toBe('[FN]')
+    expect(result.nested.other).toBe('visible')
+    expect(payload.secret).toBe('value')
+  })
+
+  it('function censor returning undefined replaces matched target with undefined instead of removing', () => {
+    const redact = deepRedact({
+      censor: () => undefined,
+      keys: ['secret'],
+    })
+    const payload = { secret: 'value', safe: 'keep' }
+
+    const result = redact(payload) as Record<string, unknown>
+
+    expect(Object.hasOwn(result, 'secret')).toBe(true)
+    expect(result.secret).toBeUndefined()
+    expect(result.safe).toBe('keep')
+  })
+
+  it('context arrays are frozen: matchedPath and rulePath are immutable at runtime', () => {
+    const contexts: FunctionCensorContext[] = []
+    const redact = deepRedact({
+      censor: (_value: unknown, ctx: FunctionCensorContext) => {
+        contexts.push(ctx)
+        return '[FN]'
+      },
+      keys: ['a', 'b'],
+    })
+
+    redact({ a: 1, b: 2 })
+
+    expect(contexts).toHaveLength(2)
+    for (const ctx of contexts) {
+      expect(() => (ctx.matchedPath as unknown[]).push('MUTATION')).toThrow(TypeError)
+      expect(() => (ctx.rulePath as unknown[]).push('MUTATION')).toThrow(TypeError)
+    }
+  })
+
+  it('retained parent path rule: function censor descendants receive own exact matchedPath and parent rulePath', () => {
+    const contexts: FunctionCensorContext[] = []
+    const redact = deepRedact({
+      paths: [{
+        path: 'accounts.*',
+        censor: (_value: unknown, ctx: FunctionCensorContext) => {
+          contexts.push(ctx)
+          return '[FN]'
+        },
+        retainStructure: true,
+      }],
+    })
+
+    redact({ accounts: { alice: { token: 'tok', safe: 'keep' } } })
+
+    expect(contexts).toHaveLength(2)
+    for (const ctx of contexts) {
+      expect(ctx.rulePath).toEqual(['accounts', { any: true }])
+    }
+    const tokenCtx = contexts.find((c) => c.terminalKey === 'token')!
+    const safeCtx = contexts.find((c) => c.terminalKey === 'safe')!
+    expect(tokenCtx.matchedPath).toEqual(['accounts', 'alice', 'token'])
+    expect(safeCtx.matchedPath).toEqual(['accounts', 'alice', 'safe'])
+  })
+
+  it('function censor does not mutate caller-owned payload', () => {
+    const payload = { user: { secret: 'original', safe: 'unchanged' } }
+    const original = structuredClone(payload)
+    const redact = deepRedact({
+      censor: () => '[FN]',
+      keys: ['secret'],
+    })
+
+    redact(payload)
+
+    expect(payload).toStrictEqual(original)
+  })
+
+  // ── same-length literal string replacement ────────────────────────────────
+
+  it('repeats literal censor to match original string length (replaceStringByLength: true, single-char token)', () => {
+    const redact = deepRedact({ censor: '*', replaceStringByLength: true, keys: ['secret'] })
+
+    expect(redact({ secret: 'hello' })).toEqual({ secret: '*****' })
+  })
+
+  it('repeats multi-character token and truncates to original string length', () => {
+    const redact = deepRedact({ censor: 'XY', replaceStringByLength: true, keys: ['secret'] })
+
+    expect(redact({ secret: 'hello' })).toEqual({ secret: 'XYXYX' })
+  })
+
+  it('uses default [REDACTED] token repeated to length when no explicit censor and replaceStringByLength: true', () => {
+    const redact = deepRedact({ replaceStringByLength: true, keys: ['secret'] })
+
+    const result = redact({ secret: 'hello' }) as { secret: string }
+    expect(result.secret).toHaveLength(5)
+    expect(result.secret).toBe('[REDA')
+  })
+
+  it('applies same-length replacement via local path-rule censor override', () => {
+    const redact = deepRedact({
+      paths: [{
+        path: 'user.password',
+        censor: '-',
+        replaceStringByLength: true,
+      }],
+    })
+
+    expect(redact({ user: { password: 'secret', safe: 'keep' } })).toEqual({
+      user: { password: '------', safe: 'keep' },
+    })
+  })
+
+  it('skips same-length replacement for non-string matched values', () => {
+    const redact = deepRedact({ censor: '*', replaceStringByLength: true, keys: ['count'] })
+
+    expect(redact({ count: 42 })).toEqual({ count: '*' })
+  })
+
+  it('skips same-length replacement when matched value is zero-length string', () => {
+    const redact = deepRedact({ censor: '*', replaceStringByLength: true, keys: ['empty'] })
+
+    expect(redact({ empty: '' })).toEqual({ empty: '' })
+  })
+
+  it('skips same-length replacement for function censor and uses its return value directly', () => {
+    const redact = deepRedact({
+      censor: () => '[FN-RESULT]',
+      replaceStringByLength: true,
+      keys: ['secret'],
+    })
+
+    expect(redact({ secret: 'hello' })).toEqual({ secret: '[FN-RESULT]' })
+  })
+
+  it('local replaceStringByLength: false overrides global replaceStringByLength: true', () => {
+    const redact = deepRedact({
+      censor: '*',
+      replaceStringByLength: true,
+      paths: [{
+        path: 'user.name',
+        replaceStringByLength: false,
+      }],
+    })
+
+    const result = redact({ user: { name: 'alice' } }) as { user: { name: string } }
+
+    expect(result.user.name).toBe('*')
   })
 })

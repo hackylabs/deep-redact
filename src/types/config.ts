@@ -10,4 +10,5 @@ export interface DeepRedactOptions {
   readonly remove?: boolean
   readonly retainStructure?: boolean
   readonly serialise?: SerialiseOption
+  readonly replaceStringByLength?: boolean
 }
