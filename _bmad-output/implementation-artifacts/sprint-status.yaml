@@ -34,7 +34,7 @@
 # - Scrum Master typically creates the next story after the previous one is 'done'
 
 generated: 2026-04-13T09:43:13+0100
-last_updated: 2026-05-01T03:30:00+0100
+last_updated: 2026-05-03T19:02:28+0100
 project: deep-redact
 project_key: NOKEY
 tracking_system: file-system
@@ -50,8 +50,8 @@ development_status:
   1-6-match-sensitive-fields-by-regex-based-path-segments: done
   epic-1-retrospective: optional
 
-  epic-2: backlog
-  2-1-apply-literal-replacement-removal-and-retain-structure-handling: backlog
+  epic-2: in-progress
+  2-1-apply-literal-replacement-removal-and-retain-structure-handling: done
   2-2-support-function-censors-and-same-length-string-replacement: backlog
   2-3-redact-matched-substrings-in-nested-string-values: backlog
   2-4-redact-matching-root-primitive-string-inputs: backlog

@@ -36,6 +36,59 @@ describe('compiled exact-selector rule plan', () => {
     })
   })
 
+  it('applies local path overrides only to the matching rule while preserving compiled defaults elsewhere', () => {
+    const plan = compileRedactorPlan({
+      censor: '[GLOBAL]',
+      keys: ['password', /token$/i],
+      paths: [
+        'account.token',
+        {
+          path: 'audit',
+          retainStructure: true,
+        },
+        {
+          path: 'user.token',
+          censor: '[LOCAL]',
+        },
+      ],
+    })
+
+    expect(plan.defaults).toEqual({
+      censor: '[GLOBAL]',
+      remove: false,
+      retainStructure: false,
+    })
+    expect(plan.exactKeyRules.policy).toBe(plan.defaults)
+    expect(plan.regexKeyRules.policy).toBe(plan.defaults)
+    expect(plan.exactPathRules['account.token']).toEqual({
+      canonicalPath: 'account.token',
+      policy: {
+        censor: '[GLOBAL]',
+        remove: false,
+        retainStructure: false,
+      },
+      segments: expect.any(Array),
+    })
+    expect(plan.exactPathRules.audit).toEqual({
+      canonicalPath: 'audit',
+      policy: {
+        censor: '[GLOBAL]',
+        remove: false,
+        retainStructure: true,
+      },
+      segments: expect.any(Array),
+    })
+    expect(plan.exactPathRules['user.token']).toEqual({
+      canonicalPath: 'user.token',
+      policy: {
+        censor: '[LOCAL]',
+        remove: false,
+        retainStructure: false,
+      },
+      segments: expect.any(Array),
+    })
+  })
+
   it('separates exact and regex key selectors during compilation', () => {
     const tokenPattern = /token$/i
     const plan = compileRedactorPlan({

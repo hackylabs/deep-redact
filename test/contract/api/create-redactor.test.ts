@@ -545,6 +545,329 @@ describe('Reusable redactor factory contract', () => {
     })
   })
 
+  it('falls back to the library default censor when no explicit literal override is configured', () => {
+    const redact = deepRedact({
+      paths: ['user.password'],
+    })
+    const payload = {
+      user: {
+        password: 'secret-password',
+        safe: 'still-visible',
+      },
+      safe: 'root-visible',
+    }
+
+    expect(redact(payload)).toEqual({
+      user: {
+        password: '[REDACTED]',
+        safe: 'still-visible',
+      },
+      safe: 'root-visible',
+    })
+  })
+
+  it('applies a global literal censor to exact-key, regex-key, exact-path, and dynamic-path matches', () => {
+    const redact = deepRedact({
+      censor: '[GLOBAL]',
+      keys: ['password', /secret$/i],
+      paths: [
+        'account.token',
+        'orders.*.cardNumber',
+      ],
+    })
+    const payload = {
+      password: 'root-password',
+      nested: {
+        apiSecret: 'nested-secret',
+        safe: 'nested-safe',
+      },
+      account: {
+        token: 'account-token',
+        safe: 'account-safe',
+      },
+      orders: [
+        { cardNumber: '4111111111111111', safe: true },
+        { cardNumber: '5555555555554444', safe: false },
+      ],
+      safe: 'root-safe',
+    }
+
+    expect(redact(payload)).toEqual({
+      password: '[GLOBAL]',
+      nested: {
+        apiSecret: '[GLOBAL]',
+        safe: 'nested-safe',
+      },
+      account: {
+        token: '[GLOBAL]',
+        safe: 'account-safe',
+      },
+      orders: [
+        { cardNumber: '[GLOBAL]', safe: true },
+        { cardNumber: '[GLOBAL]', safe: false },
+      ],
+      safe: 'root-safe',
+    })
+  })
+
+  it('lets a local path-rule censor override a broader global literal default without affecting siblings', () => {
+    const redact = deepRedact({
+      censor: '[GLOBAL]',
+      paths: [
+        'accounts.public.token',
+        {
+          path: 'accounts.internal.token',
+          censor: '[LOCAL]',
+        },
+      ],
+    })
+    const payload = {
+      accounts: {
+        public: {
+          token: 'public-token',
+          safe: 'public-safe',
+        },
+        internal: {
+          token: 'internal-token',
+          safe: 'internal-safe',
+        },
+      },
+      safe: 'root-safe',
+    }
+
+    expect(redact(payload)).toEqual({
+      accounts: {
+        public: {
+          token: '[GLOBAL]',
+          safe: 'public-safe',
+        },
+        internal: {
+          token: '[LOCAL]',
+          safe: 'internal-safe',
+        },
+      },
+      safe: 'root-safe',
+    })
+  })
+
+  it('removes exact-key and regex-key object properties without mutating the caller payload', () => {
+    const redact = deepRedact({
+      remove: true,
+      keys: ['password', /token$/i],
+    })
+    const payload = {
+      password: 'root-password',
+      safe: 'root-safe',
+      account: {
+        accessToken: 'account-token',
+        nested: {
+          password: 'nested-password',
+          safe: 'nested-safe',
+        },
+        safe: 'account-safe',
+      },
+    }
+    const originalPayload = structuredClone(payload)
+
+    expect(redact(payload)).toStrictEqual({
+      safe: 'root-safe',
+      account: {
+        nested: {
+          safe: 'nested-safe',
+        },
+        safe: 'account-safe',
+      },
+    })
+    expect(payload).toStrictEqual(originalPayload)
+  })
+
+  it('removes exact-path and dynamic-path object properties without mutating the caller payload', () => {
+    const redact = deepRedact({
+      paths: [
+        {
+          path: 'account.password',
+          remove: true,
+        },
+        {
+          path: 'services.*.accessToken',
+          remove: true,
+        },
+      ],
+    })
+    const payload = {
+      account: {
+        password: 'root-password',
+        safe: 'account-safe',
+      },
+      services: {
+        api: {
+          accessToken: 'api-token',
+          safe: 'api-safe',
+        },
+        web: {
+          accessToken: 'web-token',
+          safe: 'web-safe',
+        },
+        summary: {
+          safe: 'summary-safe',
+        },
+      },
+      untouched: {
+        password: 'still-visible',
+      },
+    }
+    const originalPayload = structuredClone(payload)
+
+    expect(redact(payload)).toStrictEqual({
+      account: {
+        safe: 'account-safe',
+      },
+      services: {
+        api: {
+          safe: 'api-safe',
+        },
+        web: {
+          safe: 'web-safe',
+        },
+        summary: {
+          safe: 'summary-safe',
+        },
+      },
+      untouched: {
+        password: 'still-visible',
+      },
+    })
+    expect(payload).toStrictEqual(originalPayload)
+  })
+
+  it('compacts removed array items from exact and dynamic path matches while preserving unrelated sparse holes', () => {
+    const users = [
+      { token: 'keep-first' },
+      { token: 'remove-second' },
+      ,
+      { token: 'remove-fourth' },
+      { token: 'keep-fifth' },
+    ]
+    const result = deepRedact({
+      paths: [
+        {
+          path: 'users[1]',
+          remove: true,
+        },
+        {
+          path: ['users', /^3$/],
+          remove: true,
+        },
+      ],
+    })({ users }) as {
+      users: Array<{ readonly token: string } | undefined>
+    }
+
+    expect(result.users).toHaveLength(3)
+    expect(result.users[0]).toEqual({ token: 'keep-first' })
+    expect(1 in result.users).toBe(false)
+    expect(result.users[2]).toEqual({ token: 'keep-fifth' })
+
+    expect(users).toHaveLength(5)
+    expect(2 in users).toBe(false)
+    expect(users[1]).toEqual({ token: 'remove-second' })
+    expect(users[3]).toEqual({ token: 'remove-fourth' })
+  })
+
+  it('retains matched path containers and redacts descendants with the compiled global literal censor', () => {
+    const redact = deepRedact({
+      censor: '[GLOBAL]',
+      paths: [
+        {
+          path: 'accounts.public',
+          retainStructure: true,
+        },
+      ],
+    })
+    const payload = {
+      accounts: {
+        public: {
+          token: 'public-token',
+          nested: {
+            secret: 'public-secret',
+          },
+        },
+        internal: {
+          token: 'internal-token',
+          nested: {
+            secret: 'internal-secret',
+          },
+        },
+      },
+      safe: 'root-safe',
+    }
+    const originalPayload = structuredClone(payload)
+
+    expect(redact(payload)).toEqual({
+      accounts: {
+        public: {
+          token: '[GLOBAL]',
+          nested: {
+            secret: '[GLOBAL]',
+          },
+        },
+        internal: {
+          token: 'internal-token',
+          nested: {
+            secret: 'internal-secret',
+          },
+        },
+      },
+      safe: 'root-safe',
+    })
+    expect(payload).toStrictEqual(originalPayload)
+  })
+
+  it('retains exact-key and regex-key matched containers using the compiled global policy', () => {
+    const redact = deepRedact({
+      censor: '[HIDDEN]',
+      retainStructure: true,
+      keys: ['credentials', /Secrets$/],
+    })
+    const payload = {
+      credentials: {
+        token: 'credentials-token',
+        nested: {
+          password: 'credentials-password',
+        },
+      },
+      tenantSecrets: {
+        apiKey: 'tenant-api-key',
+        nested: {
+          value: 'tenant-secret',
+        },
+      },
+      public: {
+        token: 'public-token',
+      },
+    }
+    const originalPayload = structuredClone(payload)
+
+    expect(redact(payload)).toEqual({
+      credentials: {
+        token: '[HIDDEN]',
+        nested: {
+          password: '[HIDDEN]',
+        },
+      },
+      tenantSecrets: {
+        apiKey: '[HIDDEN]',
+        nested: {
+          value: '[HIDDEN]',
+        },
+      },
+      public: {
+        token: 'public-token',
+      },
+    })
+    expect(payload).toStrictEqual(originalPayload)
+  })
+
   it('gives exact-path rules precedence over exact-key rules on the same leaf', () => {
     const redact = deepRedact({
       censor: '[KEY]',
