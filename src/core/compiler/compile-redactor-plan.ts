@@ -8,6 +8,8 @@ import type {
   PathSegments,
   PathSelector,
   SerialiseOption,
+  StringTest,
+  SubstringRule,
 } from '../../types/public.js'
 import {
   isDynamicPathSegment,
@@ -16,6 +18,7 @@ import {
   type PathSegment,
 } from '../matching/path-parser.js'
 import { normaliseParsedPath, renderSelectorSignature } from '../matching/path-normaliser.js'
+import { cloneRegExp } from '../validation/regex-safety.js'
 
 export type { FunctionCensorContext }
 
@@ -50,6 +53,20 @@ export interface CompiledRegexKeyRules {
   readonly policy: CompiledRedactionPolicy
 }
 
+export interface CompiledWholeValueSubstringRule {
+  readonly kind: 'whole-value'
+  readonly pattern: RegExp
+  readonly policy: CompiledRedactionPolicy
+}
+
+export interface CompiledStructuredSubstringRule {
+  readonly kind: 'structured-replacer'
+  readonly pattern: RegExp
+  readonly replacer: SubstringRule['replacer']
+}
+
+export type CompiledSubstringRule = CompiledWholeValueSubstringRule | CompiledStructuredSubstringRule
+
 export interface CompiledRedactorPlan {
   readonly defaults: CompiledRedactionPolicy
   readonly dynamicPathRules: readonly CompiledDynamicPathRule[]
@@ -57,6 +74,7 @@ export interface CompiledRedactorPlan {
   readonly exactKeyRules: CompiledExactKeyRules
   readonly regexKeyRules: CompiledRegexKeyRules
   readonly serialise?: SerialiseOption
+  readonly substringRules: readonly CompiledSubstringRule[]
 }
 
 const createLookupTable = <T>(): Record<string, T> => {
@@ -203,6 +221,31 @@ const compileRegexKeyRules = (
   })
 }
 
+const isSubstringRule = (stringTest: StringTest): stringTest is SubstringRule => {
+  return !(stringTest instanceof RegExp)
+}
+
+const compileSubstringRules = (
+  stringTests: readonly StringTest[],
+  defaults: CompiledRedactionPolicy,
+): readonly CompiledSubstringRule[] => {
+  return Object.freeze(stringTests.map((stringTest) => {
+    if (isSubstringRule(stringTest)) {
+      return Object.freeze({
+        kind: 'structured-replacer' as const,
+        pattern: cloneRegExp(stringTest.pattern),
+        replacer: stringTest.replacer,
+      })
+    }
+
+    return Object.freeze({
+      kind: 'whole-value' as const,
+      pattern: cloneRegExp(stringTest),
+      policy: defaults,
+    })
+  }))
+}
+
 export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRedactorPlan => {
   const defaults = createDefaultPolicy(options)
   const compiledPathRules = compilePathRules(options.paths ?? [], defaults)
@@ -214,5 +257,6 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
     exactPathRules: compiledPathRules.exactPathRules,
     regexKeyRules: compileRegexKeyRules(options.keys ?? [], defaults),
     serialise: options.serialise,
+    substringRules: compileSubstringRules(options.stringTests ?? [], defaults),
   })
 }

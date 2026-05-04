@@ -1,6 +1,12 @@
 import deepRedactPackage = require('@hackylabs/deep-redact')
 
 const keySelector: deepRedactPackage.KeySelector = /token$/i
+const substringRule: deepRedactPackage.SubstringRule = {
+  pattern: /token=[^&\s]+/g,
+  replacer: (value: string, pattern: RegExp) => value.replace(pattern, 'token=[REDACTED]'),
+}
+const bareStringTest: deepRedactPackage.StringTest = /api-key=[^&\s]+/
+const structuredStringTest: deepRedactPackage.StringTest = substringRule
 const regexPathSegment: deepRedactPackage.RegexPathSegment = /^tenant-\d+$/
 const structuredSegment: deepRedactPackage.StructuredPathSegment = /^tenant-\d+$/
 const structuredSelector: deepRedactPackage.StructuredPathSelector = ['tenants', /^tenant-\d+$/, 'token']
@@ -31,6 +37,7 @@ const redact = deepRedactPackage.deepRedact({
   censor: twoArgCensor,
   replaceStringByLength: false,
   keys: ['password', /token$/i],
+  stringTests: [bareStringTest, structuredStringTest],
   paths: [
     'user.password',
     ['users', 0, 'email'],
@@ -56,6 +63,9 @@ deepRedactPackage.deepRedact({ blacklistedKeys: ['password'] })
 void structuredResult
 void serialisedResult
 void keySelector
+void substringRule
+void bareStringTest
+void structuredStringTest
 void regexPathSegment
 void structuredSegment
 void structuredSelector

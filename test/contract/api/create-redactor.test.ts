@@ -164,6 +164,399 @@ describe('Reusable redactor factory contract', () => {
     })).not.toThrow()
   })
 
+  describe('Substring rule validation', () => {
+    const replaceToken = (value: string, pattern: RegExp) => value.replace(pattern, '[TOKEN]')
+
+    it.each([
+      ['invalid stringTests container', { stringTests: /token/ }, /options\.stringTests: stringTests must be an array/i],
+      ['invalid entry shape', { stringTests: [42] }, /options\.stringTests\[0\]: string test entries must be RegExp instances or substring rule objects/i],
+      [
+        'unsupported structured field',
+        { stringTests: [{ pattern: /token/, replacer: replaceToken, censor: '[TOKEN]' }] },
+        /options\.stringTests\[0\]: unsupported option "censor"/i,
+      ],
+      [
+        'missing structured pattern',
+        { stringTests: [{ replacer: replaceToken }] },
+        /options\.stringTests\[0\]\.pattern: pattern must be a RegExp instance/i,
+      ],
+      [
+        'missing structured replacer',
+        { stringTests: [{ pattern: /token/ }] },
+        /options\.stringTests\[0\]\.replacer: replacer must be a function/i,
+      ],
+      [
+        'non-RegExp structured pattern',
+        { stringTests: [{ pattern: 'token', replacer: replaceToken }] },
+        /options\.stringTests\[0\]\.pattern: pattern must be a RegExp instance/i,
+      ],
+      [
+        'non-function structured replacer',
+        { stringTests: [{ pattern: /token/, replacer: '[TOKEN]' }] },
+        /options\.stringTests\[0\]\.replacer: replacer must be a function/i,
+      ],
+      ['unsafe nested-quantifier pattern', { stringTests: [/^(a+)+$/] }, /unsafe substring rule pattern/i],
+      ['unsafe overlapping-alternation pattern', { stringTests: [/^(a|aa)+$/] }, /unsafe substring rule pattern/i],
+      ['sticky pattern', { stringTests: [/token/y] }, /substring rule pattern must not use sticky flag/i],
+      [
+        'overlong pattern',
+        { stringTests: [new RegExp('a'.repeat(257))] },
+        /substring rule pattern source must be at most 256 characters/i,
+      ],
+      ['empty non-capturing group /(?:)/ pattern', { stringTests: [new RegExp('')] }, /substring rule pattern must not match zero-length strings/i],
+      ['start-anchor pattern', { stringTests: [/^/] }, /substring rule pattern must not match zero-length strings/i],
+      ['end-anchor pattern', { stringTests: [/$/] }, /substring rule pattern must not match zero-length strings/i],
+      ['optional pattern', { stringTests: [/a?/] }, /substring rule pattern must not match zero-length strings/i],
+      ['lookahead pattern', { stringTests: [/(?=secret)/] }, /substring rule pattern must not match zero-length strings/i],
+      [
+        'structured zero-length pattern',
+        { stringTests: [{ pattern: /^/, replacer: replaceToken }] },
+        /options\.stringTests\[0\]\.pattern: substring rule pattern must not match zero-length strings/i,
+      ],
+    ])('fails fast for %s', (_label, options, expectedMessage) => {
+      expect(() => deepRedact(options as never)).toThrowError(expectedMessage)
+    })
+
+    it('accepts safe global substring patterns without mutating caller-owned lastIndex during validation', () => {
+      const barePattern = /token=[^&\s]+/g
+      const structuredPattern = /api-key=[^&\s]+/g
+      barePattern.lastIndex = 7
+      structuredPattern.lastIndex = 11
+
+      expect(() => deepRedact({
+        stringTests: [
+          barePattern,
+          {
+            pattern: structuredPattern,
+            replacer: replaceToken,
+          },
+        ],
+      })).not.toThrow()
+      expect(barePattern.lastIndex).toBe(7)
+      expect(structuredPattern.lastIndex).toBe(11)
+    })
+  })
+
+  describe('Substring rule redaction', () => {
+    it('redacts nested object properties and array elements for bare RegExp rules with the default censor', () => {
+      const redact = deepRedact({
+        stringTests: [/token=[^&\s]+/],
+      })
+      const payload = {
+        user: {
+          note: 'safe token=secret tail',
+          safe: 'visible',
+        },
+        events: [
+          'token=array-secret',
+          'visible',
+        ],
+      }
+
+      expect(redact(payload)).toEqual({
+        user: {
+          note: '[REDACTED]',
+          safe: 'visible',
+        },
+        events: [
+          '[REDACTED]',
+          'visible',
+        ],
+      })
+      expect(payload.user.note).toBe('safe token=secret tail')
+    })
+
+    it('uses the resolved whole-value censor behaviour for bare RegExp matches', () => {
+      const literalRedact = deepRedact({
+        censor: '[MASKED]',
+        stringTests: [/secret/],
+      })
+      const sameLengthRedact = deepRedact({
+        censor: '*',
+        replaceStringByLength: true,
+        stringTests: [/secret/],
+      })
+
+      expect(literalRedact({ note: 'prefix secret suffix' })).toEqual({
+        note: '[MASKED]',
+      })
+      expect(sameLengthRedact({ note: 'prefix secret suffix' })).toEqual({
+        note: '*'.repeat('prefix secret suffix'.length),
+      })
+    })
+
+    it('provides function censors with substring match context for bare RegExp matches', () => {
+      const calls: Array<readonly [unknown, FunctionCensorContext, number]> = []
+      const censor = function (value: unknown, ctx: FunctionCensorContext): string {
+        calls.push([value, ctx, arguments.length])
+        return `${ctx.matchedPath.join('.')}:${String(value)}`
+      }
+      const redact = deepRedact({
+        censor,
+        stringTests: [/token=[^&\s]+/g],
+      })
+
+      expect(redact({ user: { note: 'token=secret' } })).toEqual({
+        user: {
+          note: 'user.note:token=secret',
+        },
+      })
+      expect(calls).toHaveLength(1)
+      expect(calls[0]?.[2]).toBe(2)
+      expect(calls[0]?.[1].matchedPath).toEqual(['user', 'note'])
+      expect(calls[0]?.[1].terminalKey).toBe('note')
+      expect(calls[0]?.[1].rootInput).toEqual({ user: { note: 'token=secret' } })
+      expect(calls[0]?.[1].rulePath).toHaveLength(1)
+      expect(calls[0]?.[1].rulePath[0]).toBeInstanceOf(RegExp)
+      expect((calls[0]?.[1].rulePath[0] as RegExp).source).toBe('token=[^&\\s]+')
+    })
+
+    it('calls structured replacers once with the original string and an invocation-local pattern clone', () => {
+      const callerPattern = /token=[^&\s]+/g
+      const seenPatterns: RegExp[] = []
+      const replacer = vi.fn((value: string, pattern: RegExp) => {
+        seenPatterns.push(pattern)
+        pattern.lastIndex = 99
+        return value.replace(pattern, 'token=[REDACTED]')
+      })
+      const redact = deepRedact({
+        stringTests: [
+          {
+            pattern: callerPattern,
+            replacer,
+          },
+        ],
+      })
+
+      expect(redact({
+        note: 'safe token=one middle token=two tail',
+      })).toEqual({
+        note: 'safe token=[REDACTED] middle token=[REDACTED] tail',
+      })
+      expect(replacer).toHaveBeenCalledTimes(1)
+      expect(replacer).toHaveBeenCalledWith('safe token=one middle token=two tail', expect.any(RegExp))
+      expect(seenPatterns[0]).not.toBe(callerPattern)
+      expect(seenPatterns[0]?.source).toBe('token=[^&\\s]+')
+      expect(seenPatterns[0]?.flags).toBe('g')
+      expect(callerPattern.lastIndex).toBe(0)
+    })
+
+    it('stops after the first matching substring rule in configuration order', () => {
+      const laterStructured = vi.fn((value: string) => value.replace('token', '[TOKEN]'))
+      const bareFirst = deepRedact({
+        censor: '[WHOLE]',
+        stringTests: [
+          /token/,
+          {
+            pattern: /token/,
+            replacer: laterStructured,
+          },
+        ],
+      })
+      const structuredFirst = deepRedact({
+        censor: '[WHOLE]',
+        stringTests: [
+          {
+            pattern: /token/,
+            replacer: (value) => value.replace('token', '[TOKEN]'),
+          },
+          /token/,
+        ],
+      })
+
+      expect(bareFirst({ note: 'token=secret' })).toEqual({
+        note: '[WHOLE]',
+      })
+      expect(laterStructured).not.toHaveBeenCalled()
+      expect(structuredFirst({ note: 'token=secret' })).toEqual({
+        note: '[TOKEN]=secret',
+      })
+    })
+
+    it('leaves unmatched strings, non-string values, and root primitive strings unchanged', () => {
+      const redact = deepRedact({
+        stringTests: [
+          {
+            pattern: /token=[^&\s]+/,
+            replacer: (value) => value.replace(/token=[^&\s]+/, 'token=[REDACTED]'),
+          },
+        ],
+      })
+
+      expect(redact({
+        note: 'visible',
+        count: 2,
+        nested: {
+          ok: true,
+          empty: null,
+        },
+      })).toEqual({
+        note: 'visible',
+        count: 2,
+        nested: {
+          ok: true,
+          empty: null,
+        },
+      })
+      expect(redact('token=secret')).toBe('token=secret')
+    })
+
+    it('does not apply substring rules to values already selected by existing path or key targeting', () => {
+      const substringReplacer = vi.fn((value: string) => value.replace(/token=[^&\s]+/, 'token=[SUBSTRING]'))
+      const redact = deepRedact({
+        censor: '[WHOLE]',
+        keys: ['direct'],
+        paths: [
+          {
+            path: 'retained',
+            retainStructure: true,
+          },
+        ],
+        stringTests: [
+          {
+            pattern: /token=[^&\s]+/,
+            replacer: substringReplacer,
+          },
+        ],
+      })
+
+      expect(redact({
+        direct: 'token=key',
+        retained: {
+          inner: 'token=retained',
+        },
+        free: 'token=free',
+      })).toEqual({
+        direct: '[WHOLE]',
+        retained: {
+          inner: '[WHOLE]',
+        },
+        free: 'token=[SUBSTRING]',
+      })
+      expect(substringReplacer).toHaveBeenCalledTimes(1)
+    })
+
+    it('preserves sparse-array holes for substring rewrites and uses array compaction for bare substring removal', () => {
+      const rewritten = deepRedact({
+        stringTests: [
+          {
+            pattern: /token=[^&\s]+/,
+            replacer: (value) => value.replace(/token=[^&\s]+/, 'token=[REDACTED]'),
+          },
+        ],
+      })(['visible', , 'token=secret']) as unknown[]
+      const removed = deepRedact({
+        remove: true,
+        stringTests: [/token=[^&\s]+/],
+      })(['keep-first', , 'token=remove', 'keep-last']) as unknown[]
+
+      expect(rewritten).toHaveLength(3)
+      expect(rewritten[0]).toBe('visible')
+      expect(1 in rewritten).toBe(false)
+      expect(rewritten[2]).toBe('token=[REDACTED]')
+
+      expect(removed).toHaveLength(3)
+      expect(removed[0]).toBe('keep-first')
+      expect(1 in removed).toBe(false)
+      expect(removed[2]).toBe('keep-last')
+    })
+
+    it('does not copy the parent container when a structured replacer returns the original string unchanged', () => {
+      const input = { note: 'no match here', safe: 'also no match' }
+      const redact = deepRedact({
+        stringTests: [
+          {
+            pattern: /token=[^&\s]+/,
+            replacer: (value) => value,
+          },
+        ],
+      })
+
+      const result = redact(input)
+
+      expect(result).toBe(input)
+    })
+
+    it('removes object properties matched by bare substring rules when remove: true', () => {
+      const redact = deepRedact({
+        remove: true,
+        stringTests: [/token=[^&\s]+/],
+      })
+
+      expect(redact({
+        note: 'token=secret',
+        safe: 'visible',
+        nested: {
+          token: 'token=nested',
+          other: 'untouched',
+        },
+      })).toEqual({
+        safe: 'visible',
+        nested: {
+          other: 'untouched',
+        },
+      })
+    })
+
+    it('serialises after bare and structured substring redaction', () => {
+      const customSerialise = vi.fn((value: unknown) => JSON.stringify(value))
+      const bareRedact = deepRedact({
+        serialise: true,
+        stringTests: [/token=[^&\s]+/],
+      })
+      const structuredRedact = deepRedact({
+        serialise: customSerialise,
+        stringTests: [
+          {
+            pattern: /token=[^&\s]+/,
+            replacer: (value) => value.replace(/token=[^&\s]+/, 'token=[REDACTED]'),
+          },
+        ],
+      })
+
+      expect(bareRedact({ note: 'token=secret' })).toBe(JSON.stringify({ note: '[REDACTED]' }))
+      expect(structuredRedact({ note: 'token=secret' })).toBe(JSON.stringify({ note: 'token=[REDACTED]' }))
+      expect(customSerialise).toHaveBeenCalledWith({ note: 'token=[REDACTED]' })
+    })
+
+    it('isolates global RegExp state across repeated redaction calls and replacer pattern mutations', () => {
+      const barePattern = /token=[^&\s]+/g
+      const structuredPattern = /api-key=[^&\s]+/g
+      const redact = deepRedact({
+        stringTests: [
+          {
+            pattern: structuredPattern,
+            replacer: (value, pattern) => {
+              pattern.lastIndex = 99
+              return value.replace(pattern, 'api-key=[REDACTED]')
+            },
+          },
+          barePattern,
+        ],
+      })
+      barePattern.lastIndex = 7
+      structuredPattern.lastIndex = 11
+      const payload = {
+        first: 'api-key=one',
+        second: 'api-key=two',
+        bare: 'token=three',
+      }
+
+      expect(redact(payload)).toEqual({
+        first: 'api-key=[REDACTED]',
+        second: 'api-key=[REDACTED]',
+        bare: '[REDACTED]',
+      })
+      expect(redact(payload)).toEqual({
+        first: 'api-key=[REDACTED]',
+        second: 'api-key=[REDACTED]',
+        bare: '[REDACTED]',
+      })
+      expect(barePattern.lastIndex).toBe(7)
+      expect(structuredPattern.lastIndex).toBe(11)
+    })
+  })
+
   it('redacts exact-key matches anywhere in nested payloads through keys', () => {
     const redact = deepRedact({
       keys: ['password'],
@@ -1165,7 +1558,7 @@ describe('Reusable redactor factory contract', () => {
   })
 })
 
-describe('Story 2.2: function censors and same-length string replacement', () => {
+describe('Function censors and same-length string replacement', () => {
   // ── validation failures ─────────────────────────────────────────────────────
 
   it.each([

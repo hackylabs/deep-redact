@@ -14,6 +14,8 @@ import {
   type PublicWildcardSegment,
   type Redactor,
   type RegexPathSegment,
+  type StringTest,
+  type SubstringRule,
   type StructuredPathSegment,
   type StructuredPathSelector,
 } from '@hackylabs/deep-redact'
@@ -83,6 +85,12 @@ const paths: PathEntry[] = [
 const selector: PathSelector = ['users', { ignore: 'admin' }, 'email']
 const ignoredSegment: IgnorePathSegment = { ignore: 'admin' }
 const keySelector: KeySelector = /token$/i
+const substringRule: SubstringRule = {
+  pattern: /token=[^&\s]+/g,
+  replacer: (value: string, pattern: RegExp) => value.replace(pattern, 'token=[REDACTED]'),
+}
+const bareStringTest: StringTest = /api-key=[^&\s]+/
+const structuredStringTest: StringTest = substringRule
 const regexPathSegment: RegexPathSegment = /^tenant-\d+$/
 const structuredSegment: StructuredPathSegment = /^tenant-\d+$/
 const structuredSelector: StructuredPathSelector = ['tenants', /^tenant-\d+$/, 'token']
@@ -91,6 +99,7 @@ const options: DeepRedactOptions = {
   censor: twoArgCensor,
   keys: ['password', /token$/i],
   paths,
+  stringTests: [bareStringTest, structuredStringTest],
   serialise: (value) => JSON.stringify(value) ?? 'null',
   replaceStringByLength: false,
 }
@@ -116,6 +125,9 @@ void twoArgCensor
 void structuredResult
 void aliasResult
 void selector
+void substringRule
+void bareStringTest
+void structuredStringTest
 void ignoredSegment
 void keySelector
 void regexPathSegment

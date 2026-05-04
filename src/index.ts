@@ -16,8 +16,10 @@ export type {
   RedactorFactory,
   RegexPathSegment,
   SerialiseOption,
+  StringTest,
   StructuredPathSegment,
   StructuredPathSelector,
+  SubstringRule,
 } from './types/public.js'
 
 export const deepRedact = createReusableRedactor

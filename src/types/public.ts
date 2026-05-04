@@ -1,6 +1,12 @@
 import type { DeepRedactOptions } from './config.js'
 
-export type { DeepRedactOptions, KeySelector, SerialiseOption } from './config.js'
+export type {
+  DeepRedactOptions,
+  KeySelector,
+  SerialiseOption,
+  StringTest,
+  SubstringRule,
+} from './config.js'
 export type {
   Censor,
   FunctionCensorContext,

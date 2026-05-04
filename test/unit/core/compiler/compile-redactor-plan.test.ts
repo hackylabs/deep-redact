@@ -140,6 +140,88 @@ describe('compiled exact-selector rule plan', () => {
     expect(tokenPattern.lastIndex).toBe(99)
   })
 
+  it('compiles substring rules into a frozen ordered plan with cloned patterns', () => {
+    const barePattern = /token=[^&\s]+/g
+    const structuredPattern = /api-key=[^&\s]+/i
+    const replacer = (value: string, pattern: RegExp) => value.replace(pattern, 'api-key=[REDACTED]')
+
+    const plan = compileRedactorPlan({
+      stringTests: [
+        barePattern,
+        {
+          pattern: structuredPattern,
+          replacer,
+        },
+      ],
+    })
+
+    expect(Object.isFrozen(plan.substringRules)).toBe(true)
+    expect(plan.substringRules).toHaveLength(2)
+    expect(plan.substringRules[0]).toMatchObject({
+      kind: 'whole-value',
+      pattern: expect.any(RegExp),
+    })
+    expect(plan.substringRules[1]).toMatchObject({
+      kind: 'structured-replacer',
+      pattern: expect.any(RegExp),
+      replacer,
+    })
+    expect(Object.isFrozen(plan.substringRules[0])).toBe(true)
+    expect(Object.isFrozen(plan.substringRules[1])).toBe(true)
+    expect(plan.substringRules[0]?.pattern).not.toBe(barePattern)
+    expect(plan.substringRules[0]?.pattern.source).toBe('token=[^&\\s]+')
+    expect(plan.substringRules[0]?.pattern.flags).toBe('g')
+    expect(plan.substringRules[1]?.pattern).not.toBe(structuredPattern)
+    expect(plan.substringRules[1]?.pattern.source).toBe('api-key=[^&\\s]+')
+    expect(plan.substringRules[1]?.pattern.flags).toBe('i')
+  })
+
+  it('does not share mutable substring RegExp state with caller-owned configuration', () => {
+    const barePattern = /token=[^&\s]+/g
+    const structuredPattern = /api-key=[^&\s]+/g
+    const plan = compileRedactorPlan({
+      stringTests: [
+        barePattern,
+        {
+          pattern: structuredPattern,
+          replacer: (value, pattern) => value.replace(pattern, 'api-key=[REDACTED]'),
+        },
+      ],
+    })
+
+    barePattern.lastIndex = 13
+    structuredPattern.lastIndex = 17
+
+    expect(plan.substringRules[0]?.pattern.lastIndex).toBe(0)
+    expect(plan.substringRules[1]?.pattern.lastIndex).toBe(0)
+    expect(plan.substringRules[0]?.pattern.test('token=secret')).toBe(true)
+    expect(barePattern.lastIndex).toBe(13)
+    expect(structuredPattern.lastIndex).toBe(17)
+  })
+
+  it('compiles cloned substring patterns with lastIndex=0 even when caller-owned lastIndex is non-zero at compile time', () => {
+    const barePattern = /token=[^&\s]+/g
+    const structuredPattern = /api-key=[^&\s]+/g
+
+    barePattern.lastIndex = 13
+    structuredPattern.lastIndex = 17
+
+    const plan = compileRedactorPlan({
+      stringTests: [
+        barePattern,
+        {
+          pattern: structuredPattern,
+          replacer: (value, pattern) => value.replace(pattern, 'api-key=[REDACTED]'),
+        },
+      ],
+    })
+
+    expect(plan.substringRules[0]?.pattern.lastIndex).toBe(0)
+    expect(plan.substringRules[1]?.pattern.lastIndex).toBe(0)
+    expect(barePattern.lastIndex).toBe(13)
+    expect(structuredPattern.lastIndex).toBe(17)
+  })
+
   it('rejects duplicate canonical exact-path selectors before compilation proceeds', () => {
     const report = validateConfig({
       paths: [

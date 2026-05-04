@@ -3,6 +3,7 @@ import type {
   CompiledExactPathRule,
   CompiledRedactionPolicy,
   CompiledRedactorPlan,
+  CompiledSubstringRule,
   FunctionCensorContext,
 } from '../compiler/compile-redactor-plan.js'
 import type { PathSegments } from '../../types/paths.js'
@@ -18,6 +19,7 @@ import {
   isRemovedValue,
   type RemovedValue,
 } from '../replacement/apply-redaction.js'
+import { cloneRegExp } from '../validation/regex-safety.js'
 
 type TraversableContainer = Record<string, unknown> | unknown[]
 type PolicySource = 'dynamic-path' | 'exact-key' | 'exact-path' | 'regex-key'
@@ -251,6 +253,69 @@ const buildFunctionCensorContext = (
     : { matchedPath, rulePath: rulePathCopy, rootInput }
 }
 
+// Clones the pattern per call so function censor contexts cannot share or mutate compiled regex state.
+const buildSubstringRulePath = (pattern: RegExp): PathSegments => {
+  return Object.freeze([cloneRegExp(pattern)]) as PathSegments
+}
+
+const patternMatchesString = (pattern: RegExp, value: string): boolean => {
+  pattern.lastIndex = 0
+  const matched = pattern.test(value)
+  pattern.lastIndex = 0
+
+  return matched
+}
+
+const applySubstringRule = (
+  value: string,
+  rule: CompiledSubstringRule,
+  context: TraversalContext,
+): TraversalResult | undefined => {
+  if (!patternMatchesString(rule.pattern, value)) {
+    return undefined
+  }
+
+  if (rule.kind === 'structured-replacer') {
+    const replacement = rule.replacer(value, cloneRegExp(rule.pattern))
+
+    return {
+      changed: replacement !== value,
+      value: replacement,
+    }
+  }
+
+  const fnContext = buildFunctionCensorContext(
+    context.pathSegments,
+    buildSubstringRulePath(rule.pattern),
+    context.rootInput,
+  )
+
+  return {
+    changed: true,
+    value: applyRedaction(value, rule.policy, fnContext),
+  }
+}
+
+const transformSubstringValue = (
+  value: unknown,
+  plan: CompiledRedactorPlan,
+  context: TraversalContext,
+): TraversalResult | undefined => {
+  if (typeof value !== 'string' || context.pathSegments.length === 0) {
+    return undefined
+  }
+
+  for (const rule of plan.substringRules) {
+    const result = applySubstringRule(value, rule, context)
+
+    if (result !== undefined) {
+      return result
+    }
+  }
+
+  return undefined
+}
+
 const transformArray = (
   value: readonly unknown[],
   plan: CompiledRedactorPlan,
@@ -405,6 +470,12 @@ const transformNode = (
   }
 
   if (!isTraversableContainer(value)) {
+    const substringResult = transformSubstringValue(value, plan, context)
+
+    if (substringResult !== undefined) {
+      return substringResult
+    }
+
     return {
       changed: false,
       value,

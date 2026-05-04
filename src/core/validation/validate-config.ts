@@ -15,6 +15,7 @@ const rootOptionNames = new Set<keyof DeepRedactOptions>([
   'replaceStringByLength',
   'retainStructure',
   'serialise',
+  'stringTests',
 ])
 
 const pathRuleOptionNames = new Set<keyof PathRule>([
@@ -23,6 +24,11 @@ const pathRuleOptionNames = new Set<keyof PathRule>([
   'remove',
   'replaceStringByLength',
   'retainStructure',
+])
+
+const substringRuleOptionNames = new Set([
+  'pattern',
+  'replacer',
 ])
 
 type ConfigRecord = Record<string, unknown>
@@ -197,6 +203,89 @@ const validateKeys = (
   })
 }
 
+const zeroLengthProbeValues = Object.freeze([
+  '',
+  'a',
+  'safe',
+  'secret',
+  'token=secret',
+  'api-key=secret',
+  'prefix-secret-suffix',
+])
+
+const patternCanMatchZeroLength = (pattern: RegExp): boolean => {
+  const matcher = new RegExp(pattern.source, pattern.flags)
+
+  return zeroLengthProbeValues.some((probe) => {
+    matcher.lastIndex = 0
+    const match = matcher.exec(probe)
+    matcher.lastIndex = 0
+
+    return match?.[0] === ''
+  })
+}
+
+const validateSubstringPattern = (
+  pattern: RegExp,
+  path: string,
+  issues: ValidationIssue[],
+): void => {
+  const unsupportedRegexMessage = getUnsupportedRegexMessage(
+    pattern,
+    'Substring rule pattern',
+    { allowGlobal: true },
+  )
+
+  if (unsupportedRegexMessage !== undefined) {
+    pushIssue(issues, path, unsupportedRegexMessage)
+  }
+
+  if (patternCanMatchZeroLength(pattern)) {
+    pushIssue(issues, path, 'Substring rule pattern must not match zero-length strings.')
+  }
+}
+
+const validateStringTests = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): void => {
+  if (value === undefined) {
+    return
+  }
+
+  if (!Array.isArray(value)) {
+    pushIssue(issues, path, 'stringTests must be an array.')
+    return
+  }
+
+  value.forEach((entry, index) => {
+    const entryPath = `${path}[${index}]`
+
+    if (isRegExp(entry)) {
+      validateSubstringPattern(entry, entryPath, issues)
+      return
+    }
+
+    if (!isPlainObject(entry)) {
+      pushIssue(issues, entryPath, 'string test entries must be RegExp instances or substring rule objects.')
+      return
+    }
+
+    validateAllowedOptions(entry, substringRuleOptionNames, entryPath, issues)
+
+    if (!isRegExp(entry.pattern)) {
+      pushIssue(issues, `${entryPath}.pattern`, 'pattern must be a RegExp instance.')
+    } else {
+      validateSubstringPattern(entry.pattern, `${entryPath}.pattern`, issues)
+    }
+
+    if (typeof entry.replacer !== 'function') {
+      pushIssue(issues, `${entryPath}.replacer`, 'replacer must be a function.')
+    }
+  })
+}
+
 const validatePathRule = (
   value: unknown,
   path: string,
@@ -293,6 +382,7 @@ export const validateConfig = (options: unknown): ValidationReport => {
   validateAllowedOptions(options, rootOptionNames, 'options', issues)
   validateCensorOption(options.censor, 'options', issues)
   validateKeys(options.keys, 'options.keys', issues)
+  validateStringTests(options.stringTests, 'options.stringTests', issues)
   validateBooleanOption(options.remove, 'options', 'remove', issues)
   validateBooleanOption(options.retainStructure, 'options', 'retainStructure', issues)
   validateBooleanOption(options.replaceStringByLength, 'options', 'replaceStringByLength', issues)

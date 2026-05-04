@@ -1,4 +1,7 @@
 //#region src/core/validation/regex-safety.ts
+const cloneRegExp = (pattern) => {
+	return new RegExp(pattern.source, pattern.flags);
+};
 const maxRegexSourceLength = 256;
 const nestedQuantifierRegexPattern = /\((?:\?:|\?=|\?!|\?<=|\?<!|\?<[^>]+>)?(?:\\.|[^()[\]\\]|\[[^\]]*])*(?:[+*]|\{\d+(?:,\d*)?\})(?:\\.|[^()[\]\\]|\[[^\]]*])*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
 const quantifiedGroupRegexPattern = /\((?:\?:|\?=|\?!|\?<=|\?<!|\?<[^>]+>)?((?:\\.|[^()[\]\\]|\[[^\]]*])*)\)(?:[+*]|\{\d+(?:,\d*)?\})/g;
@@ -69,8 +72,9 @@ const hasUnsafeOverlappingAlternation = (source) => {
 const lowercaseInitial = (value) => {
 	return `${value.charAt(0).toLowerCase()}${value.slice(1)}`;
 };
-const getUnsupportedRegexMessage = (selector, label) => {
-	if (selector.global || selector.sticky) return `${label} must not use global or sticky flags.`;
+const getUnsupportedRegexMessage = (selector, label, options = {}) => {
+	if (selector.sticky) return options.allowGlobal === true ? `${label} must not use sticky flag.` : `${label} must not use global or sticky flags.`;
+	if (selector.global && options.allowGlobal !== true) return `${label} must not use global or sticky flags.`;
 	if ([...selector.source].length > maxRegexSourceLength) return `${label} source must be at most ${maxRegexSourceLength} characters.`;
 	if (nestedQuantifierRegexPattern.test(selector.source)) return `Unsafe ${lowercaseInitial(label)} uses a nested quantified pattern.`;
 	if (hasUnsafeOverlappingAlternation(selector.source)) return `Unsafe ${lowercaseInitial(label)} uses an overlapping alternation pattern.`;
@@ -429,6 +433,23 @@ const compileRegexKeyRules = (keys, defaults) => {
 		policy: defaults
 	});
 };
+const isSubstringRule = (stringTest) => {
+	return !(stringTest instanceof RegExp);
+};
+const compileSubstringRules = (stringTests, defaults) => {
+	return Object.freeze(stringTests.map((stringTest) => {
+		if (isSubstringRule(stringTest)) return Object.freeze({
+			kind: "structured-replacer",
+			pattern: cloneRegExp(stringTest.pattern),
+			replacer: stringTest.replacer
+		});
+		return Object.freeze({
+			kind: "whole-value",
+			pattern: cloneRegExp(stringTest),
+			policy: defaults
+		});
+	}));
+};
 const compileRedactorPlan = (options = {}) => {
 	const defaults = createDefaultPolicy(options);
 	const compiledPathRules = compilePathRules(options.paths ?? [], defaults);
@@ -438,7 +459,8 @@ const compileRedactorPlan = (options = {}) => {
 		exactKeyRules: compileExactKeyRules(options.keys ?? [], defaults),
 		exactPathRules: compiledPathRules.exactPathRules,
 		regexKeyRules: compileRegexKeyRules(options.keys ?? [], defaults),
-		serialise: options.serialise
+		serialise: options.serialise,
+		substringRules: compileSubstringRules(options.stringTests ?? [], defaults)
 	});
 };
 //#endregion
@@ -562,6 +584,37 @@ const buildFunctionCensorContext = (pathSegments, rulePath, rootInput) => {
 		rootInput
 	};
 };
+const buildSubstringRulePath = (pattern) => {
+	return Object.freeze([cloneRegExp(pattern)]);
+};
+const patternMatchesString = (pattern, value) => {
+	pattern.lastIndex = 0;
+	const matched = pattern.test(value);
+	pattern.lastIndex = 0;
+	return matched;
+};
+const applySubstringRule = (value, rule, context) => {
+	if (!patternMatchesString(rule.pattern, value)) return;
+	if (rule.kind === "structured-replacer") {
+		const replacement = rule.replacer(value, cloneRegExp(rule.pattern));
+		return {
+			changed: replacement !== value,
+			value: replacement
+		};
+	}
+	const fnContext = buildFunctionCensorContext(context.pathSegments, buildSubstringRulePath(rule.pattern), context.rootInput);
+	return {
+		changed: true,
+		value: applyRedaction(value, rule.policy, fnContext)
+	};
+};
+const transformSubstringValue = (value, plan, context) => {
+	if (typeof value !== "string" || context.pathSegments.length === 0) return;
+	for (const rule of plan.substringRules) {
+		const result = applySubstringRule(value, rule, context);
+		if (result !== void 0) return result;
+	}
+};
 const transformArray = (value, plan, inheritedPolicy, canonicalPath, pathSegments, rootInput) => {
 	let transformedValue;
 	const removedIndexes = [];
@@ -643,10 +696,14 @@ const transformNode = (value, plan, context) => {
 			value: applyRedaction(value, activePolicy.policy, fnContext)
 		};
 	}
-	if (!isTraversableContainer(value)) return {
-		changed: false,
-		value
-	};
+	if (!isTraversableContainer(value)) {
+		const substringResult = transformSubstringValue(value, plan, context);
+		if (substringResult !== void 0) return substringResult;
+		return {
+			changed: false,
+			value
+		};
+	}
 	const inheritedPolicy = activePolicy;
 	return Array.isArray(value) ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput) : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput);
 };
@@ -737,7 +794,8 @@ const rootOptionNames = new Set([
 	"remove",
 	"replaceStringByLength",
 	"retainStructure",
-	"serialise"
+	"serialise",
+	"stringTests"
 ]);
 const pathRuleOptionNames = new Set([
 	"path",
@@ -746,6 +804,7 @@ const pathRuleOptionNames = new Set([
 	"replaceStringByLength",
 	"retainStructure"
 ]);
+const substringRuleOptionNames = new Set(["pattern", "replacer"]);
 const isPlainObject = (value) => {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
 	const prototype = Object.getPrototypeOf(value);
@@ -817,6 +876,51 @@ const validateKeys = (value, path, issues) => {
 		if (unsupportedSelectorMessage !== void 0) pushIssue(issues, entryPath, unsupportedSelectorMessage);
 	});
 };
+const zeroLengthProbeValues = Object.freeze([
+	"",
+	"a",
+	"safe",
+	"secret",
+	"token=secret",
+	"api-key=secret",
+	"prefix-secret-suffix"
+]);
+const patternCanMatchZeroLength = (pattern) => {
+	const matcher = new RegExp(pattern.source, pattern.flags);
+	return zeroLengthProbeValues.some((probe) => {
+		matcher.lastIndex = 0;
+		const match = matcher.exec(probe);
+		matcher.lastIndex = 0;
+		return match?.[0] === "";
+	});
+};
+const validateSubstringPattern = (pattern, path, issues) => {
+	const unsupportedRegexMessage = getUnsupportedRegexMessage(pattern, "Substring rule pattern", { allowGlobal: true });
+	if (unsupportedRegexMessage !== void 0) pushIssue(issues, path, unsupportedRegexMessage);
+	if (patternCanMatchZeroLength(pattern)) pushIssue(issues, path, "Substring rule pattern must not match zero-length strings.");
+};
+const validateStringTests = (value, path, issues) => {
+	if (value === void 0) return;
+	if (!Array.isArray(value)) {
+		pushIssue(issues, path, "stringTests must be an array.");
+		return;
+	}
+	value.forEach((entry, index) => {
+		const entryPath = `${path}[${index}]`;
+		if (isRegExp(entry)) {
+			validateSubstringPattern(entry, entryPath, issues);
+			return;
+		}
+		if (!isPlainObject(entry)) {
+			pushIssue(issues, entryPath, "string test entries must be RegExp instances or substring rule objects.");
+			return;
+		}
+		validateAllowedOptions(entry, substringRuleOptionNames, entryPath, issues);
+		if (!isRegExp(entry.pattern)) pushIssue(issues, `${entryPath}.pattern`, "pattern must be a RegExp instance.");
+		else validateSubstringPattern(entry.pattern, `${entryPath}.pattern`, issues);
+		if (typeof entry.replacer !== "function") pushIssue(issues, `${entryPath}.replacer`, "replacer must be a function.");
+	});
+};
 const validatePathRule = (value, path, defaults, issues, selectorCandidates) => {
 	if (!isPlainObject(value)) {
 		pushIssue(issues, path, `${path.split(".").at(-1) ?? "entry"} must be a string selector or path-rule object.`);
@@ -873,6 +977,7 @@ const validateConfig = (options) => {
 	validateAllowedOptions(options, rootOptionNames, "options", issues);
 	validateCensorOption(options.censor, "options", issues);
 	validateKeys(options.keys, "options.keys", issues);
+	validateStringTests(options.stringTests, "options.stringTests", issues);
 	validateBooleanOption(options.remove, "options", "remove", issues);
 	validateBooleanOption(options.retainStructure, "options", "retainStructure", issues);
 	validateBooleanOption(options.replaceStringByLength, "options", "replaceStringByLength", issues);

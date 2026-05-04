@@ -1,9 +1,17 @@
+export const cloneRegExp = (pattern: RegExp): RegExp => {
+  return new RegExp(pattern.source, pattern.flags)
+}
+
 const maxRegexSourceLength = 256
 const nestedQuantifierRegexPattern = /\((?:\?:|\?=|\?!|\?<=|\?<!|\?<[^>]+>)?(?:\\.|[^()[\]\\]|\[[^\]]*])*(?:[+*]|\{\d+(?:,\d*)?\})(?:\\.|[^()[\]\\]|\[[^\]]*])*\)(?:[+*]|\{\d+(?:,\d*)?\})/
 const quantifiedGroupRegexPattern = /\((?:\?:|\?=|\?!|\?<=|\?<!|\?<[^>]+>)?((?:\\.|[^()[\]\\]|\[[^\]]*])*)\)(?:[+*]|\{\d+(?:,\d*)?\})/g
 
 export const isRegExp = (value: unknown): value is RegExp => {
   return value instanceof RegExp
+}
+
+interface RegexSafetyOptions {
+  readonly allowGlobal?: boolean
 }
 
 const splitRegexAlternatives = (source: string): readonly string[] => {
@@ -89,8 +97,18 @@ const lowercaseInitial = (value: string): string => {
   return `${value.charAt(0).toLowerCase()}${value.slice(1)}`
 }
 
-export const getUnsupportedRegexMessage = (selector: RegExp, label: string): string | undefined => {
-  if (selector.global || selector.sticky) {
+export const getUnsupportedRegexMessage = (
+  selector: RegExp,
+  label: string,
+  options: RegexSafetyOptions = {},
+): string | undefined => {
+  if (selector.sticky) {
+    return options.allowGlobal === true
+      ? `${label} must not use sticky flag.`
+      : `${label} must not use global or sticky flags.`
+  }
+
+  if (selector.global && options.allowGlobal !== true) {
     return `${label} must not use global or sticky flags.`
   }
 
