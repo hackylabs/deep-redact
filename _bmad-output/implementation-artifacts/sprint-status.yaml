@@ -54,7 +54,7 @@ development_status:
   2-1-apply-literal-replacement-removal-and-retain-structure-handling: done
   2-2-support-function-censors-and-same-length-string-replacement: done
   2-3-redact-matched-substrings-in-nested-string-values: done
-  2-4-redact-matching-root-primitive-string-inputs: backlog
+  2-4-redact-matching-root-primitive-string-inputs: done
   2-5-deterministic-precedence-across-exact-path-structured-path-exact-key-regex-property-and-substring-rules: backlog
   2-6-enable-optional-fuzzy-and-case-insensitive-matching-for-literal-string-key-rules: backlog
   epic-2-retrospective: optional

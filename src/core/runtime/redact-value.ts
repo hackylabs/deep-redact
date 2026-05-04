@@ -296,17 +296,44 @@ const applySubstringRule = (
   }
 }
 
+const applyRootPrimitiveSubstringMatch = (
+  value: string,
+  rule: CompiledSubstringRule,
+  plan: CompiledRedactorPlan,
+  context: TraversalContext,
+): TraversalResult | undefined => {
+  if (!patternMatchesString(rule.pattern, value)) {
+    return undefined
+  }
+
+  const fnContext = buildFunctionCensorContext(
+    context.pathSegments,
+    buildSubstringRulePath(rule.pattern),
+    context.rootInput,
+  )
+  const policy = rule.kind === 'whole-value' ? rule.policy : plan.defaults
+
+  return {
+    changed: true,
+    value: applyRedaction(value, policy, fnContext),
+  }
+}
+
 const transformSubstringValue = (
   value: unknown,
   plan: CompiledRedactorPlan,
   context: TraversalContext,
 ): TraversalResult | undefined => {
-  if (typeof value !== 'string' || context.pathSegments.length === 0) {
+  if (typeof value !== 'string') {
     return undefined
   }
 
+  const isRootInput = context.pathSegments.length === 0
+
   for (const rule of plan.substringRules) {
-    const result = applySubstringRule(value, rule, context)
+    const result = isRootInput
+      ? applyRootPrimitiveSubstringMatch(value, rule, plan, context)
+      : applySubstringRule(value, rule, context)
 
     if (result !== undefined) {
       return result

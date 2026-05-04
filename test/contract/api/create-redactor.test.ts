@@ -373,7 +373,7 @@ describe('Reusable redactor factory contract', () => {
       })
     })
 
-    it('leaves unmatched strings, non-string values, and root primitive strings unchanged', () => {
+    it('leaves unmatched strings and non-string values unchanged', () => {
       const redact = deepRedact({
         stringTests: [
           {
@@ -398,7 +398,6 @@ describe('Reusable redactor factory contract', () => {
           empty: null,
         },
       })
-      expect(redact('token=secret')).toBe('token=secret')
     })
 
     it('does not apply substring rules to values already selected by existing path or key targeting', () => {
@@ -554,6 +553,157 @@ describe('Reusable redactor factory contract', () => {
       })
       expect(barePattern.lastIndex).toBe(7)
       expect(structuredPattern.lastIndex).toBe(11)
+    })
+  })
+
+  describe('Story 2.4: root primitive string redaction', () => {
+    it('redacts a matching root string with the default censor for a bare RegExp rule', () => {
+      const redact = deepRedact({
+        stringTests: [/token=[^&\s]+/],
+      })
+
+      expect(redact('token=secret')).toBe('[REDACTED]')
+    })
+
+    it('redacts a matching root string with a custom literal censor for a bare RegExp rule', () => {
+      const redact = deepRedact({
+        censor: '[MASKED]',
+        stringTests: [/token=[^&\s]+/],
+      })
+
+      expect(redact('token=secret')).toBe('[MASKED]')
+    })
+
+    it('provides function censors with correct context for a bare RegExp match on a root string', () => {
+      const calls: Array<{ value: unknown; ctx: FunctionCensorContext }> = []
+      const censor = (_value: unknown, ctx: FunctionCensorContext) => {
+        calls.push({ value: _value, ctx })
+        return '[FN]'
+      }
+      const rootInput = 'token=secret'
+      const redact = deepRedact({
+        censor,
+        stringTests: [/token=[^&\s]+/g],
+      })
+
+      expect(redact(rootInput)).toBe('[FN]')
+      expect(calls).toHaveLength(1)
+      expect(calls[0]!.value).toBe(rootInput)
+      expect(calls[0]!.ctx.matchedPath).toEqual([])
+      expect(Object.hasOwn(calls[0]!.ctx, 'terminalKey')).toBe(false)
+      expect(calls[0]!.ctx.rootInput).toBe(rootInput)
+      expect(calls[0]!.ctx.rulePath).toHaveLength(1)
+      expect(calls[0]!.ctx.rulePath[0]).toBeInstanceOf(RegExp)
+      expect((calls[0]!.ctx.rulePath[0] as RegExp).source).toBe('token=[^&\\s]+')
+    })
+
+    it('applies same-length replacement to a matching root string', () => {
+      const rootInput = 'token=secret'
+      const redact = deepRedact({
+        censor: '*',
+        replaceStringByLength: true,
+        stringTests: [/token=[^&\s]+/],
+      })
+
+      expect(redact(rootInput)).toBe('*'.repeat(rootInput.length))
+    })
+
+    it('redacts a matching root string using whole-value censor for a structured rule without calling the replacer', () => {
+      const replacer = vi.fn((value: string) => value.replace(/token=[^&\s]+/, 'token=[REDACTED]'))
+      const redact = deepRedact({
+        stringTests: [{ pattern: /token=[^&\s]+/, replacer }],
+      })
+
+      expect(redact('token=secret')).toBe('[REDACTED]')
+      expect(replacer).toHaveBeenCalledTimes(0)
+    })
+
+    it('provides function censors with correct context for a structured rule match on a root string', () => {
+      const calls: Array<{ value: unknown; ctx: FunctionCensorContext }> = []
+      const censor = (_value: unknown, ctx: FunctionCensorContext) => {
+        calls.push({ value: _value, ctx })
+        return '[FN]'
+      }
+      const replacer = vi.fn((value: string) => value.replace(/token=[^&\s]+/, 'token=[REDACTED]'))
+      const rootInput = 'token=secret'
+      const redact = deepRedact({
+        censor,
+        stringTests: [{ pattern: /token=[^&\s]+/, replacer }],
+      })
+
+      expect(redact(rootInput)).toBe('[FN]')
+      expect(calls).toHaveLength(1)
+      expect(calls[0]!.ctx.matchedPath).toEqual([])
+      expect(Object.hasOwn(calls[0]!.ctx, 'terminalKey')).toBe(false)
+      expect(calls[0]!.ctx.rootInput).toBe(rootInput)
+      expect(calls[0]!.ctx.rulePath).toHaveLength(1)
+      expect(calls[0]!.ctx.rulePath[0]).toBeInstanceOf(RegExp)
+      expect((calls[0]!.ctx.rulePath[0] as RegExp).source).toBe('token=[^&\\s]+')
+      expect(replacer).not.toHaveBeenCalled()
+    })
+
+    it('returns undefined when remove: true matches a root string', () => {
+      const redact = deepRedact({
+        remove: true,
+        stringTests: [/token=[^&\s]+/],
+      })
+
+      expect(redact('token=secret')).toBeUndefined()
+      expect(redact('no-match')).toBe('no-match')
+    })
+
+    it('returns root string unchanged when no substring rule matches', () => {
+      const redact = deepRedact({
+        stringTests: [/token=[^&\s]+/],
+      })
+
+      expect(redact('no-match-here')).toBe('no-match-here')
+    })
+
+    it('returns non-string root primitives unchanged', () => {
+      const redact = deepRedact({
+        stringTests: [/token=[^&\s]+/],
+      })
+
+      expect(redact(42)).toBe(42)
+      expect(redact(true)).toBe(true)
+      expect(redact(null)).toBe(null)
+    })
+
+    it('stops at the first matching rule for root string inputs', () => {
+      const firstRedact = deepRedact({
+        censor: '[FIRST]',
+        stringTests: [/token/, /secret/],
+      })
+      const secondRedact = deepRedact({
+        censor: '[SECOND]',
+        stringTests: [/nomatch/, /token/],
+      })
+
+      expect(firstRedact('token=secret')).toBe('[FIRST]')
+      expect(secondRedact('token=secret')).toBe('[SECOND]')
+    })
+
+    it('passes the redacted root string to a custom serialise function', () => {
+      const serialise = vi.fn((value: unknown) => JSON.stringify(value))
+      const redact = deepRedact({
+        serialise,
+        stringTests: [/token=[^&\s]+/],
+      })
+
+      expect(redact('token=secret')).toBe('"[REDACTED]"')
+      expect(serialise).toHaveBeenCalledWith('[REDACTED]')
+    })
+
+    it('returns the raw redacted string when serialise: false, not a JSON-stringified value', () => {
+      const redact = deepRedact({
+        serialise: false,
+        stringTests: [/token=[^&\s]+/],
+      })
+      const result = redact('token=secret')
+
+      expect(result).toBe('[REDACTED]')
+      expect(result).not.toBe('"[REDACTED]"')
     })
   })
 

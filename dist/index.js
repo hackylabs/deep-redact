@@ -608,10 +608,19 @@ const applySubstringRule = (value, rule, context) => {
 		value: applyRedaction(value, rule.policy, fnContext)
 	};
 };
+const applyRootPrimitiveSubstringMatch = (value, rule, plan, context) => {
+	if (!patternMatchesString(rule.pattern, value)) return;
+	const fnContext = buildFunctionCensorContext(context.pathSegments, buildSubstringRulePath(rule.pattern), context.rootInput);
+	return {
+		changed: true,
+		value: applyRedaction(value, rule.kind === "whole-value" ? rule.policy : plan.defaults, fnContext)
+	};
+};
 const transformSubstringValue = (value, plan, context) => {
-	if (typeof value !== "string" || context.pathSegments.length === 0) return;
+	if (typeof value !== "string") return;
+	const isRootInput = context.pathSegments.length === 0;
 	for (const rule of plan.substringRules) {
-		const result = applySubstringRule(value, rule, context);
+		const result = isRootInput ? applyRootPrimitiveSubstringMatch(value, rule, plan, context) : applySubstringRule(value, rule, context);
 		if (result !== void 0) return result;
 	}
 };
