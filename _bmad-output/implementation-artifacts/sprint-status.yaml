@@ -50,7 +50,7 @@ development_status:
   1-6-match-sensitive-fields-by-regex-based-path-segments: done
   epic-1-retrospective: optional
 
-  epic-2: in-progress
+  epic-2: done
   2-1-apply-literal-replacement-removal-and-retain-structure-handling: done
   2-2-support-function-censors-and-same-length-string-replacement: done
   2-3-redact-matched-substrings-in-nested-string-values: done
