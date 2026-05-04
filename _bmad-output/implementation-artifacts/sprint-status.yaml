@@ -34,7 +34,7 @@
 # - Scrum Master typically creates the next story after the previous one is 'done'
 
 generated: 2026-04-13T09:43:13+0100
-last_updated: 2026-05-04T15:52:54+0100
+last_updated: 2026-05-04T19:16:48+0100
 project: deep-redact
 project_key: NOKEY
 tracking_system: file-system
@@ -59,8 +59,8 @@ development_status:
   2-6-enable-optional-fuzzy-and-case-insensitive-matching-for-literal-string-key-rules: done
   epic-2-retrospective: optional
 
-  epic-3: backlog
-  3-1-redact-a-canonical-nested-mixed-payload-without-post-init-runtime-throws: backlog
+  epic-3: in-progress
+  3-1-redact-a-canonical-nested-mixed-payload-without-post-init-runtime-throws: done
   3-2-handle-circular-references-and-revisited-identities-safely: backlog
   3-3-resolve-built-in-and-custom-transformers-deterministically: backlog
   3-4-exclude-ignored-value-types-from-descendant-redaction-while-preserving-safe-output: backlog

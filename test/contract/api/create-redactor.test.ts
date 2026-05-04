@@ -1046,6 +1046,242 @@ describe('Reusable redactor factory contract', () => {
     })
   })
 
+  describe('Canonical nested mixed payload traversal', () => {
+    const createCanonicalMixedPayloadKeyCensor = () => vi.fn((_value: unknown, ctx: FunctionCensorContext) => {
+      const firstRuleSegment = ctx.rulePath[0]
+
+      return firstRuleSegment instanceof RegExp ? '[REGEX-KEY]' : '[EXACT-KEY]'
+    })
+
+    const createCanonicalMixedPayloadSubstringReplacer = () => vi.fn((value: string, pattern: RegExp) => {
+      return value.replace(pattern, 'token=[SUBSTRING]')
+    })
+
+    const createCanonicalMixedPayload = (
+      options: {
+        readonly batchOneKeep?: string
+        readonly freeText?: string
+        readonly metadataPublic?: string
+        readonly objectInArraySubstring?: string
+        readonly regexSessionToken?: string
+        readonly sessionNote?: string
+      } = {},
+    ) => ({
+      identity: {
+        exact: {
+          password: 'token=exact-path',
+          safeNumber: 42,
+          safeBoolean: false,
+          safeNull: null,
+          safeUndefined: undefined,
+        },
+        retained: {
+          directSecret: 'token=retained-exact-key',
+          sessionToken: 'token=retained-regex-key',
+          note: 'token=retained-substring',
+          override: 'token=retained-override',
+          nestedArray: [
+            'token=retained-array-item',
+            {
+              sessionToken: 'token=retained-object-in-array',
+              publicNote: 'token=retained-public-note',
+            },
+          ],
+        },
+        batches: [
+          {
+            note: 'token=dynamic-zero',
+            keep: 'visible batch zero',
+            flag: true,
+          },
+          {
+            note: 'token=dynamic-one',
+            keep: options.batchOneKeep ?? 'visible batch one',
+            count: 2,
+            safeUndefined: undefined,
+          },
+        ],
+        freeText: options.freeText ?? 'token=free-text',
+        safeRootBoolean: true,
+      },
+      sessions: [
+        {
+          directSecret: 'token=exact-key-array',
+          sessionToken: options.regexSessionToken ?? 'token=regex-key-array',
+          note: options.sessionNote ?? 'visible session note',
+          flags: [true, null, undefined],
+        },
+        {
+          eventList: [
+            'visible event',
+            {
+              note: options.objectInArraySubstring ?? 'token=substring-object-in-array',
+              safeNumber: 9,
+            },
+          ],
+          safeNull: null,
+        },
+      ],
+      metadata: {
+        public: options.metadataPublic ?? 'visible metadata',
+        nullable: null,
+        safeUndefined: undefined,
+      },
+    })
+
+    const createCanonicalMixedPayloadExpectedResult = (
+      options: {
+        readonly batchOneKeep?: string
+        readonly metadataPublic?: string
+        readonly sessionNote?: string
+      } = {},
+    ) => ({
+      identity: {
+        exact: {
+          password: '[EXACT-PATH]',
+          safeNumber: 42,
+          safeBoolean: false,
+          safeNull: null,
+          safeUndefined: undefined,
+        },
+        retained: {
+          directSecret: '[INHERITED-PATH]',
+          sessionToken: '[INHERITED-PATH]',
+          note: '[INHERITED-PATH]',
+          override: '[EXACT-PATH]',
+          nestedArray: [
+            '[INHERITED-PATH]',
+            {
+              sessionToken: '[INHERITED-PATH]',
+              publicNote: '[INHERITED-PATH]',
+            },
+          ],
+        },
+        batches: [
+          {
+            note: '[DYNAMIC-PATH]',
+            keep: 'visible batch zero',
+            flag: true,
+          },
+          {
+            note: '[DYNAMIC-PATH]',
+            keep: options.batchOneKeep ?? 'visible batch one',
+            count: 2,
+            safeUndefined: undefined,
+          },
+        ],
+        freeText: 'token=[SUBSTRING]',
+        safeRootBoolean: true,
+      },
+      sessions: [
+        {
+          directSecret: '[EXACT-KEY]',
+          sessionToken: '[REGEX-KEY]',
+          note: options.sessionNote ?? 'visible session note',
+          flags: [true, null, undefined],
+        },
+        {
+          eventList: [
+            'visible event',
+            {
+              note: 'token=[SUBSTRING]',
+              safeNumber: 9,
+            },
+          ],
+          safeNull: null,
+        },
+      ],
+      metadata: {
+        public: options.metadataPublic ?? 'visible metadata',
+        nullable: null,
+        safeUndefined: undefined,
+      },
+    })
+
+    const createCanonicalMixedPayloadRedactor = (
+      keyCensor = createCanonicalMixedPayloadKeyCensor(),
+      substringReplacer = createCanonicalMixedPayloadSubstringReplacer(),
+    ) => ({
+      keyCensor,
+      substringReplacer,
+      redact: deepRedact({
+        censor: keyCensor,
+        keys: ['directSecret', /token$/i],
+        paths: [
+          {
+            path: 'identity.exact.password',
+            censor: '[EXACT-PATH]',
+          },
+          {
+            path: 'identity.retained',
+            censor: '[INHERITED-PATH]',
+            retainStructure: true,
+          },
+          {
+            path: 'identity.retained.override',
+            censor: '[EXACT-PATH]',
+          },
+          {
+            path: 'identity.batches.*.note',
+            censor: '[DYNAMIC-PATH]',
+          },
+        ],
+        stringTests: [
+          {
+            pattern: /token=[^&\s]+/,
+            replacer: substringReplacer,
+          },
+        ],
+      }),
+    })
+
+    it('redacts the canonical mixed payload in one pass while preserving untouched supported siblings', () => {
+      const payload = createCanonicalMixedPayload()
+      const originalPayload = structuredClone(payload)
+      const expected = createCanonicalMixedPayloadExpectedResult()
+      const { redact, keyCensor, substringReplacer } = createCanonicalMixedPayloadRedactor()
+      const result = redact(payload)
+
+      expect(result).toStrictEqual(expected)
+      expect(result).not.toBe(payload)
+      expect(payload).toStrictEqual(originalPayload)
+      expect(keyCensor).toHaveBeenCalledTimes(2)
+      expect(substringReplacer).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps repeated canonical mixed-payload calls independent across fixture instances', () => {
+      const firstPayload = createCanonicalMixedPayload()
+      const secondPayload = createCanonicalMixedPayload({
+        batchOneKeep: 'visible batch one second call',
+        freeText: 'token=free-text-second',
+        metadataPublic: 'visible metadata second call',
+        objectInArraySubstring: 'token=substring-object-in-array-second',
+        regexSessionToken: 'token=regex-key-array-second',
+        sessionNote: 'visible session note second call',
+      })
+      const firstOriginalPayload = structuredClone(firstPayload)
+      const secondOriginalPayload = structuredClone(secondPayload)
+      const firstExpected = createCanonicalMixedPayloadExpectedResult()
+      const secondExpected = createCanonicalMixedPayloadExpectedResult({
+        batchOneKeep: 'visible batch one second call',
+        metadataPublic: 'visible metadata second call',
+        sessionNote: 'visible session note second call',
+      })
+      const { redact, keyCensor, substringReplacer } = createCanonicalMixedPayloadRedactor()
+      const firstResult = redact(firstPayload)
+      const secondResult = redact(secondPayload)
+
+      expect(firstResult).toStrictEqual(firstExpected)
+      expect(secondResult).toStrictEqual(secondExpected)
+      expect(firstResult).not.toBe(firstPayload)
+      expect(secondResult).not.toBe(secondPayload)
+      expect(firstPayload).toStrictEqual(firstOriginalPayload)
+      expect(secondPayload).toStrictEqual(secondOriginalPayload)
+      expect(keyCensor).toHaveBeenCalledTimes(4)
+      expect(substringReplacer).toHaveBeenCalledTimes(4)
+    })
+  })
+
   it('redacts exact-key matches anywhere in nested payloads through keys', () => {
     const redact = deepRedact({
       keys: ['password'],
