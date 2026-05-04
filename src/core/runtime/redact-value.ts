@@ -46,8 +46,48 @@ interface DirectKeyMatchResult {
 }
 
 interface TraversalResult {
+  readonly cacheValue: RemovedValue | unknown
   readonly changed: boolean
+  readonly pathStable: boolean
   readonly value: RemovedValue | unknown
+}
+
+interface CompletedTraversalRecord {
+  readonly canonicalPath: string
+  readonly pathStable: boolean
+  readonly ruleContextKey: string
+  readonly value: TraversableContainer
+}
+
+interface CompletedArraySnapshotEntry {
+  readonly present: boolean
+  readonly value?: unknown
+}
+
+interface CompletedObjectSnapshotEntry {
+  readonly key: string
+  readonly value: unknown
+}
+
+interface CompletedArraySnapshot {
+  readonly items: readonly CompletedArraySnapshotEntry[]
+  readonly kind: 'array'
+}
+
+interface CompletedObjectSnapshot {
+  readonly entries: readonly CompletedObjectSnapshotEntry[]
+  readonly kind: 'object'
+}
+
+type CompletedTraversalSnapshot = CompletedArraySnapshot | CompletedObjectSnapshot
+
+interface TraversalState {
+  readonly completedIdentities: WeakMap<TraversableContainer, CompletedTraversalRecord[]>
+  readonly completedSnapshots: WeakMap<TraversableContainer, CompletedTraversalSnapshot>
+}
+
+interface TraversalBranchState {
+  readonly activePaths: WeakMap<TraversableContainer, string>
 }
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
@@ -115,6 +155,143 @@ const findMatchingLiteralKey = (
 
 const renderPathSegmentText = (pathSegment: ExactPathSegment): string => {
   return pathSegment.kind === 'index' ? String(pathSegment.value) : pathSegment.value
+}
+
+const createTraversalState = (): TraversalState => {
+  return {
+    completedIdentities: new WeakMap<TraversableContainer, CompletedTraversalRecord[]>(),
+    completedSnapshots: new WeakMap<TraversableContainer, CompletedTraversalSnapshot>(),
+  }
+}
+
+const createTraversalBranchState = (): TraversalBranchState => {
+  return {
+    activePaths: new WeakMap<TraversableContainer, string>(),
+  }
+}
+
+const renderRulePathSegment = (segment: PathSegments[number]): string => {
+  if (typeof segment === 'string') {
+    return `property:${segment}`
+  }
+
+  if (typeof segment === 'number') {
+    return `index:${segment}`
+  }
+
+  if (segment instanceof RegExp) {
+    return `regex:${segment.source}/${segment.flags}`
+  }
+
+  if ('any' in segment && segment.any === true) {
+    return 'wildcard:*'
+  }
+
+  if ('anyDepth' in segment && segment.anyDepth === true) {
+    return 'wildcard:**'
+  }
+
+  if (!('ignore' in segment)) {
+    return 'unknown'
+  }
+
+  const ignored = segment.ignore
+
+  if (ignored instanceof RegExp) {
+    return `ignore-regex:${ignored.source}/${ignored.flags}`
+  }
+
+  return typeof ignored === 'number'
+    ? `ignore-index:${ignored}`
+    : `ignore-property:${ignored}`
+}
+
+const buildRuleContextKey = (
+  activePolicy: ActivePolicyMatch | undefined,
+): string => {
+  if (activePolicy === undefined) {
+    return 'none'
+  }
+
+  return `${activePolicy.source}:${activePolicy.rulePath.map(renderRulePathSegment).join('|')}`
+}
+
+const usesPathSensitivePolicy = (
+  activePolicy: ActivePolicyMatch | undefined,
+): boolean => {
+  return activePolicy?.source === 'exact-path'
+    || activePolicy?.source === 'dynamic-path'
+    || typeof activePolicy?.policy.censor === 'function'
+}
+
+const createCircularMarker = (
+  originalPath: string,
+  path: string,
+): Record<string, string> => {
+  return {
+    _transformer: 'circular',
+    path,
+    value: originalPath,
+  }
+}
+
+const resolveCompletedTraversal = (
+  records: readonly CompletedTraversalRecord[],
+  canonicalPath: string,
+  ruleContextKey: string,
+  value: TraversableContainer,
+): TraversalResult | undefined => {
+  const reusableRecord = records.find((record) => {
+    return record.ruleContextKey === ruleContextKey
+      && (record.pathStable || record.canonicalPath === canonicalPath)
+  })
+
+  if (reusableRecord !== undefined) {
+    return {
+      cacheValue: reusableRecord.value,
+      changed: reusableRecord.value !== value,
+      pathStable: reusableRecord.pathStable,
+      value: reusableRecord.value,
+    }
+  }
+}
+
+const storeCompletedTraversal = (
+  state: TraversalState,
+  value: TraversableContainer,
+  record: CompletedTraversalRecord,
+): void => {
+  const existingRecords = state.completedIdentities.get(value)
+
+  if (existingRecords === undefined) {
+    state.completedIdentities.set(value, [record])
+    return
+  }
+
+  existingRecords.push(record)
+}
+
+const storeCompletedSnapshot = (
+  state: TraversalState,
+  value: TraversableContainer,
+  snapshot: CompletedTraversalSnapshot,
+): void => {
+  state.completedSnapshots.set(value, snapshot)
+}
+
+const withActiveContainer = <T>(
+  branchState: TraversalBranchState,
+  value: TraversableContainer,
+  canonicalPath: string,
+  run: () => T,
+): T => {
+  branchState.activePaths.set(value, canonicalPath)
+
+  try {
+    return run()
+  } finally {
+    branchState.activePaths.delete(value)
+  }
 }
 
 const resolveDirectKeyMatch = (
@@ -315,7 +492,9 @@ const applySubstringRule = (
     const replacement = rule.replacer(value, cloneRegExp(rule.pattern))
 
     return {
+      cacheValue: replacement,
       changed: replacement !== value,
+      pathStable: true,
       value: replacement,
     }
   }
@@ -325,10 +504,13 @@ const applySubstringRule = (
     buildSubstringRulePath(rule.pattern),
     context.rootInput,
   )
+  const redactedValue = applyRedaction(value, rule.policy, fnContext)
 
   return {
+    cacheValue: redactedValue,
     changed: true,
-    value: applyRedaction(value, rule.policy, fnContext),
+    pathStable: typeof rule.policy.censor !== 'function',
+    value: redactedValue,
   }
 }
 
@@ -348,10 +530,13 @@ const applyRootPrimitiveSubstringMatch = (
     context.rootInput,
   )
   const policy = rule.kind === 'whole-value' ? rule.policy : plan.defaults
+  const redactedValue = applyRedaction(value, policy, fnContext)
 
   return {
+    cacheValue: redactedValue,
     changed: true,
-    value: applyRedaction(value, policy, fnContext),
+    pathStable: typeof policy.censor !== 'function',
+    value: redactedValue,
   }
 }
 
@@ -386,10 +571,15 @@ const transformArray = (
   canonicalPath: string | undefined,
   pathSegments: readonly ExactPathSegment[],
   rootInput: unknown,
+  state: TraversalState,
+  branchState: TraversalBranchState,
 ): TraversalResult => {
+  const cacheValue: unknown[] = new Array(value.length)
+  const snapshotItems: CompletedArraySnapshotEntry[] = new Array(value.length)
   let transformedValue: unknown[] | undefined
   const removedIndexes: number[] = []
   let changed = false
+  let pathStable = true
 
   for (let index = 0; index < value.length; index += 1) {
     if (!(index in value)) {
@@ -397,6 +587,10 @@ const transformArray = (
     }
 
     const item = value[index]
+    snapshotItems[index] = {
+      present: true,
+      value: item,
+    }
     const pathSegment = createIndexPathSegment(index)
     const itemPath = appendCanonicalPathSegment(canonicalPath, pathSegment)
     const itemResult = transformNode(item, plan, {
@@ -404,7 +598,8 @@ const transformArray = (
       inheritedPolicy,
       pathSegments: Object.freeze([...pathSegments, pathSegment]),
       rootInput,
-    })
+    }, state, branchState)
+    pathStable &&= itemResult.pathStable
 
     if (isRemovedValue(itemResult.value)) {
       if (transformedValue === undefined) {
@@ -416,6 +611,8 @@ const transformArray = (
       continue
     }
 
+    cacheValue[index] = itemResult.cacheValue
+
     if (!itemResult.changed) {
       continue
     }
@@ -425,33 +622,46 @@ const transformArray = (
     }
 
     changed = true
-    transformedValue[index] = itemResult.value
+      transformedValue[index] = itemResult.value
   }
+
+  storeCompletedSnapshot(state, value as TraversableContainer, {
+    items: snapshotItems,
+    kind: 'array',
+  })
 
   if (transformedValue === undefined) {
     return {
+      cacheValue,
       changed: false,
+      pathStable,
       value,
     }
   }
 
   if (removedIndexes.length === 0) {
     return {
+      cacheValue,
       changed,
+      pathStable,
       value: transformedValue,
     }
   }
 
   const compactedValue = transformedValue.slice()
+  const compactedCacheValue = cacheValue.slice()
   let removedCount = 0
 
   for (const removedIndex of removedIndexes) {
     compactedValue.splice(removedIndex - removedCount, 1)
+    compactedCacheValue.splice(removedIndex - removedCount, 1)
     removedCount += 1
   }
 
   return {
+    cacheValue: compactedCacheValue,
     changed,
+    pathStable,
     value: compactedValue,
   }
 }
@@ -463,11 +673,20 @@ const transformObject = (
   canonicalPath: string | undefined,
   pathSegments: readonly ExactPathSegment[],
   rootInput: unknown,
+  state: TraversalState,
+  branchState: TraversalBranchState,
 ): TraversalResult => {
+  const cacheValue: Record<string, unknown> = {}
+  const snapshotEntries: CompletedObjectSnapshotEntry[] = []
   let changed = false
+  let pathStable = true
   let transformedValue: Record<string, unknown> | undefined
 
   for (const [key, propertyValue] of Object.entries(value)) {
+    snapshotEntries.push({
+      key,
+      value: propertyValue,
+    })
     const pathSegment = createPropertyPathSegment(key)
     const propertyPath = appendCanonicalPathSegment(canonicalPath, pathSegment)
     const propertyResult = transformNode(propertyValue, plan, {
@@ -476,7 +695,8 @@ const transformObject = (
       inheritedPolicy,
       pathSegments: Object.freeze([...pathSegments, pathSegment]),
       rootInput,
-    })
+    }, state, branchState)
+    pathStable &&= propertyResult.pathStable
 
     if (isRemovedValue(propertyResult.value)) {
       if (transformedValue === undefined) {
@@ -488,6 +708,8 @@ const transformObject = (
       continue
     }
 
+    cacheValue[key] = propertyResult.cacheValue
+
     if (!propertyResult.changed) {
       continue
     }
@@ -497,19 +719,183 @@ const transformObject = (
     }
 
     changed = true
-    transformedValue[key] = propertyResult.value
+      transformedValue[key] = propertyResult.value
+  }
+
+  storeCompletedSnapshot(state, value, {
+    entries: snapshotEntries,
+    kind: 'object',
+  })
+
+  return {
+    cacheValue,
+    changed,
+    pathStable,
+    value: changed ? transformedValue : value,
+  }
+}
+
+const transformCompletedArray = (
+  snapshot: CompletedArraySnapshot,
+  plan: CompiledRedactorPlan,
+  inheritedPolicy: ActivePolicyMatch | undefined,
+  canonicalPath: string | undefined,
+  pathSegments: readonly ExactPathSegment[],
+  rootInput: unknown,
+  state: TraversalState,
+  branchState: TraversalBranchState,
+): TraversalResult => {
+  const cacheValue: unknown[] = new Array(snapshot.items.length)
+  const transformedValue: unknown[] = new Array(snapshot.items.length)
+  const removedIndexes: number[] = []
+  let pathStable = true
+
+  for (let index = 0; index < snapshot.items.length; index += 1) {
+    const itemSnapshot = snapshot.items[index]
+
+    if (itemSnapshot === undefined || !itemSnapshot.present) {
+      continue
+    }
+
+    const pathSegment = createIndexPathSegment(index)
+    const itemPath = appendCanonicalPathSegment(canonicalPath, pathSegment)
+    const itemResult = transformNode(itemSnapshot.value, plan, {
+      canonicalPath: itemPath,
+      inheritedPolicy,
+      pathSegments: Object.freeze([...pathSegments, pathSegment]),
+      rootInput,
+    }, state, branchState)
+    pathStable &&= itemResult.pathStable
+
+    if (isRemovedValue(itemResult.value)) {
+      removedIndexes.push(index)
+      continue
+    }
+
+    cacheValue[index] = itemResult.cacheValue
+    transformedValue[index] = itemResult.value
+  }
+
+  if (removedIndexes.length === 0) {
+    return {
+      cacheValue,
+      changed: true,
+      pathStable,
+      value: transformedValue,
+    }
+  }
+
+  const compactedCacheValue = cacheValue.slice()
+  const compactedValue = transformedValue.slice()
+  let removedCount = 0
+
+  for (const removedIndex of removedIndexes) {
+    compactedCacheValue.splice(removedIndex - removedCount, 1)
+    compactedValue.splice(removedIndex - removedCount, 1)
+    removedCount += 1
   }
 
   return {
-    changed,
-    value: changed ? transformedValue : value,
+    cacheValue: compactedCacheValue,
+    changed: true,
+    pathStable,
+    value: compactedValue,
   }
+}
+
+const transformCompletedObject = (
+  snapshot: CompletedObjectSnapshot,
+  plan: CompiledRedactorPlan,
+  inheritedPolicy: ActivePolicyMatch | undefined,
+  canonicalPath: string | undefined,
+  pathSegments: readonly ExactPathSegment[],
+  rootInput: unknown,
+  state: TraversalState,
+  branchState: TraversalBranchState,
+): TraversalResult => {
+  const cacheValue: Record<string, unknown> = {}
+  const transformedValue: Record<string, unknown> = {}
+  let pathStable = true
+
+  for (const entry of snapshot.entries) {
+    const pathSegment = createPropertyPathSegment(entry.key)
+    const propertyPath = appendCanonicalPathSegment(canonicalPath, pathSegment)
+    const propertyResult = transformNode(entry.value, plan, {
+      canonicalPath: propertyPath,
+      directKeyMatch: resolveDirectKeyMatch(plan, entry.key),
+      inheritedPolicy,
+      pathSegments: Object.freeze([...pathSegments, pathSegment]),
+      rootInput,
+    }, state, branchState)
+    pathStable &&= propertyResult.pathStable
+
+    if (isRemovedValue(propertyResult.value)) {
+      continue
+    }
+
+    cacheValue[entry.key] = propertyResult.cacheValue
+    transformedValue[entry.key] = propertyResult.value
+  }
+
+  return {
+    cacheValue,
+    changed: true,
+    pathStable,
+    value: transformedValue,
+  }
+}
+
+const replayCompletedTraversal = (
+  value: TraversableContainer,
+  snapshot: CompletedTraversalSnapshot,
+  plan: CompiledRedactorPlan,
+  inheritedPolicy: ActivePolicyMatch | undefined,
+  context: TraversalContext,
+  ruleContextKey: string,
+  state: TraversalState,
+  branchState: TraversalBranchState,
+): TraversalResult => {
+  const canonicalPath = context.canonicalPath ?? ''
+  const result = withActiveContainer(branchState, value, canonicalPath, () => {
+    return snapshot.kind === 'array'
+      ? transformCompletedArray(
+        snapshot,
+        plan,
+        inheritedPolicy,
+        context.canonicalPath,
+        context.pathSegments,
+        context.rootInput,
+        state,
+        branchState,
+      )
+      : transformCompletedObject(
+        snapshot,
+        plan,
+        inheritedPolicy,
+        context.canonicalPath,
+        context.pathSegments,
+        context.rootInput,
+        state,
+        branchState,
+      )
+  })
+
+  storeCompletedTraversal(state, value, {
+    canonicalPath,
+    pathStable: result.pathStable,
+    ruleContextKey,
+    value: result.cacheValue as TraversableContainer,
+  })
+
+  return result
 }
 
 const transformNode = (
   value: unknown,
   plan: CompiledRedactorPlan,
   context: TraversalContext,
+  state: TraversalState,
+  branchState: TraversalBranchState,
 ): TraversalResult => {
   const activePolicy = selectActivePolicy(
     plan,
@@ -525,10 +911,13 @@ const transformNode = (
       activePolicy.rulePath,
       context.rootInput,
     )
+    const redactedValue = applyRedaction(value, activePolicy.policy, fnContext)
 
     return {
+      cacheValue: redactedValue,
       changed: true,
-      value: applyRedaction(value, activePolicy.policy, fnContext),
+      pathStable: !usesPathSensitivePolicy(activePolicy),
+      value: redactedValue,
     }
   }
 
@@ -540,29 +929,83 @@ const transformNode = (
     }
 
     return {
+      cacheValue: value,
       changed: false,
+      pathStable: true,
       value,
     }
   }
 
-  const inheritedPolicy = activePolicy
-  const result = Array.isArray(value)
-    ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput)
-    : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput)
+  const canonicalPath = context.canonicalPath ?? ''
+  const originalPath = branchState.activePaths.get(value)
 
-  return result
+  if (originalPath !== undefined) {
+    const circularMarker = createCircularMarker(originalPath ?? '', canonicalPath)
+
+    return {
+      cacheValue: circularMarker,
+      changed: true,
+      pathStable: false,
+      value: circularMarker,
+    }
+  }
+
+  const completedRecords = state.completedIdentities.get(value)
+  const ruleContextKey = buildRuleContextKey(activePolicy)
+  const completedResult = completedRecords === undefined
+    ? undefined
+    : resolveCompletedTraversal(completedRecords, canonicalPath, ruleContextKey, value)
+
+  if (completedResult !== undefined) {
+    return completedResult
+  }
+
+  if (completedRecords !== undefined) {
+    const snapshot = state.completedSnapshots.get(value)
+
+    if (snapshot !== undefined) {
+      return replayCompletedTraversal(
+        value,
+        snapshot,
+        plan,
+        activePolicy,
+        context,
+        ruleContextKey,
+        state,
+        branchState,
+      )
+    }
+  }
+
+  const inheritedPolicy = activePolicy
+  return withActiveContainer(branchState, value, canonicalPath, () => {
+    const result = Array.isArray(value)
+      ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState)
+      : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState)
+
+    storeCompletedTraversal(state, value, {
+      canonicalPath,
+      pathStable: result.pathStable,
+      ruleContextKey,
+      value: result.cacheValue as TraversableContainer,
+    })
+
+    return result
+  })
 }
 
 export const redactValue = (
   value: unknown,
   plan: CompiledRedactorPlan,
 ): unknown => {
+  const state = createTraversalState()
+  const branchState = createTraversalBranchState()
   const result = transformNode(value, plan, {
     canonicalPath: undefined,
     inheritedPolicy: undefined,
     pathSegments: Object.freeze([]) as readonly ExactPathSegment[],
     rootInput: value,
-  })
+  }, state, branchState)
 
   return isRemovedValue(result.value) ? undefined : result.value
 }

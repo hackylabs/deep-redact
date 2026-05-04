@@ -2582,6 +2582,339 @@ describe('Reusable redactor factory contract', () => {
   })
 })
 
+describe('Circular references and revisited identities', () => {
+  const circularMarker = (path: string, value = '') => ({
+    _transformer: 'circular',
+    path,
+    value,
+  })
+
+  const createObjectSelfReferenceFixture = (): Record<string, unknown> => {
+    const payload: Record<string, unknown> = {
+      safe: 'visible',
+    }
+
+    payload.self = payload
+
+    return payload
+  }
+
+  const createArraySelfReferenceFixture = (): unknown[] => {
+    const payload: unknown[] = ['visible']
+    payload.push(payload)
+
+    return payload
+  }
+
+  const createObjectInArrayCycleFixture = (): Record<string, unknown> => {
+    const payload: Record<string, unknown> = {
+      records: [{
+        safe: 'visible',
+      }],
+    }
+    const records = payload.records as Array<Record<string, unknown>>
+    records[0]!.parent = records
+
+    return payload
+  }
+
+  const createArrayInObjectCycleFixture = (): Record<string, unknown> => {
+    const payload: Record<string, unknown> = {
+      wrapper: {
+        items: [],
+        safe: 'visible',
+      },
+    }
+    const wrapper = payload.wrapper as { items: unknown[]; safe: string }
+    wrapper.items.push(wrapper)
+
+    return payload
+  }
+
+  const createMutualReferenceFixture = (): Record<string, unknown> => {
+    const first: Record<string, unknown> = { name: 'A' }
+    const second: Record<string, unknown> = { name: 'B' }
+    first.peer = second
+    second.peer = first
+
+    return {
+      first,
+      second,
+    }
+  }
+
+  const createSameContextAliasFixture = (): {
+    readonly payload: Record<string, unknown>
+    readonly getTokenReads: () => number
+  } => {
+    let tokenReads = 0
+    const shared: Record<string, unknown> = {
+      safe: 'visible',
+    }
+    Object.defineProperty(shared, 'token', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        tokenReads += 1
+        return 'secret'
+      },
+    })
+
+    return {
+      getTokenReads: () => tokenReads,
+      payload: {
+        left: { shared },
+        right: { shared },
+      },
+    }
+  }
+
+  const createDifferentContextAliasFixture = (): {
+    readonly payload: Record<string, unknown>
+    readonly getTokenReads: () => number
+  } => {
+    let tokenReads = 0
+    const shared: Record<string, unknown> = {
+      safe: 'visible',
+    }
+    Object.defineProperty(shared, 'token', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        tokenReads += 1
+        return 'secret'
+      },
+    })
+
+    return {
+      getTokenReads: () => tokenReads,
+      payload: {
+        exact: { shared },
+        regex: { sessionShared: shared },
+      },
+    }
+  }
+
+  const createMatchedAfterUnmatchedAliasFixture = (): {
+    readonly payload: Record<string, unknown>
+    readonly getTokenReads: () => number
+  } => {
+    let tokenReads = 0
+    const shared: Record<string, unknown> = {
+      safe: 'visible',
+    }
+    Object.defineProperty(shared, 'token', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        tokenReads += 1
+        return 'secret'
+      },
+    })
+
+    return {
+      getTokenReads: () => tokenReads,
+      payload: {
+        plain: { item: shared },
+        sensitive: { password: shared },
+      },
+    }
+  }
+
+  const createCyclicAliasFixture = (): Record<string, unknown> => {
+    const shared: Record<string, unknown> = {
+      safe: 'visible',
+    }
+    shared.self = shared
+
+    return {
+      left: shared,
+      right: shared,
+    }
+  }
+
+  const createRepeatedInvocationFixture = (): Record<string, unknown> => {
+    const payload: Record<string, unknown> = {
+      records: [{
+        safe: 'visible',
+        token: 'secret',
+      }],
+    }
+    const records = payload.records as Array<Record<string, unknown>>
+    records[0]!.parent = records
+
+    return payload
+  }
+
+  it('replaces a direct object self-reference with the public circular marker while preserving siblings', () => {
+    const redact = deepRedact({})
+
+    expect(redact(createObjectSelfReferenceFixture())).toEqual({
+      safe: 'visible',
+      self: circularMarker('self'),
+    })
+  })
+
+  it('replaces a direct array self-reference with the public circular marker while preserving siblings', () => {
+    const redact = deepRedact({})
+
+    expect(redact(createArraySelfReferenceFixture())).toEqual([
+      'visible',
+      circularMarker('1'),
+    ])
+  })
+
+  it('records the original reference path for nested object-in-array and array-in-object circular edges', () => {
+    const redact = deepRedact({})
+
+    expect(redact(createObjectInArrayCycleFixture())).toEqual({
+      records: [{
+        parent: circularMarker('records.0.parent', 'records'),
+        safe: 'visible',
+      }],
+    })
+    expect(redact(createArrayInObjectCycleFixture())).toEqual({
+      wrapper: {
+        items: [circularMarker('wrapper.items.0', 'wrapper')],
+        safe: 'visible',
+      },
+    })
+  })
+
+  it('handles mutually referential objects deterministically without throwing', () => {
+    const redact = deepRedact({})
+
+    expect(redact(createMutualReferenceFixture())).toEqual({
+      first: {
+        name: 'A',
+        peer: {
+          name: 'B',
+          peer: circularMarker('first.peer.peer', 'first'),
+        },
+      },
+      second: {
+        name: 'B',
+        peer: {
+          name: 'A',
+          peer: circularMarker('second.peer.peer', 'second'),
+        },
+      },
+    })
+  })
+
+  it('replays same-context path-sensitive revisits with the current branch path without descending into the original identity again', () => {
+    const baselineFixture = createSameContextAliasFixture()
+    const fixture = createSameContextAliasFixture()
+    const redact = deepRedact({
+      censor: (_value, context) => String(context.matchedPath.join('.')),
+      keys: ['shared'],
+      retainStructure: true,
+    })
+    redact({
+      left: baselineFixture.payload.left,
+    })
+    const baselineTokenReads = baselineFixture.getTokenReads()
+    const result = redact(fixture.payload) as {
+      left: { shared: Record<string, unknown> }
+      right: { shared: Record<string, unknown> }
+    }
+    expect(result.left.shared).toEqual({
+      safe: 'left.shared.safe',
+      token: 'left.shared.token',
+    })
+    expect(result.right.shared).toEqual({
+      safe: 'right.shared.safe',
+      token: 'right.shared.token',
+    })
+    expect(fixture.getTokenReads()).toBe(baselineTokenReads)
+  })
+
+  it('replays different-context revisits with path-correct output even when both rules share the compiled default policy object', () => {
+    const baselineFixture = createDifferentContextAliasFixture()
+    const fixture = createDifferentContextAliasFixture()
+    const redact = deepRedact({
+      censor: (_value, context) => String(context.matchedPath.join('.')),
+      keys: ['shared', /Shared$/],
+      retainStructure: true,
+    })
+    redact({
+      exact: baselineFixture.payload.exact,
+    })
+    const baselineTokenReads = baselineFixture.getTokenReads()
+    const result = redact(fixture.payload) as {
+      exact: { shared: Record<string, unknown> }
+      regex: { sessionShared: Record<string, unknown> }
+    }
+    expect(result.exact.shared).toEqual({
+      safe: 'exact.shared.safe',
+      token: 'exact.shared.token',
+    })
+    expect(result.regex.sessionShared).toEqual({
+      safe: 'regex.sessionShared.safe',
+      token: 'regex.sessionShared.token',
+    })
+    expect(fixture.getTokenReads()).toBe(baselineTokenReads)
+  })
+
+  it('applies later matched retained redaction after an earlier unmatched visit without re-entering the completed identity', () => {
+    const baselineFixture = createMatchedAfterUnmatchedAliasFixture()
+    const fixture = createMatchedAfterUnmatchedAliasFixture()
+    const redact = deepRedact({
+      censor: (_value, context) => String(context.matchedPath.join('.')),
+      keys: ['password'],
+      retainStructure: true,
+    })
+    redact({
+      plain: baselineFixture.payload.plain,
+    })
+    const baselineTokenReads = baselineFixture.getTokenReads()
+    const result = redact(fixture.payload) as {
+      plain: { item: Record<string, unknown> }
+      sensitive: { password: Record<string, unknown> }
+    }
+
+    expect(result.plain.item.safe).toBe('visible')
+    expect(result.sensitive.password).toEqual({
+      safe: 'sensitive.password.safe',
+      token: 'sensitive.password.token',
+    })
+    expect(fixture.getTokenReads()).toBe(baselineTokenReads)
+  })
+
+  it('replays revisited cyclic aliases with branch-local circular marker paths', () => {
+    const redact = deepRedact({})
+
+    expect(redact(createCyclicAliasFixture())).toEqual({
+      left: {
+        safe: 'visible',
+        self: circularMarker('left.self', 'left'),
+      },
+      right: {
+        safe: 'visible',
+        self: circularMarker('right.self', 'right'),
+      },
+    })
+  })
+
+  it('returns identical output across repeated invocations with equivalent fresh cyclic fixtures while leaving inputs unchanged', () => {
+    const redact = deepRedact({
+      keys: ['token'],
+    })
+    const firstPayload = createRepeatedInvocationFixture()
+    const secondPayload = createRepeatedInvocationFixture()
+    const firstResult = redact(firstPayload)
+    const secondResult = redact(secondPayload)
+    const firstRecords = firstPayload.records as Array<Record<string, unknown>>
+    const secondRecords = secondPayload.records as Array<Record<string, unknown>>
+
+    expect(firstResult).toEqual(secondResult)
+    expect(firstRecords[0]!.token).toBe('secret')
+    expect(firstRecords[0]!.parent).toBe(firstRecords)
+    expect(secondRecords[0]!.token).toBe('secret')
+    expect(secondRecords[0]!.parent).toBe(secondRecords)
+  })
+})
+
 describe('Function censors and same-length string replacement', () => {
   // ── validation failures ─────────────────────────────────────────────────────
 

@@ -549,6 +549,70 @@ const findMatchingLiteralKey = (literalMatchers, requiresCanonicalKey, key) => {
 const renderPathSegmentText = (pathSegment) => {
 	return pathSegment.kind === "index" ? String(pathSegment.value) : pathSegment.value;
 };
+const createTraversalState = () => {
+	return {
+		completedIdentities: /* @__PURE__ */ new WeakMap(),
+		completedSnapshots: /* @__PURE__ */ new WeakMap()
+	};
+};
+const createTraversalBranchState = () => {
+	return { activePaths: /* @__PURE__ */ new WeakMap() };
+};
+const renderRulePathSegment = (segment) => {
+	if (typeof segment === "string") return `property:${segment}`;
+	if (typeof segment === "number") return `index:${segment}`;
+	if (segment instanceof RegExp) return `regex:${segment.source}/${segment.flags}`;
+	if ("any" in segment && segment.any === true) return "wildcard:*";
+	if ("anyDepth" in segment && segment.anyDepth === true) return "wildcard:**";
+	if (!("ignore" in segment)) return "unknown";
+	const ignored = segment.ignore;
+	if (ignored instanceof RegExp) return `ignore-regex:${ignored.source}/${ignored.flags}`;
+	return typeof ignored === "number" ? `ignore-index:${ignored}` : `ignore-property:${ignored}`;
+};
+const buildRuleContextKey = (activePolicy) => {
+	if (activePolicy === void 0) return "none";
+	return `${activePolicy.source}:${activePolicy.rulePath.map(renderRulePathSegment).join("|")}`;
+};
+const usesPathSensitivePolicy = (activePolicy) => {
+	return activePolicy?.source === "exact-path" || activePolicy?.source === "dynamic-path" || typeof activePolicy?.policy.censor === "function";
+};
+const createCircularMarker = (originalPath, path) => {
+	return {
+		_transformer: "circular",
+		path,
+		value: originalPath
+	};
+};
+const resolveCompletedTraversal = (records, canonicalPath, ruleContextKey, value) => {
+	const reusableRecord = records.find((record) => {
+		return record.ruleContextKey === ruleContextKey && (record.pathStable || record.canonicalPath === canonicalPath);
+	});
+	if (reusableRecord !== void 0) return {
+		cacheValue: reusableRecord.value,
+		changed: reusableRecord.value !== value,
+		pathStable: reusableRecord.pathStable,
+		value: reusableRecord.value
+	};
+};
+const storeCompletedTraversal = (state, value, record) => {
+	const existingRecords = state.completedIdentities.get(value);
+	if (existingRecords === void 0) {
+		state.completedIdentities.set(value, [record]);
+		return;
+	}
+	existingRecords.push(record);
+};
+const storeCompletedSnapshot = (state, value, snapshot) => {
+	state.completedSnapshots.set(value, snapshot);
+};
+const withActiveContainer = (branchState, value, canonicalPath, run) => {
+	branchState.activePaths.set(value, canonicalPath);
+	try {
+		return run();
+	} finally {
+		branchState.activePaths.delete(value);
+	}
+};
 const resolveDirectKeyMatch = (plan, key) => {
 	const matchingLiteralRule = findMatchingLiteralKey(plan.exactKeyRules.literalMatchers, plan.exactKeyRules.requiresCanonicalKey, key);
 	if (matchingLiteralRule !== void 0) return {
@@ -641,22 +705,31 @@ const applySubstringRule = (value, rule, context) => {
 	if (rule.kind === "structured-replacer") {
 		const replacement = rule.replacer(value, cloneRegExp(rule.pattern));
 		return {
+			cacheValue: replacement,
 			changed: replacement !== value,
+			pathStable: true,
 			value: replacement
 		};
 	}
 	const fnContext = buildFunctionCensorContext(context.pathSegments, buildSubstringRulePath(rule.pattern), context.rootInput);
+	const redactedValue = applyRedaction(value, rule.policy, fnContext);
 	return {
+		cacheValue: redactedValue,
 		changed: true,
-		value: applyRedaction(value, rule.policy, fnContext)
+		pathStable: typeof rule.policy.censor !== "function",
+		value: redactedValue
 	};
 };
 const applyRootPrimitiveSubstringMatch = (value, rule, plan, context) => {
 	if (!patternMatchesString(rule.pattern, value)) return;
 	const fnContext = buildFunctionCensorContext(context.pathSegments, buildSubstringRulePath(rule.pattern), context.rootInput);
+	const policy = rule.kind === "whole-value" ? rule.policy : plan.defaults;
+	const redactedValue = applyRedaction(value, policy, fnContext);
 	return {
+		cacheValue: redactedValue,
 		changed: true,
-		value: applyRedaction(value, rule.kind === "whole-value" ? rule.policy : plan.defaults, fnContext)
+		pathStable: typeof policy.censor !== "function",
+		value: redactedValue
 	};
 };
 const transformSubstringValue = (value, plan, context) => {
@@ -667,54 +740,82 @@ const transformSubstringValue = (value, plan, context) => {
 		if (result !== void 0) return result;
 	}
 };
-const transformArray = (value, plan, inheritedPolicy, canonicalPath, pathSegments, rootInput) => {
+const transformArray = (value, plan, inheritedPolicy, canonicalPath, pathSegments, rootInput, state, branchState) => {
+	const cacheValue = new Array(value.length);
+	const snapshotItems = new Array(value.length);
 	let transformedValue;
 	const removedIndexes = [];
 	let changed = false;
+	let pathStable = true;
 	for (let index = 0; index < value.length; index += 1) {
 		if (!(index in value)) continue;
 		const item = value[index];
+		snapshotItems[index] = {
+			present: true,
+			value: item
+		};
 		const pathSegment = createIndexPathSegment(index);
 		const itemResult = transformNode(item, plan, {
 			canonicalPath: appendCanonicalPathSegment(canonicalPath, pathSegment),
 			inheritedPolicy,
 			pathSegments: Object.freeze([...pathSegments, pathSegment]),
 			rootInput
-		});
+		}, state, branchState);
+		pathStable &&= itemResult.pathStable;
 		if (isRemovedValue(itemResult.value)) {
 			if (transformedValue === void 0) transformedValue = value.slice();
 			changed = true;
 			removedIndexes.push(index);
 			continue;
 		}
+		cacheValue[index] = itemResult.cacheValue;
 		if (!itemResult.changed) continue;
 		if (transformedValue === void 0) transformedValue = value.slice();
 		changed = true;
 		transformedValue[index] = itemResult.value;
 	}
+	storeCompletedSnapshot(state, value, {
+		items: snapshotItems,
+		kind: "array"
+	});
 	if (transformedValue === void 0) return {
+		cacheValue,
 		changed: false,
+		pathStable,
 		value
 	};
 	if (removedIndexes.length === 0) return {
+		cacheValue,
 		changed,
+		pathStable,
 		value: transformedValue
 	};
 	const compactedValue = transformedValue.slice();
+	const compactedCacheValue = cacheValue.slice();
 	let removedCount = 0;
 	for (const removedIndex of removedIndexes) {
 		compactedValue.splice(removedIndex - removedCount, 1);
+		compactedCacheValue.splice(removedIndex - removedCount, 1);
 		removedCount += 1;
 	}
 	return {
+		cacheValue: compactedCacheValue,
 		changed,
+		pathStable,
 		value: compactedValue
 	};
 };
-const transformObject = (value, plan, inheritedPolicy, canonicalPath, pathSegments, rootInput) => {
+const transformObject = (value, plan, inheritedPolicy, canonicalPath, pathSegments, rootInput, state, branchState) => {
+	const cacheValue = {};
+	const snapshotEntries = [];
 	let changed = false;
+	let pathStable = true;
 	let transformedValue;
 	for (const [key, propertyValue] of Object.entries(value)) {
+		snapshotEntries.push({
+			key,
+			value: propertyValue
+		});
 		const pathSegment = createPropertyPathSegment(key);
 		const propertyResult = transformNode(propertyValue, plan, {
 			canonicalPath: appendCanonicalPathSegment(canonicalPath, pathSegment),
@@ -722,50 +823,177 @@ const transformObject = (value, plan, inheritedPolicy, canonicalPath, pathSegmen
 			inheritedPolicy,
 			pathSegments: Object.freeze([...pathSegments, pathSegment]),
 			rootInput
-		});
+		}, state, branchState);
+		pathStable &&= propertyResult.pathStable;
 		if (isRemovedValue(propertyResult.value)) {
 			if (transformedValue === void 0) transformedValue = { ...value };
 			changed = true;
 			delete transformedValue[key];
 			continue;
 		}
+		cacheValue[key] = propertyResult.cacheValue;
 		if (!propertyResult.changed) continue;
 		if (transformedValue === void 0) transformedValue = { ...value };
 		changed = true;
 		transformedValue[key] = propertyResult.value;
 	}
+	storeCompletedSnapshot(state, value, {
+		entries: snapshotEntries,
+		kind: "object"
+	});
 	return {
+		cacheValue,
 		changed,
+		pathStable,
 		value: changed ? transformedValue : value
 	};
 };
-const transformNode = (value, plan, context) => {
+const transformCompletedArray = (snapshot, plan, inheritedPolicy, canonicalPath, pathSegments, rootInput, state, branchState) => {
+	const cacheValue = new Array(snapshot.items.length);
+	const transformedValue = new Array(snapshot.items.length);
+	const removedIndexes = [];
+	let pathStable = true;
+	for (let index = 0; index < snapshot.items.length; index += 1) {
+		const itemSnapshot = snapshot.items[index];
+		if (itemSnapshot === void 0 || !itemSnapshot.present) continue;
+		const pathSegment = createIndexPathSegment(index);
+		const itemPath = appendCanonicalPathSegment(canonicalPath, pathSegment);
+		const itemResult = transformNode(itemSnapshot.value, plan, {
+			canonicalPath: itemPath,
+			inheritedPolicy,
+			pathSegments: Object.freeze([...pathSegments, pathSegment]),
+			rootInput
+		}, state, branchState);
+		pathStable &&= itemResult.pathStable;
+		if (isRemovedValue(itemResult.value)) {
+			removedIndexes.push(index);
+			continue;
+		}
+		cacheValue[index] = itemResult.cacheValue;
+		transformedValue[index] = itemResult.value;
+	}
+	if (removedIndexes.length === 0) return {
+		cacheValue,
+		changed: true,
+		pathStable,
+		value: transformedValue
+	};
+	const compactedCacheValue = cacheValue.slice();
+	const compactedValue = transformedValue.slice();
+	let removedCount = 0;
+	for (const removedIndex of removedIndexes) {
+		compactedCacheValue.splice(removedIndex - removedCount, 1);
+		compactedValue.splice(removedIndex - removedCount, 1);
+		removedCount += 1;
+	}
+	return {
+		cacheValue: compactedCacheValue,
+		changed: true,
+		pathStable,
+		value: compactedValue
+	};
+};
+const transformCompletedObject = (snapshot, plan, inheritedPolicy, canonicalPath, pathSegments, rootInput, state, branchState) => {
+	const cacheValue = {};
+	const transformedValue = {};
+	let pathStable = true;
+	for (const entry of snapshot.entries) {
+		const pathSegment = createPropertyPathSegment(entry.key);
+		const propertyPath = appendCanonicalPathSegment(canonicalPath, pathSegment);
+		const propertyResult = transformNode(entry.value, plan, {
+			canonicalPath: propertyPath,
+			directKeyMatch: resolveDirectKeyMatch(plan, entry.key),
+			inheritedPolicy,
+			pathSegments: Object.freeze([...pathSegments, pathSegment]),
+			rootInput
+		}, state, branchState);
+		pathStable &&= propertyResult.pathStable;
+		if (isRemovedValue(propertyResult.value)) continue;
+		cacheValue[entry.key] = propertyResult.cacheValue;
+		transformedValue[entry.key] = propertyResult.value;
+	}
+	return {
+		cacheValue,
+		changed: true,
+		pathStable,
+		value: transformedValue
+	};
+};
+const replayCompletedTraversal = (value, snapshot, plan, inheritedPolicy, context, ruleContextKey, state, branchState) => {
+	const canonicalPath = context.canonicalPath ?? "";
+	const result = withActiveContainer(branchState, value, canonicalPath, () => {
+		return snapshot.kind === "array" ? transformCompletedArray(snapshot, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState) : transformCompletedObject(snapshot, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState);
+	});
+	storeCompletedTraversal(state, value, {
+		canonicalPath,
+		pathStable: result.pathStable,
+		ruleContextKey,
+		value: result.cacheValue
+	});
+	return result;
+};
+const transformNode = (value, plan, context, state, branchState) => {
 	const activePolicy = selectActivePolicy(plan, resolveExactPathRule(plan, context.canonicalPath), resolveDynamicPathRule(plan, context.pathSegments), context.directKeyMatch, context.inheritedPolicy);
 	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !isTraversableContainer(value))) {
 		const fnContext = buildFunctionCensorContext(context.pathSegments, activePolicy.rulePath, context.rootInput);
+		const redactedValue = applyRedaction(value, activePolicy.policy, fnContext);
 		return {
+			cacheValue: redactedValue,
 			changed: true,
-			value: applyRedaction(value, activePolicy.policy, fnContext)
+			pathStable: !usesPathSensitivePolicy(activePolicy),
+			value: redactedValue
 		};
 	}
 	if (!isTraversableContainer(value)) {
 		const substringResult = transformSubstringValue(value, plan, context);
 		if (substringResult !== void 0) return substringResult;
 		return {
+			cacheValue: value,
 			changed: false,
+			pathStable: true,
 			value
 		};
 	}
+	const canonicalPath = context.canonicalPath ?? "";
+	const originalPath = branchState.activePaths.get(value);
+	if (originalPath !== void 0) {
+		const circularMarker = createCircularMarker(originalPath ?? "", canonicalPath);
+		return {
+			cacheValue: circularMarker,
+			changed: true,
+			pathStable: false,
+			value: circularMarker
+		};
+	}
+	const completedRecords = state.completedIdentities.get(value);
+	const ruleContextKey = buildRuleContextKey(activePolicy);
+	const completedResult = completedRecords === void 0 ? void 0 : resolveCompletedTraversal(completedRecords, canonicalPath, ruleContextKey, value);
+	if (completedResult !== void 0) return completedResult;
+	if (completedRecords !== void 0) {
+		const snapshot = state.completedSnapshots.get(value);
+		if (snapshot !== void 0) return replayCompletedTraversal(value, snapshot, plan, activePolicy, context, ruleContextKey, state, branchState);
+	}
 	const inheritedPolicy = activePolicy;
-	return Array.isArray(value) ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput) : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput);
+	return withActiveContainer(branchState, value, canonicalPath, () => {
+		const result = Array.isArray(value) ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState) : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState);
+		storeCompletedTraversal(state, value, {
+			canonicalPath,
+			pathStable: result.pathStable,
+			ruleContextKey,
+			value: result.cacheValue
+		});
+		return result;
+	});
 };
 const redactValue = (value, plan) => {
+	const state = createTraversalState();
+	const branchState = createTraversalBranchState();
 	const result = transformNode(value, plan, {
 		canonicalPath: void 0,
 		inheritedPolicy: void 0,
 		pathSegments: Object.freeze([]),
 		rootInput: value
-	});
+	}, state, branchState);
 	return isRemovedValue(result.value) ? void 0 : result.value;
 };
 //#endregion
