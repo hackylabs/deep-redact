@@ -556,7 +556,7 @@ describe('Reusable redactor factory contract', () => {
     })
   })
 
-  describe('Story 2.4: root primitive string redaction', () => {
+  describe('Root primitive string redaction', () => {
     it('redacts a matching root string with the default censor for a bare RegExp rule', () => {
       const redact = deepRedact({
         stringTests: [/token=[^&\s]+/],
@@ -704,6 +704,345 @@ describe('Reusable redactor factory contract', () => {
 
       expect(result).toBe('[REDACTED]')
       expect(result).not.toBe('"[REDACTED]"')
+    })
+  })
+
+  describe('Precedence across path, key, and substring targeting', () => {
+    const createKeyCensor = () => vi.fn((_value: unknown, ctx: FunctionCensorContext) => {
+      const firstRuleSegment = ctx.rulePath[0]
+
+      return firstRuleSegment instanceof RegExp ? '[REGEX-KEY]' : '[EXACT-KEY]'
+    })
+
+    const createSubstringReplacer = () => vi.fn((value: string) => value.replace(/token=[^&\s]+/, 'token=[SUBSTRING]'))
+
+    const createPrecedencePayload = () => ({
+      records: {
+        exact: { token: 'token=exact' },
+        structured: { token: 'token=structured' },
+        key: { token: 'token=key' },
+        regex: { sessionToken: 'token=regex' },
+        substring: { note: 'token=substring' },
+      },
+    })
+
+    it('resolves one deterministic winner per leaf across exact-path, structured path, exact-key, regex-key, and substring rules', () => {
+      const exactPathCensor = vi.fn(() => '[EXACT-PATH]')
+      const structuredPathCensor = vi.fn(() => '[STRUCTURED-PATH]')
+      const keyCensor = createKeyCensor()
+      const substringReplacer = createSubstringReplacer()
+      const redact = deepRedact({
+        censor: keyCensor,
+        keys: ['token', /token$/i],
+        paths: [
+          {
+            path: 'records.exact.token',
+            censor: exactPathCensor,
+          },
+          {
+            path: ['records', /^structured$/, 'token'],
+            censor: structuredPathCensor,
+          },
+        ],
+        stringTests: [
+          {
+            pattern: /token=[^&\s]+/,
+            replacer: substringReplacer,
+          },
+        ],
+      })
+
+      expect(redact(createPrecedencePayload())).toEqual({
+        records: {
+          exact: { token: '[EXACT-PATH]' },
+          structured: { token: '[STRUCTURED-PATH]' },
+          key: { token: '[EXACT-KEY]' },
+          regex: { sessionToken: '[REGEX-KEY]' },
+          substring: { note: 'token=[SUBSTRING]' },
+        },
+      })
+      expect(exactPathCensor).toHaveBeenCalledTimes(1)
+      expect(structuredPathCensor).toHaveBeenCalledTimes(1)
+      expect(keyCensor).toHaveBeenCalledTimes(2)
+      expect(substringReplacer).toHaveBeenCalledTimes(1)
+    })
+
+    it('lets exact-path rules beat structured path, exact-key, regex-key, and substring matches on the same leaf', () => {
+      const exactPathCensor = vi.fn(() => '[EXACT-PATH]')
+      const structuredPathCensor = vi.fn(() => '[STRUCTURED-PATH]')
+      const keyCensor = createKeyCensor()
+      const substringReplacer = createSubstringReplacer()
+      const redact = deepRedact({
+        censor: keyCensor,
+        keys: ['token', /token$/i],
+        paths: [
+          {
+            path: 'records.exact.token',
+            censor: exactPathCensor,
+          },
+          {
+            path: ['records', /^exact$/, 'token'],
+            censor: structuredPathCensor,
+          },
+        ],
+        stringTests: [
+          {
+            pattern: /token=[^&\s]+/,
+            replacer: substringReplacer,
+          },
+        ],
+      })
+
+      expect(redact({
+        records: {
+          exact: { token: 'token=exact' },
+        },
+      })).toEqual({
+        records: {
+          exact: { token: '[EXACT-PATH]' },
+        },
+      })
+      expect(exactPathCensor).toHaveBeenCalledTimes(1)
+      expect(structuredPathCensor).not.toHaveBeenCalled()
+      expect(keyCensor).not.toHaveBeenCalled()
+      expect(substringReplacer).not.toHaveBeenCalled()
+    })
+
+    it('lets structured path rules beat exact-key, regex-key, and substring matches when no exact-path rule applies', () => {
+      const structuredPathCensor = vi.fn(() => '[STRUCTURED-PATH]')
+      const keyCensor = createKeyCensor()
+      const substringReplacer = createSubstringReplacer()
+      const redact = deepRedact({
+        censor: keyCensor,
+        keys: ['token', /token$/i],
+        paths: [
+          {
+            path: ['records', /^structured$/, 'token'],
+            censor: structuredPathCensor,
+          },
+        ],
+        stringTests: [
+          {
+            pattern: /token=[^&\s]+/,
+            replacer: substringReplacer,
+          },
+        ],
+      })
+
+      expect(redact({
+        records: {
+          structured: { token: 'token=structured' },
+        },
+      })).toEqual({
+        records: {
+          structured: { token: '[STRUCTURED-PATH]' },
+        },
+      })
+      expect(structuredPathCensor).toHaveBeenCalledTimes(1)
+      expect(keyCensor).not.toHaveBeenCalled()
+      expect(substringReplacer).not.toHaveBeenCalled()
+    })
+
+    it('lets exact-key rules beat regex-key and substring matches when no path rule applies', () => {
+      const keyCensor = createKeyCensor()
+      const substringReplacer = createSubstringReplacer()
+      const redact = deepRedact({
+        censor: keyCensor,
+        keys: ['token', /token$/i],
+        stringTests: [
+          {
+            pattern: /token=[^&\s]+/,
+            replacer: substringReplacer,
+          },
+        ],
+      })
+
+      expect(redact({
+        records: {
+          key: { token: 'token=key' },
+        },
+      })).toEqual({
+        records: {
+          key: { token: '[EXACT-KEY]' },
+        },
+      })
+      expect(keyCensor).toHaveBeenCalledTimes(1)
+      expect(keyCensor.mock.calls[0]![1].rulePath).toEqual(['token'])
+      expect(substringReplacer).not.toHaveBeenCalled()
+    })
+
+    it('lets regex-key rules beat substring replacement on the same leaf', () => {
+      const keyCensor = createKeyCensor()
+      const substringReplacer = createSubstringReplacer()
+      const redact = deepRedact({
+        censor: keyCensor,
+        keys: [/token$/i],
+        stringTests: [
+          {
+            pattern: /token=[^&\s]+/,
+            replacer: substringReplacer,
+          },
+        ],
+      })
+
+      expect(redact({
+        records: {
+          regex: { sessionToken: 'token=regex' },
+        },
+      })).toEqual({
+        records: {
+          regex: { sessionToken: '[REGEX-KEY]' },
+        },
+      })
+      expect(keyCensor).toHaveBeenCalledTimes(1)
+      expect(keyCensor.mock.calls[0]![1].rulePath[0]).toBeInstanceOf(RegExp)
+      expect(substringReplacer).not.toHaveBeenCalled()
+    })
+
+    it('continues traversing retained containers while keeping inherited whole-value claims ahead of key and substring rewrites', () => {
+      const retainedParentCensor = vi.fn((_value: unknown, _ctx: FunctionCensorContext) => '[RETAINED-PARENT]')
+      const exactPathCensor = vi.fn(() => '[EXACT-PATH]')
+      const keyCensor = createKeyCensor()
+      const substringReplacer = createSubstringReplacer()
+      const redact = deepRedact({
+        censor: keyCensor,
+        keys: ['token', /token$/i],
+        paths: [
+          {
+            path: 'retained',
+            censor: retainedParentCensor,
+            retainStructure: true,
+          },
+          {
+            path: 'retained.override',
+            censor: exactPathCensor,
+          },
+        ],
+        stringTests: [
+          {
+            pattern: /token=[^&\s]+/,
+            replacer: substringReplacer,
+          },
+        ],
+      })
+
+      expect(redact({
+        retained: {
+          token: 'token=exact-key',
+          sessionToken: 'token=regex-key',
+          inherited: 'token=inherited',
+          override: 'token=override',
+        },
+        free: 'token=free',
+      })).toEqual({
+        retained: {
+          token: '[RETAINED-PARENT]',
+          sessionToken: '[RETAINED-PARENT]',
+          inherited: '[RETAINED-PARENT]',
+          override: '[EXACT-PATH]',
+        },
+        free: 'token=[SUBSTRING]',
+      })
+      expect(retainedParentCensor).toHaveBeenCalledTimes(3)
+      expect(retainedParentCensor.mock.calls.map(([, ctx]) => ctx.matchedPath)).toEqual([
+        ['retained', 'token'],
+        ['retained', 'sessionToken'],
+        ['retained', 'inherited'],
+      ])
+      expect(exactPathCensor).toHaveBeenCalledTimes(1)
+      expect(keyCensor).not.toHaveBeenCalled()
+      expect(substringReplacer).toHaveBeenCalledTimes(1)
+    })
+
+    it('returns byte-for-byte identical output across repeated runs with the same overlapping-rule payload', () => {
+      const exactPathCensor = vi.fn(() => '[EXACT-PATH]')
+      const structuredPathCensor = vi.fn(() => '[STRUCTURED-PATH]')
+      const keyCensor = createKeyCensor()
+      const substringReplacer = createSubstringReplacer()
+      const payload = createPrecedencePayload()
+      const redact = deepRedact({
+        serialise: true,
+        censor: keyCensor,
+        keys: ['token', /token$/i],
+        paths: [
+          {
+            path: 'records.exact.token',
+            censor: exactPathCensor,
+          },
+          {
+            path: ['records', /^structured$/, 'token'],
+            censor: structuredPathCensor,
+          },
+        ],
+        stringTests: [
+          {
+            pattern: /token=[^&\s]+/,
+            replacer: substringReplacer,
+          },
+        ],
+      })
+
+      const first = redact(payload)
+      const second = redact(payload)
+
+      expect(first).toBe(second)
+      expect(first).toBe(JSON.stringify({
+        records: {
+          exact: { token: '[EXACT-PATH]' },
+          structured: { token: '[STRUCTURED-PATH]' },
+          key: { token: '[EXACT-KEY]' },
+          regex: { sessionToken: '[REGEX-KEY]' },
+          substring: { note: 'token=[SUBSTRING]' },
+        },
+      }))
+    })
+
+    it('returns structurally identical output across repeated runs with the same overlapping-rule payload when serialise is omitted', () => {
+      const exactPathCensor = vi.fn(() => '[EXACT-PATH]')
+      const structuredPathCensor = vi.fn(() => '[STRUCTURED-PATH]')
+      const keyCensor = createKeyCensor()
+      const substringReplacer = createSubstringReplacer()
+      const payload = createPrecedencePayload()
+      const originalPayload = structuredClone(payload)
+      const redact = deepRedact({
+        censor: keyCensor,
+        keys: ['token', /token$/i],
+        paths: [
+          {
+            path: 'records.exact.token',
+            censor: exactPathCensor,
+          },
+          {
+            path: ['records', /^structured$/, 'token'],
+            censor: structuredPathCensor,
+          },
+        ],
+        stringTests: [
+          {
+            pattern: /token=[^&\s]+/,
+            replacer: substringReplacer,
+          },
+        ],
+      })
+
+      const first = redact(payload)
+      const second = redact(payload)
+      const expected = {
+        records: {
+          exact: { token: '[EXACT-PATH]' },
+          structured: { token: '[STRUCTURED-PATH]' },
+          key: { token: '[EXACT-KEY]' },
+          regex: { sessionToken: '[REGEX-KEY]' },
+          substring: { note: 'token=[SUBSTRING]' },
+        },
+      }
+
+      expect(first).toEqual(expected)
+      expect(second).toEqual(expected)
+      expect(first).toEqual(second)
+      expect(first).not.toBe(payload)
+      expect(second).not.toBe(payload)
+      expect(payload).toEqual(originalPayload)
     })
   })
 
