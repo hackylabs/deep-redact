@@ -5,6 +5,7 @@ import {
   type DeepRedactOptions,
   type FunctionCensorContext,
   type IgnorePathSegment,
+  type KeyRule,
   type KeySelector,
   type PathEntry,
   type PathSegments,
@@ -84,7 +85,13 @@ const paths: PathEntry[] = [
 
 const selector: PathSelector = ['users', { ignore: 'admin' }, 'email']
 const ignoredSegment: IgnorePathSegment = { ignore: 'admin' }
-const keySelector: KeySelector = /token$/i
+const structuredKeyRule: KeyRule = {
+  key: 'pass_code',
+  fuzzyKeyMatch: true,
+  caseSensitiveKeyMatch: false,
+}
+const keySelector: KeySelector = structuredKeyRule
+const regexKeySelector: KeySelector = /token$/i
 const substringRule: SubstringRule = {
   pattern: /token=[^&\s]+/g,
   replacer: (value: string, pattern: RegExp) => value.replace(pattern, 'token=[REDACTED]'),
@@ -97,7 +104,9 @@ const structuredSelector: StructuredPathSelector = ['tenants', /^tenant-\d+$/, '
 
 const options: DeepRedactOptions = {
   censor: twoArgCensor,
-  keys: ['password', /token$/i],
+  fuzzyKeyMatch: false,
+  caseSensitiveKeyMatch: false,
+  keys: ['password', regexKeySelector, structuredKeyRule],
   paths,
   stringTests: [bareStringTest, structuredStringTest],
   serialise: (value) => JSON.stringify(value) ?? 'null',
@@ -130,6 +139,8 @@ void bareStringTest
 void structuredStringTest
 void ignoredSegment
 void keySelector
+void regexKeySelector
+void structuredKeyRule
 void regexPathSegment
 void structuredSegment
 void structuredSelector

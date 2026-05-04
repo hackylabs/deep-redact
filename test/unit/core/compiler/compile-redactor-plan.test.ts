@@ -3,7 +3,7 @@ import { compileRedactorPlan } from '../../../../src/core/compiler/compile-redac
 import { validateConfig } from '../../../../src/core/validation/validate-config.js'
 
 describe('compiled exact-selector rule plan', () => {
-  it('merges global defaults into path rules and exact-key rules once at initialisation', () => {
+  it('merges global defaults into path rules and literal key matcher defaults once at initialisation', () => {
     const plan = compileRedactorPlan({
       censor: '[GLOBAL]',
       keys: ['password'],
@@ -15,17 +15,25 @@ describe('compiled exact-selector rule plan', () => {
       ],
     })
 
-    expect(Object.getPrototypeOf(plan.exactKeyRules.keys)).toBeNull()
     expect(Object.getPrototypeOf(plan.exactPathRules)).toBeNull()
-    expect(plan.exactKeyRules.keys).toEqual({
-      password: true,
-    })
+    expect(Object.isFrozen(plan.exactKeyRules)).toBe(true)
+    expect(Object.isFrozen(plan.exactKeyRules.literalMatchers)).toBe(true)
+    expect(plan.exactKeyRules.literalMatchers).toEqual([
+      {
+        canonicalKey: 'password',
+        configuredKey: 'password',
+        matchMode: 'exact',
+        rulePath: ['password'],
+      },
+    ])
+    expect(Object.isFrozen(plan.exactKeyRules.literalMatchers[0])).toBe(true)
     expect(plan.exactKeyRules.policy).toEqual({
       censor: '[GLOBAL]',
       remove: false,
       replaceStringByLength: false,
       retainStructure: false,
     })
+    expect(plan.exactKeyRules.requiresCanonicalKey).toBe(false)
     expect(plan.exactPathRules['user.password']).toEqual({
       canonicalPath: 'user.password',
       policy: {
@@ -37,6 +45,46 @@ describe('compiled exact-selector rule plan', () => {
       rulePath: expect.any(Array),
       segments: expect.any(Array),
     })
+  })
+
+  it('merges global and local literal matching defaults into ordered frozen matcher records', () => {
+    const plan = compileRedactorPlan({
+      caseSensitiveKeyMatch: false,
+      keys: [
+        'pass_code',
+        {
+          key: 'ApiKey',
+          caseSensitiveKeyMatch: true,
+        },
+        {
+          key: 'pass',
+          fuzzyKeyMatch: true,
+          caseSensitiveKeyMatch: true,
+        },
+      ],
+    })
+
+    expect(plan.exactKeyRules.requiresCanonicalKey).toBe(true)
+    expect(plan.exactKeyRules.literalMatchers).toEqual([
+      {
+        canonicalKey: 'passcode',
+        configuredKey: 'pass_code',
+        matchMode: 'canonical-exact',
+        rulePath: ['pass_code'],
+      },
+      {
+        canonicalKey: 'apikey',
+        configuredKey: 'ApiKey',
+        matchMode: 'exact',
+        rulePath: ['ApiKey'],
+      },
+      {
+        canonicalKey: 'pass',
+        configuredKey: 'pass',
+        matchMode: 'contains',
+        rulePath: ['pass'],
+      },
+    ])
   })
 
   it('applies local path overrides only to the matching rule while preserving compiled defaults elsewhere', () => {
@@ -106,10 +154,14 @@ describe('compiled exact-selector rule plan', () => {
       keys: ['password', tokenPattern],
     })
 
-    expect(Object.getPrototypeOf(plan.exactKeyRules.keys)).toBeNull()
-    expect(plan.exactKeyRules.keys).toEqual({
-      password: true,
-    })
+    expect(plan.exactKeyRules.literalMatchers).toEqual([
+      {
+        canonicalKey: 'password',
+        configuredKey: 'password',
+        matchMode: 'exact',
+        rulePath: ['password'],
+      },
+    ])
     expect(plan.regexKeyRules.matchers).toHaveLength(1)
     expect(plan.regexKeyRules.matchers[0]).not.toBe(tokenPattern)
     expect(plan.regexKeyRules.matchers[0]?.source).toBe('token$')
@@ -122,6 +174,32 @@ describe('compiled exact-selector rule plan', () => {
       replaceStringByLength: false,
       retainStructure: false,
     })
+  })
+
+  it('preserves literal matcher configuration order when more than one rule can hit the same property', () => {
+    const plan = compileRedactorPlan({
+      keys: [
+        {
+          key: 'pass',
+          fuzzyKeyMatch: true,
+          caseSensitiveKeyMatch: true,
+        },
+        {
+          key: 'pass_code',
+          fuzzyKeyMatch: false,
+          caseSensitiveKeyMatch: false,
+        },
+      ],
+    })
+
+    expect(plan.exactKeyRules.literalMatchers.map((rule) => rule.configuredKey)).toEqual([
+      'pass',
+      'pass_code',
+    ])
+    expect(plan.exactKeyRules.literalMatchers.map((rule) => rule.matchMode)).toEqual([
+      'contains',
+      'canonical-exact',
+    ])
   })
 
   it('uses cloned non-stateful regex key matchers deterministically', () => {

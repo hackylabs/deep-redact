@@ -2,6 +2,7 @@ import type { DeepRedactOptions } from './config.js'
 
 export type {
   DeepRedactOptions,
+  KeyRule,
   KeySelector,
   SerialiseOption,
   StringTest,

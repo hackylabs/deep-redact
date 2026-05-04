@@ -2,6 +2,7 @@ import type {
   Censor,
   DeepRedactOptions,
   FunctionCensorContext,
+  KeyRule,
   KeySelector,
   PathEntry,
   PathRule,
@@ -17,6 +18,7 @@ import {
   type ExactPathSegment,
   type PathSegment,
 } from '../matching/path-parser.js'
+import { canonicaliseKey } from '../matching/key-normaliser.js'
 import { normaliseParsedPath, renderSelectorSignature } from '../matching/path-normaliser.js'
 import { cloneRegExp } from '../validation/regex-safety.js'
 
@@ -43,9 +45,19 @@ export interface CompiledDynamicPathRule {
   readonly segments: readonly PathSegment[]
 }
 
+export type CompiledLiteralKeyMatchMode = 'exact' | 'canonical-exact' | 'contains' | 'canonical-contains'
+
+export interface CompiledLiteralKeyRule {
+  readonly canonicalKey: string
+  readonly configuredKey: string
+  readonly matchMode: CompiledLiteralKeyMatchMode
+  readonly rulePath: PathSegments
+}
+
 export interface CompiledExactKeyRules {
-  readonly keys: Readonly<Record<string, true>>
+  readonly literalMatchers: readonly CompiledLiteralKeyRule[]
   readonly policy: CompiledRedactionPolicy
+  readonly requiresCanonicalKey: boolean
 }
 
 export interface CompiledRegexKeyRules {
@@ -103,6 +115,18 @@ const createDefaultPolicy = (options: DeepRedactOptions): CompiledRedactionPolic
     remove: options.remove ?? false,
     replaceStringByLength: options.replaceStringByLength ?? false,
     retainStructure: options.retainStructure ?? false,
+  })
+}
+
+interface KeyMatchDefaults {
+  readonly caseSensitiveKeyMatch: boolean
+  readonly fuzzyKeyMatch: boolean
+}
+
+const createKeyMatchDefaults = (options: DeepRedactOptions): KeyMatchDefaults => {
+  return Object.freeze({
+    caseSensitiveKeyMatch: options.caseSensitiveKeyMatch ?? true,
+    fuzzyKeyMatch: options.fuzzyKeyMatch ?? false,
   })
 }
 
@@ -185,21 +209,55 @@ const compilePathRules = (
   })
 }
 
+const isKeyRule = (keySelector: KeySelector): keySelector is KeyRule => {
+  return typeof keySelector === 'object'
+    && keySelector !== null
+    && !(keySelector instanceof RegExp)
+    && 'key' in keySelector
+}
+
+const toLiteralKeyRule = (keySelector: string | KeyRule, defaults: KeyMatchDefaults): CompiledLiteralKeyRule => {
+  const configuredKey = typeof keySelector === 'string' ? keySelector : keySelector.key
+  const fuzzyKeyMatch = typeof keySelector === 'string'
+    ? defaults.fuzzyKeyMatch
+    : keySelector.fuzzyKeyMatch ?? defaults.fuzzyKeyMatch
+  const caseSensitiveKeyMatch = typeof keySelector === 'string'
+    ? defaults.caseSensitiveKeyMatch
+    : keySelector.caseSensitiveKeyMatch ?? defaults.caseSensitiveKeyMatch
+
+  let matchMode: CompiledLiteralKeyMatchMode = 'exact'
+
+  if (fuzzyKeyMatch) {
+    matchMode = caseSensitiveKeyMatch ? 'contains' : 'canonical-contains'
+  } else if (!caseSensitiveKeyMatch) {
+    matchMode = 'canonical-exact'
+  }
+
+  return Object.freeze({
+    canonicalKey: canonicaliseKey(configuredKey),
+    configuredKey,
+    matchMode,
+    rulePath: Object.freeze([configuredKey]) as PathSegments,
+  })
+}
+
 const compileExactKeyRules = (
   keys: readonly KeySelector[],
   defaults: CompiledRedactionPolicy,
+  keyDefaults: KeyMatchDefaults,
 ): CompiledExactKeyRules => {
-  const exactKeys = createLookupTable<true>()
+  const literalMatchers: CompiledLiteralKeyRule[] = []
 
   for (const key of keys) {
-    if (typeof key === 'string') {
-      exactKeys[key] = true
+    if (typeof key === 'string' || isKeyRule(key)) {
+      literalMatchers.push(toLiteralKeyRule(key, keyDefaults))
     }
   }
 
   return Object.freeze({
-    keys: Object.freeze(exactKeys),
+    literalMatchers: Object.freeze(literalMatchers),
     policy: defaults,
+    requiresCanonicalKey: literalMatchers.some((rule) => rule.matchMode.startsWith('canonical')),
   })
 }
 
@@ -248,12 +306,13 @@ const compileSubstringRules = (
 
 export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRedactorPlan => {
   const defaults = createDefaultPolicy(options)
+  const keyDefaults = createKeyMatchDefaults(options)
   const compiledPathRules = compilePathRules(options.paths ?? [], defaults)
 
   return Object.freeze({
     defaults,
     dynamicPathRules: compiledPathRules.dynamicPathRules,
-    exactKeyRules: compileExactKeyRules(options.keys ?? [], defaults),
+    exactKeyRules: compileExactKeyRules(options.keys ?? [], defaults, keyDefaults),
     exactPathRules: compiledPathRules.exactPathRules,
     regexKeyRules: compileRegexKeyRules(options.keys ?? [], defaults),
     serialise: options.serialise,

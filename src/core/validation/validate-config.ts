@@ -8,7 +8,9 @@ import {
 import { getUnsupportedRegexMessage, isRegExp } from './regex-safety.js'
 
 const rootOptionNames = new Set<keyof DeepRedactOptions>([
+  'caseSensitiveKeyMatch',
   'censor',
+  'fuzzyKeyMatch',
   'keys',
   'paths',
   'remove',
@@ -29,6 +31,12 @@ const pathRuleOptionNames = new Set<keyof PathRule>([
 const substringRuleOptionNames = new Set([
   'pattern',
   'replacer',
+])
+
+const keyRuleOptionNames = new Set([
+  'caseSensitiveKeyMatch',
+  'fuzzyKeyMatch',
+  'key',
 ])
 
 type ConfigRecord = Record<string, unknown>
@@ -158,6 +166,46 @@ const getUnsupportedKeyRegexMessage = (selector: RegExp): string | undefined => 
   return getUnsupportedRegexMessage(selector, 'Regex key selector')
 }
 
+const validateLiteralKeySelector = (
+  entry: string,
+  path: string,
+  issues: ValidationIssue[],
+): void => {
+  if (entry.length === 0) {
+    pushIssue(issues, path, 'key selectors must not be empty.')
+    return
+  }
+
+  const unsupportedSelectorMessage = getUnsupportedKeySelectorMessage(entry)
+
+  if (unsupportedSelectorMessage !== undefined) {
+    pushIssue(issues, path, unsupportedSelectorMessage)
+  }
+}
+
+const validateKeyRule = (
+  value: ConfigRecord,
+  path: string,
+  issues: ValidationIssue[],
+): void => {
+  validateAllowedOptions(value, keyRuleOptionNames, path, issues)
+
+  if (typeof value.key !== 'string') {
+    pushIssue(issues, `${path}.key`, 'key must be a string.')
+  } else if (value.key.length === 0) {
+    pushIssue(issues, `${path}.key`, 'key must not be empty.')
+  } else {
+    const unsupportedSelectorMessage = getUnsupportedKeySelectorMessage(value.key)
+
+    if (unsupportedSelectorMessage !== undefined) {
+      pushIssue(issues, `${path}.key`, unsupportedSelectorMessage)
+    }
+  }
+
+  validateBooleanOption(value.fuzzyKeyMatch, path, 'fuzzyKeyMatch', issues)
+  validateBooleanOption(value.caseSensitiveKeyMatch, path, 'caseSensitiveKeyMatch', issues)
+}
+
 const validateKeys = (
   value: unknown,
   path: string,
@@ -185,21 +233,17 @@ const validateKeys = (
       return
     }
 
-    if (typeof entry !== 'string') {
-      pushIssue(issues, entryPath, 'key selectors must be strings or RegExp instances.')
+    if (typeof entry === 'string') {
+      validateLiteralKeySelector(entry, entryPath, issues)
       return
     }
 
-    if (entry.length === 0) {
-      pushIssue(issues, entryPath, 'key selectors must not be empty.')
+    if (isPlainObject(entry)) {
+      validateKeyRule(entry, entryPath, issues)
       return
     }
 
-    const unsupportedSelectorMessage = getUnsupportedKeySelectorMessage(entry)
-
-    if (unsupportedSelectorMessage !== undefined) {
-      pushIssue(issues, entryPath, unsupportedSelectorMessage)
-    }
+    pushIssue(issues, entryPath, 'key selectors must be strings or RegExp instances or key-rule objects.')
   })
 }
 
@@ -380,7 +424,9 @@ export const validateConfig = (options: unknown): ValidationReport => {
   }
 
   validateAllowedOptions(options, rootOptionNames, 'options', issues)
+  validateBooleanOption(options.caseSensitiveKeyMatch, 'options', 'caseSensitiveKeyMatch', issues)
   validateCensorOption(options.censor, 'options', issues)
+  validateBooleanOption(options.fuzzyKeyMatch, 'options', 'fuzzyKeyMatch', issues)
   validateKeys(options.keys, 'options.keys', issues)
   validateStringTests(options.stringTests, 'options.stringTests', issues)
   validateBooleanOption(options.remove, 'options', 'remove', issues)

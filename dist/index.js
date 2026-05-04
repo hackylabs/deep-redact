@@ -302,6 +302,11 @@ const parsePathSelector = (selector) => {
 	return typeof selector === "string" ? parseStringPathSelector(selector) : parseStructuredPathSelector(selector);
 };
 //#endregion
+//#region src/core/matching/key-normaliser.ts
+const canonicaliseKey = (value) => {
+	return value.toLowerCase().trim().replace(/[_-]/g, "");
+};
+//#endregion
 //#region src/core/matching/path-normaliser.ts
 const canonicalBarePropertyPattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const renderPropertySegment = (value, isRoot) => {
@@ -369,6 +374,12 @@ const createDefaultPolicy = (options) => {
 		retainStructure: options.retainStructure ?? false
 	});
 };
+const createKeyMatchDefaults = (options) => {
+	return Object.freeze({
+		caseSensitiveKeyMatch: options.caseSensitiveKeyMatch ?? true,
+		fuzzyKeyMatch: options.fuzzyKeyMatch ?? false
+	});
+};
 const mergePolicy = (defaults, overrides) => {
 	return Object.freeze({
 		censor: overrides.censor ?? defaults.censor,
@@ -417,12 +428,30 @@ const compilePathRules = (pathEntries, defaults) => {
 		exactPathRules: Object.freeze(exactPathRules)
 	});
 };
-const compileExactKeyRules = (keys, defaults) => {
-	const exactKeys = createLookupTable();
-	for (const key of keys) if (typeof key === "string") exactKeys[key] = true;
+const isKeyRule = (keySelector) => {
+	return typeof keySelector === "object" && keySelector !== null && !(keySelector instanceof RegExp) && "key" in keySelector;
+};
+const toLiteralKeyRule = (keySelector, defaults) => {
+	const configuredKey = typeof keySelector === "string" ? keySelector : keySelector.key;
+	const fuzzyKeyMatch = typeof keySelector === "string" ? defaults.fuzzyKeyMatch : keySelector.fuzzyKeyMatch ?? defaults.fuzzyKeyMatch;
+	const caseSensitiveKeyMatch = typeof keySelector === "string" ? defaults.caseSensitiveKeyMatch : keySelector.caseSensitiveKeyMatch ?? defaults.caseSensitiveKeyMatch;
+	let matchMode = "exact";
+	if (fuzzyKeyMatch) matchMode = caseSensitiveKeyMatch ? "contains" : "canonical-contains";
+	else if (!caseSensitiveKeyMatch) matchMode = "canonical-exact";
 	return Object.freeze({
-		keys: Object.freeze(exactKeys),
-		policy: defaults
+		canonicalKey: canonicaliseKey(configuredKey),
+		configuredKey,
+		matchMode,
+		rulePath: Object.freeze([configuredKey])
+	});
+};
+const compileExactKeyRules = (keys, defaults, keyDefaults) => {
+	const literalMatchers = [];
+	for (const key of keys) if (typeof key === "string" || isKeyRule(key)) literalMatchers.push(toLiteralKeyRule(key, keyDefaults));
+	return Object.freeze({
+		literalMatchers: Object.freeze(literalMatchers),
+		policy: defaults,
+		requiresCanonicalKey: literalMatchers.some((rule) => rule.matchMode.startsWith("canonical"))
 	});
 };
 const compileRegexKeyRules = (keys, defaults) => {
@@ -452,11 +481,12 @@ const compileSubstringRules = (stringTests, defaults) => {
 };
 const compileRedactorPlan = (options = {}) => {
 	const defaults = createDefaultPolicy(options);
+	const keyDefaults = createKeyMatchDefaults(options);
 	const compiledPathRules = compilePathRules(options.paths ?? [], defaults);
 	return Object.freeze({
 		defaults,
 		dynamicPathRules: compiledPathRules.dynamicPathRules,
-		exactKeyRules: compileExactKeyRules(options.keys ?? [], defaults),
+		exactKeyRules: compileExactKeyRules(options.keys ?? [], defaults, keyDefaults),
 		exactPathRules: compiledPathRules.exactPathRules,
 		regexKeyRules: compileRegexKeyRules(options.keys ?? [], defaults),
 		serialise: options.serialise,
@@ -504,13 +534,26 @@ const findMatchingRegexKey = (matchers, key) => {
 		return matcher.test(key);
 	});
 };
+const findMatchingLiteralKey = (literalMatchers, requiresCanonicalKey, key) => {
+	let canonicalKey;
+	for (const rule of literalMatchers) {
+		if (rule.matchMode === "exact" && key === rule.configuredKey) return rule;
+		if (rule.matchMode === "contains" && key.includes(rule.configuredKey)) return rule;
+		if (requiresCanonicalKey && (rule.matchMode === "canonical-exact" || rule.matchMode === "canonical-contains")) {
+			canonicalKey ??= canonicaliseKey(key);
+			if (rule.matchMode === "canonical-exact" && canonicalKey === rule.canonicalKey) return rule;
+			if (rule.matchMode === "canonical-contains" && canonicalKey.includes(rule.canonicalKey)) return rule;
+		}
+	}
+};
 const renderPathSegmentText = (pathSegment) => {
 	return pathSegment.kind === "index" ? String(pathSegment.value) : pathSegment.value;
 };
 const resolveDirectKeyMatch = (plan, key) => {
-	if (hasLookupValue(plan.exactKeyRules.keys, key)) return {
+	const matchingLiteralRule = findMatchingLiteralKey(plan.exactKeyRules.literalMatchers, plan.exactKeyRules.requiresCanonicalKey, key);
+	if (matchingLiteralRule !== void 0) return {
 		source: "exact-key",
-		rulePath: Object.freeze([key])
+		rulePath: matchingLiteralRule.rulePath
 	};
 	const matchingRegex = findMatchingRegexKey(plan.regexKeyRules.matchers, key);
 	if (matchingRegex !== void 0) return {
@@ -797,7 +840,9 @@ const validatePathSelectors = (selectorCandidates, issues) => {
 //#endregion
 //#region src/core/validation/validate-config.ts
 const rootOptionNames = new Set([
+	"caseSensitiveKeyMatch",
 	"censor",
+	"fuzzyKeyMatch",
 	"keys",
 	"paths",
 	"remove",
@@ -814,6 +859,11 @@ const pathRuleOptionNames = new Set([
 	"retainStructure"
 ]);
 const substringRuleOptionNames = new Set(["pattern", "replacer"]);
+const keyRuleOptionNames = new Set([
+	"caseSensitiveKeyMatch",
+	"fuzzyKeyMatch",
+	"key"
+]);
 const isPlainObject = (value) => {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
 	const prototype = Object.getPrototypeOf(value);
@@ -860,6 +910,25 @@ const getUnsupportedKeySelectorMessage = (selector) => {
 const getUnsupportedKeyRegexMessage = (selector) => {
 	return getUnsupportedRegexMessage(selector, "Regex key selector");
 };
+const validateLiteralKeySelector = (entry, path, issues) => {
+	if (entry.length === 0) {
+		pushIssue(issues, path, "key selectors must not be empty.");
+		return;
+	}
+	const unsupportedSelectorMessage = getUnsupportedKeySelectorMessage(entry);
+	if (unsupportedSelectorMessage !== void 0) pushIssue(issues, path, unsupportedSelectorMessage);
+};
+const validateKeyRule = (value, path, issues) => {
+	validateAllowedOptions(value, keyRuleOptionNames, path, issues);
+	if (typeof value.key !== "string") pushIssue(issues, `${path}.key`, "key must be a string.");
+	else if (value.key.length === 0) pushIssue(issues, `${path}.key`, "key must not be empty.");
+	else {
+		const unsupportedSelectorMessage = getUnsupportedKeySelectorMessage(value.key);
+		if (unsupportedSelectorMessage !== void 0) pushIssue(issues, `${path}.key`, unsupportedSelectorMessage);
+	}
+	validateBooleanOption(value.fuzzyKeyMatch, path, "fuzzyKeyMatch", issues);
+	validateBooleanOption(value.caseSensitiveKeyMatch, path, "caseSensitiveKeyMatch", issues);
+};
 const validateKeys = (value, path, issues) => {
 	if (value === void 0) return;
 	if (!Array.isArray(value)) {
@@ -873,16 +942,15 @@ const validateKeys = (value, path, issues) => {
 			if (unsupportedRegexMessage !== void 0) pushIssue(issues, entryPath, unsupportedRegexMessage);
 			return;
 		}
-		if (typeof entry !== "string") {
-			pushIssue(issues, entryPath, "key selectors must be strings or RegExp instances.");
+		if (typeof entry === "string") {
+			validateLiteralKeySelector(entry, entryPath, issues);
 			return;
 		}
-		if (entry.length === 0) {
-			pushIssue(issues, entryPath, "key selectors must not be empty.");
+		if (isPlainObject(entry)) {
+			validateKeyRule(entry, entryPath, issues);
 			return;
 		}
-		const unsupportedSelectorMessage = getUnsupportedKeySelectorMessage(entry);
-		if (unsupportedSelectorMessage !== void 0) pushIssue(issues, entryPath, unsupportedSelectorMessage);
+		pushIssue(issues, entryPath, "key selectors must be strings or RegExp instances or key-rule objects.");
 	});
 };
 const zeroLengthProbeValues = Object.freeze([
@@ -984,7 +1052,9 @@ const validateConfig = (options) => {
 		return createValidationReport(issues);
 	}
 	validateAllowedOptions(options, rootOptionNames, "options", issues);
+	validateBooleanOption(options.caseSensitiveKeyMatch, "options", "caseSensitiveKeyMatch", issues);
 	validateCensorOption(options.censor, "options", issues);
+	validateBooleanOption(options.fuzzyKeyMatch, "options", "fuzzyKeyMatch", issues);
 	validateKeys(options.keys, "options.keys", issues);
 	validateStringTests(options.stringTests, "options.stringTests", issues);
 	validateBooleanOption(options.remove, "options", "remove", issues);

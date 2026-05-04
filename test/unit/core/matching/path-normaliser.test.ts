@@ -56,7 +56,7 @@ describe('exact path selector parsing and normalisation', () => {
     ['structured invalid matcher object', ['users', { match: 'email' }], /unsupported structured selector segment/i],
     ['structured regex-like string segment', ['users', '/^team-/i', 'token'], /unsupported regex-like segment/i],
   ])('rejects %s', (_label, selector, expectedMessage) => {
-    expect(() => parsePathSelector(selector as never)).toThrowError(expectedMessage)
-    expect(() => parsePathSelector(selector as never)).toThrowError(PathSyntaxError)
+    expect(() => parsePathSelector(selector as never)).toThrow(expectedMessage)
+    expect(() => parsePathSelector(selector as never)).toThrow(PathSyntaxError)
   })
 })

@@ -104,7 +104,7 @@ describe('Reusable redactor factory contract', () => {
       /regex path segment source must be at most 256 characters/i,
     ],
   ])('fails fast for %s', (_label, options, expectedMessage) => {
-    expect(() => deepRedact(options as never)).toThrowError(expectedMessage)
+    expect(() => deepRedact(options as never)).toThrow(expectedMessage)
   })
 
   it.each([
@@ -149,7 +149,7 @@ describe('Reusable redactor factory contract', () => {
       /paths\[0\].*remove cannot be combined with retainStructure/i,
     ],
   ])('rejects conflicting options for %s', (_label, options, expectedMessage) => {
-    expect(() => deepRedact(options)).toThrowError(expectedMessage)
+    expect(() => deepRedact(options)).toThrow(expectedMessage)
   })
 
   it('accepts non-stateful RegExp key selectors during initialisation', () => {
@@ -214,7 +214,7 @@ describe('Reusable redactor factory contract', () => {
         /options\.stringTests\[0\]\.pattern: substring rule pattern must not match zero-length strings/i,
       ],
     ])('fails fast for %s', (_label, options, expectedMessage) => {
-      expect(() => deepRedact(options as never)).toThrowError(expectedMessage)
+      expect(() => deepRedact(options as never)).toThrow(expectedMessage)
     })
 
     it('accepts safe global substring patterns without mutating caller-owned lastIndex during validation', () => {
@@ -1153,6 +1153,305 @@ describe('Reusable redactor factory contract', () => {
     expect(passwordKey.lastIndex).toBe(7)
   })
 
+  describe('Fuzzy and case-insensitive literal key matching', () => {
+    it.each([
+      [
+        'rejects unsupported key-rule option names',
+        { keys: [{ key: 'password', remove: true }] },
+        /options\.keys\[0\]: unsupported option "remove"/i,
+      ],
+      [
+        'rejects non-boolean fuzzyKeyMatch values',
+        { keys: [{ key: 'password', fuzzyKeyMatch: 'yes' }] },
+        /options\.keys\[0\]\.fuzzyKeyMatch: fuzzyKeyMatch must be a boolean/i,
+      ],
+      [
+        'rejects non-boolean caseSensitiveKeyMatch values',
+        { keys: [{ key: 'password', caseSensitiveKeyMatch: 'no' }] },
+        /options\.keys\[0\]\.caseSensitiveKeyMatch: caseSensitiveKeyMatch must be a boolean/i,
+      ],
+      [
+        'rejects empty key-rule key strings',
+        { keys: [{ key: '' }] },
+        /options\.keys\[0\]\.key: key must not be empty/i,
+      ],
+      [
+        'rejects non-string key-rule key values',
+        { keys: [{ key: /password/i }] },
+        /options\.keys\[0\]\.key: key must be a string/i,
+      ],
+    ])('%s', (_label, options, expectedMessage) => {
+      expect(() => deepRedact(options as never)).toThrow(expectedMessage)
+    })
+
+    it('defaults to exact case-sensitive matching for bare string key rules when no matching options are set', () => {
+      const redact = deepRedact({
+        keys: ['PassCode'],
+      })
+
+      expect(redact({
+        PassCode: '[REDACTED]',
+        passcode: 'visible-lower',
+        passCode: 'visible-camel',
+        'PASS-CODE': 'visible-kebab',
+      })).toEqual({
+        PassCode: '[REDACTED]',
+        passcode: 'visible-lower',
+        passCode: 'visible-camel',
+        'PASS-CODE': 'visible-kebab',
+      })
+    })
+
+    it('inherits root matching defaults and keeps local literal overrides isolated per rule', () => {
+      const redact = deepRedact({
+        censor: (_value: unknown, ctx: FunctionCensorContext) => `[${String(ctx.rulePath[0])}]`,
+        fuzzyKeyMatch: false,
+        caseSensitiveKeyMatch: false,
+        keys: [
+          'pass_code',
+          {
+            key: 'ApiKey',
+            caseSensitiveKeyMatch: true,
+          },
+        ],
+      })
+
+      expect(redact({
+        passCode: 'global-a',
+        'PASS-CODE': 'global-b',
+        apikey: 'visible-local-miss',
+        ApiKey: 'local-hit',
+      })).toEqual({
+        passCode: '[pass_code]',
+        'PASS-CODE': '[pass_code]',
+        apikey: 'visible-local-miss',
+        ApiKey: '[ApiKey]',
+      })
+    })
+
+    it('matches only exact case-sensitive literal keys when fuzzyKeyMatch is false and caseSensitiveKeyMatch is true', () => {
+      const redact = deepRedact({
+        censor: '[CASE-SENSITIVE-KEY]',
+        keys: [{
+          key: 'PassCode',
+          fuzzyKeyMatch: false,
+          caseSensitiveKeyMatch: true,
+        }],
+      })
+
+      expect(redact({
+        PassCode: '[CASE-SENSITIVE-KEY]',
+        passcode: 'visible-lower',
+        passCode: 'visible-camel',
+        'PASS-CODE': 'visible-kebab',
+      })).toEqual({
+        PassCode: '[CASE-SENSITIVE-KEY]',
+        passcode: 'visible-lower',
+        passCode: 'visible-camel',
+        'PASS-CODE': 'visible-kebab',
+      })
+    })
+
+    it('uses canonical equality for exact case-insensitive literal key matches', () => {
+      const redact = deepRedact({
+        censor: '[CASE-INSENSITIVE-KEY]',
+        keys: [{
+          key: 'pass_code',
+          fuzzyKeyMatch: false,
+          caseSensitiveKeyMatch: false,
+        }],
+      })
+
+      expect(redact({
+        pass_code: 'one',
+        'pass-code': 'two',
+        passCode: 'three',
+        ' PASS_CODE ': 'four',
+      })).toEqual({
+        pass_code: '[CASE-INSENSITIVE-KEY]',
+        'pass-code': '[CASE-INSENSITIVE-KEY]',
+        passCode: '[CASE-INSENSITIVE-KEY]',
+        ' PASS_CODE ': '[CASE-INSENSITIVE-KEY]',
+      })
+    })
+
+    it('uses raw containment for fuzzy case-sensitive literal key matches', () => {
+      const redact = deepRedact({
+        censor: '[FUZZY-KEY]',
+        keys: [{
+          key: 'pass',
+          fuzzyKeyMatch: true,
+          caseSensitiveKeyMatch: true,
+        }],
+      })
+
+      expect(redact({
+        password: 'lower-hit',
+        passcode: 'camel-hit',
+        Password: 'visible-upper',
+      })).toEqual({
+        password: '[FUZZY-KEY]',
+        passcode: '[FUZZY-KEY]',
+        Password: 'visible-upper',
+      })
+    })
+
+    it('uses canonical containment for fuzzy case-insensitive literal key matches', () => {
+      const redact = deepRedact({
+        censor: '[FUZZY-KEY]',
+        keys: [{
+          key: 'pass_code',
+          fuzzyKeyMatch: true,
+          caseSensitiveKeyMatch: false,
+        }],
+      })
+
+      expect(redact({
+        passcode: 'one',
+        passCode: 'two',
+        'PASS-CODE': 'three',
+      })).toEqual({
+        passcode: '[FUZZY-KEY]',
+        passCode: '[FUZZY-KEY]',
+        'PASS-CODE': '[FUZZY-KEY]',
+      })
+    })
+
+    it('does not apply a literal key rule when the active matching settings do not match the payload key', () => {
+      const redact = deepRedact({
+        censor: '[NO-HIT]',
+        keys: [{
+          key: 'token',
+          fuzzyKeyMatch: false,
+          caseSensitiveKeyMatch: true,
+        }],
+      })
+
+      expect(redact({
+        Token: 'visible-case-miss',
+        tokenised: 'visible-fuzzy-miss',
+      })).toEqual({
+        Token: 'visible-case-miss',
+        tokenised: 'visible-fuzzy-miss',
+      })
+    })
+
+    it('does not change regex-key or path-selector semantics when literal matching defaults are enabled globally', () => {
+      const redact = deepRedact({
+        fuzzyKeyMatch: true,
+        caseSensitiveKeyMatch: false,
+        censor: (_value: unknown, ctx: FunctionCensorContext) => ctx.rulePath[0] instanceof RegExp
+          ? '[REGEX-KEY]'
+          : '[PATH]',
+        keys: [/Password$/],
+        paths: [{
+          path: 'account.Pass_Code',
+          censor: '[PATH]',
+        }],
+      })
+
+      expect(redact({
+        account: {
+          Pass_Code: 'path-hit',
+          'pass-code': 'visible-path-miss',
+        },
+        record: {
+          dbPassword: 'regex-hit',
+          dbpassword: 'visible-regex-miss',
+        },
+      })).toEqual({
+        account: {
+          Pass_Code: '[PATH]',
+          'pass-code': 'visible-path-miss',
+        },
+        record: {
+          dbPassword: '[REGEX-KEY]',
+          dbpassword: 'visible-regex-miss',
+        },
+      })
+    })
+
+    it('keeps fuzzy or case-insensitive literal hits in the exact-key tier beneath path rules and above regex-key and substring rules', () => {
+      const redact = deepRedact({
+        censor: (_value: unknown, ctx: FunctionCensorContext) => ctx.rulePath[0] instanceof RegExp
+          ? '[REGEX-KEY]'
+          : '[CASE-INSENSITIVE-KEY]',
+        keys: [
+          {
+            key: 'pass_code',
+            fuzzyKeyMatch: true,
+            caseSensitiveKeyMatch: false,
+          },
+          /pass/i,
+        ],
+        paths: [{
+          path: 'records.path.passCodeNote',
+          censor: '[PATH-WIN]',
+        }],
+        stringTests: [{
+          pattern: /token=\[[A-Z-]+\]/,
+          replacer: (value: string) => value.replace(/token=\[[A-Z-]+\]/, 'token=[SUBSTRING]'),
+        }],
+      })
+
+      expect(redact({
+        records: {
+          path: {
+            passCodeNote: 'token=[PATH]',
+          },
+          literal: {
+            passCodeNote: 'token=[FUZZY-KEY]',
+          },
+          substring: {
+            note: 'token=[SUBSTRING]',
+          },
+        },
+      })).toEqual({
+        records: {
+          path: {
+            passCodeNote: '[PATH-WIN]',
+          },
+          literal: {
+            passCodeNote: '[CASE-INSENSITIVE-KEY]',
+          },
+          substring: {
+            note: 'token=[SUBSTRING]',
+          },
+        },
+      })
+    })
+
+    it('surfaces the first matching configured literal key through FunctionCensorContext.rulePath when multiple literal rules match', () => {
+      const contexts: FunctionCensorContext[] = []
+      const redact = deepRedact({
+        censor: (_value: unknown, ctx: FunctionCensorContext) => {
+          contexts.push(ctx)
+          return '[FIRST-LITERAL-WIN]'
+        },
+        keys: [
+          {
+            key: 'pass',
+            fuzzyKeyMatch: true,
+            caseSensitiveKeyMatch: true,
+          },
+          {
+            key: 'pass_code',
+            fuzzyKeyMatch: false,
+            caseSensitiveKeyMatch: false,
+          },
+        ],
+      })
+
+      expect(redact({
+        passCode: 'secret',
+      })).toEqual({
+        passCode: '[FIRST-LITERAL-WIN]',
+      })
+      expect(contexts).toHaveLength(1)
+      expect(contexts[0]!.rulePath).toEqual(['pass'])
+    })
+  })
+
   it('canonicalises exact array-index paths across dot and bracket syntax', () => {
     const payload = {
       users: [
@@ -1224,7 +1523,7 @@ describe('Reusable redactor factory contract', () => {
         'users[0].email',
         'users.0.email',
       ],
-    })).toThrowError(/duplicate canonical selector "users\.0\.email"/i)
+    })).toThrow(/duplicate canonical selector "users\.0\.email"/i)
   })
 
   it('rejects structured string selectors that duplicate equivalent quoted-property string selectors', () => {
@@ -1233,7 +1532,7 @@ describe('Reusable redactor factory contract', () => {
         'users["0"].email',
         ['users', '0', 'email'],
       ],
-    })).toThrowError(/duplicate canonical selector "users\["0"\]\.email"/i)
+    })).toThrow(/duplicate canonical selector "users\["0"\]\.email"/i)
   })
 
   it('rejects duplicate dynamic selectors during initialisation', () => {
@@ -1242,7 +1541,7 @@ describe('Reusable redactor factory contract', () => {
         'users.*.email',
         'users.*.email',
       ],
-    })).toThrowError(/duplicate dynamic selector "users\.\*\.email"/i)
+    })).toThrow(/duplicate dynamic selector "users\.\*\.email"/i)
   })
 
   it('rejects duplicate regex dynamic selectors during initialisation', () => {
@@ -1251,7 +1550,7 @@ describe('Reusable redactor factory contract', () => {
         ['users', /^tenant-\d+$/i, 'token'],
         ['users', /^tenant-\d+$/i, 'token'],
       ],
-    })).toThrowError(/duplicate dynamic selector/i)
+    })).toThrow(/duplicate dynamic selector/i)
   })
 
   it('redacts one-level wildcard matches without touching deeper non-matching branches', () => {
@@ -2097,7 +2396,7 @@ describe('Function censors and same-length string replacement', () => {
       /replaceStringByLength must be a boolean/i,
     ],
   ])('fails fast for %s', (_label, options, expectedMessage) => {
-    expect(() => deepRedact(options as never)).toThrowError(expectedMessage)
+    expect(() => deepRedact(options as never)).toThrow(expectedMessage)
   })
 
   it('accepts replaceStringByLength: false at root and path-rule without error', () => {

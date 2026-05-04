@@ -1,6 +1,7 @@
 import type {
   CompiledDynamicPathRule,
   CompiledExactPathRule,
+  CompiledLiteralKeyRule,
   CompiledRedactionPolicy,
   CompiledRedactorPlan,
   CompiledSubstringRule,
@@ -13,6 +14,7 @@ import {
   type ExactPathSegment,
   type PathSegment,
 } from '../matching/path-parser.js'
+import { canonicaliseKey } from '../matching/key-normaliser.js'
 import { appendCanonicalPathSegment } from '../matching/path-normaliser.js'
 import {
   applyRedaction,
@@ -79,6 +81,38 @@ const findMatchingRegexKey = (
   })
 }
 
+const findMatchingLiteralKey = (
+  literalMatchers: readonly CompiledLiteralKeyRule[],
+  requiresCanonicalKey: boolean,
+  key: string,
+): CompiledLiteralKeyRule | undefined => {
+  let canonicalKey: string | undefined
+
+  for (const rule of literalMatchers) {
+    if (rule.matchMode === 'exact' && key === rule.configuredKey) {
+      return rule
+    }
+
+    if (rule.matchMode === 'contains' && key.includes(rule.configuredKey)) {
+      return rule
+    }
+
+    if (requiresCanonicalKey && (rule.matchMode === 'canonical-exact' || rule.matchMode === 'canonical-contains')) {
+      canonicalKey ??= canonicaliseKey(key)
+
+      if (rule.matchMode === 'canonical-exact' && canonicalKey === rule.canonicalKey) {
+        return rule
+      }
+
+      if (rule.matchMode === 'canonical-contains' && canonicalKey.includes(rule.canonicalKey)) {
+        return rule
+      }
+    }
+  }
+
+  return undefined
+}
+
 const renderPathSegmentText = (pathSegment: ExactPathSegment): string => {
   return pathSegment.kind === 'index' ? String(pathSegment.value) : pathSegment.value
 }
@@ -87,10 +121,12 @@ const resolveDirectKeyMatch = (
   plan: CompiledRedactorPlan,
   key: string,
 ): DirectKeyMatchResult | undefined => {
-  if (hasLookupValue(plan.exactKeyRules.keys, key)) {
+  const matchingLiteralRule = findMatchingLiteralKey(plan.exactKeyRules.literalMatchers, plan.exactKeyRules.requiresCanonicalKey, key)
+
+  if (matchingLiteralRule !== undefined) {
     return {
       source: 'exact-key',
-      rulePath: Object.freeze([key]),
+      rulePath: matchingLiteralRule.rulePath,
     }
   }
 
