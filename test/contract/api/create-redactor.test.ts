@@ -72,6 +72,19 @@ describe('Reusable redactor factory contract', () => {
     ['unsupported root option', { serialize: true }, /unsupported option "serialize"/i],
     ['unsupported legacy key option', { blacklistedKeys: ['password'] }, /unsupported option "blacklistedKeys"/i],
     ['invalid serialise value', { serialise: 'json' }, /serialise must be a boolean or function/i],
+    ['legacy array transformers option', { transformers: [(_value: unknown) => _value] }, /transformers must be an object/i],
+    ['unsupported transformer bucket', { transformers: { byBucket: {} } }, /unsupported option "byBucket"/i],
+    ['unsupported transformer type bucket', { transformers: { byType: { string: [(_value: unknown) => _value] } } }, /unsupported option "string"/i],
+    [
+      'unsupported transformer constructor bucket',
+      { transformers: { byConstructor: { Promise: [(_value: unknown) => _value] } } },
+      /unsupported option "Promise"/i,
+    ],
+    [
+      'invalid fallback transformer entry',
+      { transformers: { fallback: [null] } },
+      /transformer entries must be functions/i,
+    ],
     ['invalid paths container', { paths: 'user.password' }, /paths must be an array/i],
     ['invalid path entry', { paths: [42] }, /paths\[0\] must be a string selector or path-rule object/i],
     ['missing path on path rule', { paths: [{ remove: true }] }, /paths\[0\]\.path: path must be a string or structured selector array/i],
@@ -2579,6 +2592,385 @@ describe('Reusable redactor factory contract', () => {
     expect(1 in result.users).toBe(false)
     expect(result.users[0]).toEqual({ token: '[REDACTED]' })
     expect(result.users[2]).toEqual({ safe: true })
+  })
+})
+
+describe('Built-in and custom transformer resolution', () => {
+  const buildBigInt = (value: bigint) => ({
+    _transformer: 'bigint',
+    value: {
+      radix: 10,
+      number: value.toString(10),
+    },
+  })
+
+  const buildDate = (value: Date) => ({
+    _transformer: 'date',
+    datetime: value.toISOString(),
+  })
+
+  const buildError = (value: Error) => ({
+    _transformer: 'error',
+    value: {
+      type: value.constructor.name,
+      message: value.message,
+      stack: value.stack,
+    },
+  })
+
+  const buildMap = (value: Map<string, unknown>) => ({
+    _transformer: 'map',
+    value: Object.fromEntries(value.entries()),
+  })
+
+  const buildRegex = (value: RegExp) => ({
+    _transformer: 'regex',
+    value: {
+      source: value.source,
+      flags: value.flags,
+    },
+  })
+
+  const buildSet = (value: Set<unknown>) => ({
+    _transformer: 'set',
+    value: Array.from(value.values()),
+  })
+
+  const buildUrl = (value: URL) => ({
+    _transformer: 'url',
+    value: value.href,
+  })
+
+  class StoryTransformerError extends Error {
+    constructor(message: string) {
+      super(message)
+      this.name = 'StoryTransformerError'
+    }
+  }
+
+  const createStoryError = (message: string): StoryTransformerError => {
+    const error = new StoryTransformerError(message)
+    error.stack = `StoryTransformerError: ${message}\n    at transformer story fixture`
+
+    return error
+  }
+
+  const circularMarker = (path: string, value = '') => ({
+    _transformer: 'circular',
+    path,
+    value,
+  })
+
+  it('returns the public built-in output shapes for supported root runtime values', () => {
+    const bigintValue = 42n
+    const dateValue = new Date('2026-01-02T03:04:05.000Z')
+    const errorValue = createStoryError('top-secret')
+    const mapValue = new Map<string, unknown>([
+      ['password', 'secret'],
+      ['count', 2],
+    ])
+    const regexValue = /token/gi
+    const setValue = new Set<unknown>(['visible', 7])
+    const urlValue = new URL('https://example.com/private?token=secret')
+    const redact = deepRedact({})
+
+    expect(redact(bigintValue)).toEqual(buildBigInt(bigintValue))
+    expect(redact(dateValue)).toEqual(buildDate(dateValue))
+    expect(redact(errorValue)).toEqual(buildError(errorValue))
+    expect(redact(mapValue)).toEqual(buildMap(mapValue))
+    expect(redact(regexValue)).toEqual(buildRegex(regexValue))
+    expect(redact(setValue)).toEqual(buildSet(setValue))
+    expect(redact(urlValue)).toEqual(buildUrl(urlValue))
+  })
+
+  it('transforms supported nested runtime values and continues descendant redaction through their plain representations', () => {
+    const dateValue = new Date('2026-01-02T03:04:05.000Z')
+    const errorValue = createStoryError('token=secret')
+    const regexValue = /token/gi
+    const urlValue = new URL('https://example.com/private?token=secret')
+    const payload = {
+      runtime: {
+        bigint: 42n,
+        date: dateValue,
+        error: errorValue,
+        map: new Map<string, unknown>([
+          ['password', 'secret'],
+          ['nested', { secret: 'value' }],
+        ]),
+        regex: regexValue,
+        set: new Set<unknown>([
+          { password: 'secret' },
+          'visible',
+        ]),
+        url: urlValue,
+      },
+    }
+    const redact = deepRedact({
+      paths: [
+        'runtime.bigint.value.number',
+        'runtime.error.value.message',
+        'runtime.map.value.password',
+        'runtime.map.value.nested.secret',
+        'runtime.regex.value.source',
+        'runtime.set.value.0.password',
+        'runtime.url.value',
+      ],
+    })
+
+    expect(redact(payload)).toEqual({
+      runtime: {
+        bigint: {
+          _transformer: 'bigint',
+          value: {
+            radix: 10,
+            number: '[REDACTED]',
+          },
+        },
+        date: buildDate(dateValue),
+        error: {
+          _transformer: 'error',
+          value: {
+            type: 'StoryTransformerError',
+            message: '[REDACTED]',
+            stack: errorValue.stack,
+          },
+        },
+        map: {
+          _transformer: 'map',
+          value: {
+            password: '[REDACTED]',
+            nested: {
+              secret: '[REDACTED]',
+            },
+          },
+        },
+        regex: {
+          _transformer: 'regex',
+          value: {
+            source: '[REDACTED]',
+            flags: 'gi',
+          },
+        },
+        set: {
+          _transformer: 'set',
+          value: [
+            {
+              password: '[REDACTED]',
+            },
+            'visible',
+          ],
+        },
+        url: {
+          _transformer: 'url',
+          value: '[REDACTED]',
+        },
+      },
+    })
+  })
+
+  it('applies runtime transformation before the serialise adapter for root bigint values', () => {
+    expect(deepRedact({
+      serialise: true,
+    })(42n)).toBe(JSON.stringify(buildBigInt(42n)))
+  })
+
+  it('keeps whole-value rule precedence when a transformed branch is already claimed by an existing terminal rule', () => {
+    const redact = deepRedact({
+      keys: ['map'],
+      paths: ['map.value.password'],
+    })
+
+    expect(redact({
+      map: new Map<string, unknown>([
+        ['password', 'secret'],
+      ]),
+    })).toEqual({
+      map: '[REDACTED]',
+    })
+  })
+
+  it('reuses the circular and revisit seam inside transformed representations', () => {
+    const shared = {
+      secret: 'value',
+    }
+    const payload = new Map<string, unknown>([
+      ['left', shared],
+      ['right', shared],
+    ])
+    payload.set('self', payload)
+    const redact = deepRedact({
+      censor: (_value, context) => String(context.matchedPath.join('.')),
+      paths: [
+        'value.left.secret',
+        'value.right.secret',
+      ],
+    })
+
+    expect(redact(payload)).toEqual({
+      _transformer: 'map',
+      value: {
+        left: {
+          secret: 'value.left.secret',
+        },
+        right: {
+          secret: 'value.right.secret',
+        },
+        self: circularMarker('value.self'),
+      },
+    })
+  })
+
+  it('prefers byType over byConstructor and fallback for supported object values', () => {
+    const byType = vi.fn((value: unknown) => {
+      if (!(value instanceof Date)) {
+        return value
+      }
+
+      return {
+        bucket: 'byType',
+        iso: value.toISOString(),
+      }
+    })
+    const byConstructor = vi.fn((value: unknown) => ({
+      bucket: 'byConstructor',
+      iso: (value as Date).toISOString(),
+    }))
+    const fallback = vi.fn((value: unknown) => ({
+      bucket: 'fallback',
+      value: String(value),
+    }))
+    const dateValue = new Date('2026-01-02T03:04:05.000Z')
+    const redact = deepRedact({
+      transformers: {
+        byType: {
+          object: [byType],
+        },
+        byConstructor: {
+          Date: [byConstructor],
+        },
+        fallback: [fallback],
+      },
+    })
+
+    expect(redact(dateValue)).toEqual({
+      bucket: 'byType',
+      iso: dateValue.toISOString(),
+    })
+    expect(byType).toHaveBeenCalledTimes(1)
+    expect(byConstructor).not.toHaveBeenCalled()
+    expect(fallback).not.toHaveBeenCalled()
+  })
+
+  it('prefers byConstructor over fallback when higher-precedence buckets leave the value unchanged', () => {
+    const byType = vi.fn((value: unknown) => value)
+    const byConstructor = vi.fn((value: unknown) => ({
+      bucket: 'byConstructor',
+      href: (value as URL).href,
+    }))
+    const fallback = vi.fn((value: unknown) => ({
+      bucket: 'fallback',
+      value: String(value),
+    }))
+    const urlValue = new URL('https://example.com/private?token=secret')
+    const redact = deepRedact({
+      transformers: {
+        byType: {
+          object: [byType],
+        },
+        byConstructor: {
+          URL: [byConstructor],
+        },
+        fallback: [fallback],
+      },
+    })
+
+    expect(redact(urlValue)).toEqual({
+      bucket: 'byConstructor',
+      href: urlValue.href,
+    })
+    expect(byType).toHaveBeenCalledTimes(1)
+    expect(byConstructor).toHaveBeenCalledTimes(1)
+    expect(fallback).not.toHaveBeenCalled()
+  })
+
+  it('uses declaration order within a bucket and short-circuits after the first custom transformer that changes the value', () => {
+    const first = vi.fn((value: unknown) => value)
+    const second = vi.fn((value: unknown) => ({
+      bucket: 'second',
+      number: (value as bigint).toString(10),
+    }))
+    const third = vi.fn((value: unknown) => ({
+      bucket: 'third',
+      value: String(value),
+    }))
+    const fallback = vi.fn((value: unknown) => ({
+      bucket: 'fallback',
+      value: String(value),
+    }))
+    const redact = deepRedact({
+      transformers: {
+        byType: {
+          bigint: [first, second, third],
+        },
+        fallback: [fallback],
+      },
+    })
+
+    expect(redact(42n)).toEqual({
+      bucket: 'second',
+      number: '42',
+    })
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(second).toHaveBeenCalledTimes(1)
+    expect(third).not.toHaveBeenCalled()
+    expect(fallback).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the built-in transformer only when earlier user transformers leave the supported value unchanged', () => {
+    const first = vi.fn((value: unknown) => value)
+    const second = vi.fn((value: unknown) => value)
+    const fallback = vi.fn((value: unknown) => ({
+      bucket: 'fallback',
+      value: String(value),
+    }))
+    const redact = deepRedact({
+      transformers: {
+        byType: {
+          bigint: [first, second],
+        },
+        fallback: [fallback],
+      },
+    })
+
+    expect(redact(42n)).toEqual(buildBigInt(42n))
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(second).toHaveBeenCalledTimes(1)
+    expect(fallback).not.toHaveBeenCalled()
+  })
+
+  it('does not apply byType.object transformers to ordinary plain objects or arrays', () => {
+    const byTypeObject = vi.fn((value: unknown) => ({
+      transformed: true,
+      value,
+    }))
+    const payload = {
+      list: [
+        { password: 'secret' },
+      ],
+      plain: {
+        password: 'secret',
+      },
+    }
+    const redact = deepRedact({
+      transformers: {
+        byType: {
+          object: [byTypeObject],
+        },
+      },
+    })
+
+    expect(redact(payload)).toBe(payload)
+    expect(byTypeObject).not.toHaveBeenCalled()
   })
 })
 

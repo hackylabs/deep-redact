@@ -1,5 +1,6 @@
 import type { PathRule, PathSelector } from '../../types/paths.js'
 import type { DeepRedactOptions, SerialiseOption } from '../../types/public.js'
+import type { TransformersByConstructor, TransformersByType } from '../../types/transformers.js'
 import { createValidationReport, type ValidationIssue, type ValidationReport } from './validation-report.js'
 import {
   validatePathSelectors,
@@ -18,6 +19,7 @@ const rootOptionNames = new Set<keyof DeepRedactOptions>([
   'retainStructure',
   'serialise',
   'stringTests',
+  'transformers',
 ])
 
 const pathRuleOptionNames = new Set<keyof PathRule>([
@@ -37,6 +39,26 @@ const keyRuleOptionNames = new Set([
   'caseSensitiveKeyMatch',
   'fuzzyKeyMatch',
   'key',
+])
+
+const transformerOptionNames = new Set<keyof NonNullable<DeepRedactOptions['transformers']>>([
+  'byType',
+  'byConstructor',
+  'fallback',
+])
+
+const transformerByTypeOptionNames = new Set<keyof TransformersByType>([
+  'bigint',
+  'object',
+])
+
+const transformerByConstructorOptionNames = new Set<keyof TransformersByConstructor>([
+  'Date',
+  'Error',
+  'Map',
+  'RegExp',
+  'Set',
+  'URL',
 ])
 
 type ConfigRecord = Record<string, unknown>
@@ -330,6 +352,74 @@ const validateStringTests = (
   })
 }
 
+const validateTransformerEntries = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): void => {
+  if (value === undefined) {
+    return
+  }
+
+  if (!Array.isArray(value)) {
+    pushIssue(issues, path, `${path.split('.').at(-1) ?? 'transformers'} must be an array.`)
+    return
+  }
+
+  value.forEach((entry, index) => {
+    if (typeof entry !== 'function') {
+      pushIssue(issues, `${path}[${index}]`, 'Transformer entries must be functions.')
+    }
+  })
+}
+
+const validateTransformerBuckets = (
+  value: unknown,
+  path: string,
+  allowedOptions: ReadonlySet<string>,
+  issues: ValidationIssue[],
+): void => {
+  if (value === undefined) {
+    return
+  }
+
+  if (!isPlainObject(value)) {
+    pushIssue(issues, path, `${path.split('.').at(-1) ?? 'bucket'} must be an object.`)
+    return
+  }
+
+  validateAllowedOptions(value, allowedOptions, path, issues)
+
+  for (const [bucketName, entries] of Object.entries(value)) {
+    if (!allowedOptions.has(bucketName)) {
+      continue
+    }
+
+    validateTransformerEntries(entries, `${path}.${bucketName}`, issues)
+  }
+}
+
+const validateTransformers = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): void => {
+  if (value === undefined) {
+    return
+  }
+
+  if (!isPlainObject(value)) {
+    pushIssue(issues, path, 'transformers must be an object.')
+    return
+  }
+
+  validateAllowedOptions(value, transformerOptionNames, path, issues)
+
+  validateTransformerBuckets(value.byType, `${path}.byType`, transformerByTypeOptionNames, issues)
+  validateTransformerBuckets(value.byConstructor, `${path}.byConstructor`, transformerByConstructorOptionNames, issues)
+  validateTransformerEntries(value.fallback, `${path}.fallback`, issues)
+}
+
 const validatePathRule = (
   value: unknown,
   path: string,
@@ -429,6 +519,7 @@ export const validateConfig = (options: unknown): ValidationReport => {
   validateBooleanOption(options.fuzzyKeyMatch, 'options', 'fuzzyKeyMatch', issues)
   validateKeys(options.keys, 'options.keys', issues)
   validateStringTests(options.stringTests, 'options.stringTests', issues)
+  validateTransformers(options.transformers, 'options.transformers', issues)
   validateBooleanOption(options.remove, 'options', 'remove', issues)
   validateBooleanOption(options.retainStructure, 'options', 'retainStructure', issues)
   validateBooleanOption(options.replaceStringByLength, 'options', 'replaceStringByLength', issues)

@@ -17,6 +17,10 @@ import {
   type RegexPathSegment,
   type StringTest,
   type SubstringRule,
+  type Transformer,
+  type TransformersByConstructor,
+  type TransformersByType,
+  type TransformersOption,
   type StructuredPathSegment,
   type StructuredPathSelector,
 } from '@hackylabs/deep-redact'
@@ -101,6 +105,24 @@ const structuredStringTest: StringTest = substringRule
 const regexPathSegment: RegexPathSegment = /^tenant-\d+$/
 const structuredSegment: StructuredPathSegment = /^tenant-\d+$/
 const structuredSelector: StructuredPathSelector = ['tenants', /^tenant-\d+$/, 'token']
+const passthroughTransformer: Transformer = (value: unknown) => value
+const transformersByType: TransformersByType = {
+  bigint: [passthroughTransformer],
+  object: [passthroughTransformer],
+}
+const transformersByConstructor: TransformersByConstructor = {
+  Date: [passthroughTransformer],
+  Error: [passthroughTransformer],
+  Map: [passthroughTransformer],
+  RegExp: [passthroughTransformer],
+  Set: [passthroughTransformer],
+  URL: [passthroughTransformer],
+}
+const transformers: TransformersOption = {
+  byType: transformersByType,
+  byConstructor: transformersByConstructor,
+  fallback: [passthroughTransformer],
+}
 
 const options: DeepRedactOptions = {
   censor: twoArgCensor,
@@ -110,6 +132,7 @@ const options: DeepRedactOptions = {
   paths,
   stringTests: [bareStringTest, structuredStringTest],
   serialise: (value) => JSON.stringify(value) ?? 'null',
+  transformers,
   replaceStringByLength: false,
 }
 
@@ -144,6 +167,10 @@ void structuredKeyRule
 void regexPathSegment
 void structuredSegment
 void structuredSelector
+void passthroughTransformer
+void transformersByType
+void transformersByConstructor
+void transformers
 void exampleSegments
 void exampleCtx
 void invalidLegacyOption

@@ -21,6 +21,10 @@ export type {
   StructuredPathSegment,
   StructuredPathSelector,
   SubstringRule,
+  Transformer,
+  TransformersByConstructor,
+  TransformersByType,
+  TransformersOption,
 } from './types/public.js'
 
 export const deepRedact = createReusableRedactor

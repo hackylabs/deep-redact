@@ -22,8 +22,14 @@ import {
   type RemovedValue,
 } from '../replacement/apply-redaction.js'
 import { cloneRegExp } from '../validation/regex-safety.js'
+import {
+  isSupportedTransformableObject,
+  isSupportedTransformableValue,
+  resolveTransformedValue,
+} from '../../transformers/resolve-transformer.js'
 
 type TraversableContainer = Record<string, unknown> | unknown[]
+type TrackableIdentity = object
 type PolicySource = 'dynamic-path' | 'exact-key' | 'exact-path' | 'regex-key'
 
 interface ActivePolicyMatch {
@@ -56,7 +62,7 @@ interface CompletedTraversalRecord {
   readonly canonicalPath: string
   readonly pathStable: boolean
   readonly ruleContextKey: string
-  readonly value: TraversableContainer
+  readonly value: RemovedValue | unknown
 }
 
 interface CompletedArraySnapshotEntry {
@@ -82,12 +88,12 @@ interface CompletedObjectSnapshot {
 type CompletedTraversalSnapshot = CompletedArraySnapshot | CompletedObjectSnapshot
 
 interface TraversalState {
-  readonly completedIdentities: WeakMap<TraversableContainer, CompletedTraversalRecord[]>
-  readonly completedSnapshots: WeakMap<TraversableContainer, CompletedTraversalSnapshot>
+  readonly completedIdentities: WeakMap<TrackableIdentity, CompletedTraversalRecord[]>
+  readonly completedSnapshots: WeakMap<TrackableIdentity, CompletedTraversalSnapshot>
 }
 
 interface TraversalBranchState {
-  readonly activePaths: WeakMap<TraversableContainer, string>
+  readonly activePaths: WeakMap<TrackableIdentity, string>
 }
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
@@ -102,6 +108,10 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 
 const isTraversableContainer = (value: unknown): value is TraversableContainer => {
   return Array.isArray(value) || isPlainObject(value)
+}
+
+const canRetainStructure = (value: unknown): boolean => {
+  return isTraversableContainer(value) || isSupportedTransformableValue(value)
 }
 
 const hasLookupValue = <T>(
@@ -159,14 +169,14 @@ const renderPathSegmentText = (pathSegment: ExactPathSegment): string => {
 
 const createTraversalState = (): TraversalState => {
   return {
-    completedIdentities: new WeakMap<TraversableContainer, CompletedTraversalRecord[]>(),
-    completedSnapshots: new WeakMap<TraversableContainer, CompletedTraversalSnapshot>(),
+    completedIdentities: new WeakMap<TrackableIdentity, CompletedTraversalRecord[]>(),
+    completedSnapshots: new WeakMap<TrackableIdentity, CompletedTraversalSnapshot>(),
   }
 }
 
 const createTraversalBranchState = (): TraversalBranchState => {
   return {
-    activePaths: new WeakMap<TraversableContainer, string>(),
+    activePaths: new WeakMap<TrackableIdentity, string>(),
   }
 }
 
@@ -239,7 +249,7 @@ const resolveCompletedTraversal = (
   records: readonly CompletedTraversalRecord[],
   canonicalPath: string,
   ruleContextKey: string,
-  value: TraversableContainer,
+  value: unknown,
 ): TraversalResult | undefined => {
   const reusableRecord = records.find((record) => {
     return record.ruleContextKey === ruleContextKey
@@ -258,7 +268,7 @@ const resolveCompletedTraversal = (
 
 const storeCompletedTraversal = (
   state: TraversalState,
-  value: TraversableContainer,
+  value: TrackableIdentity,
   record: CompletedTraversalRecord,
 ): void => {
   const existingRecords = state.completedIdentities.get(value)
@@ -273,15 +283,15 @@ const storeCompletedTraversal = (
 
 const storeCompletedSnapshot = (
   state: TraversalState,
-  value: TraversableContainer,
+  value: TrackableIdentity,
   snapshot: CompletedTraversalSnapshot,
 ): void => {
   state.completedSnapshots.set(value, snapshot)
 }
 
-const withActiveContainer = <T>(
+const withActiveIdentity = <T>(
   branchState: TraversalBranchState,
-  value: TraversableContainer,
+  value: TrackableIdentity,
   canonicalPath: string,
   run: () => T,
 ): T => {
@@ -564,6 +574,86 @@ const transformSubstringValue = (
   return undefined
 }
 
+const syncCompletedSnapshot = (
+  state: TraversalState,
+  identity: TrackableIdentity,
+  value: unknown,
+): void => {
+  if (!isTraversableContainer(value)) {
+    return
+  }
+
+  const snapshot = state.completedSnapshots.get(value)
+
+  if (snapshot !== undefined) {
+    state.completedSnapshots.set(identity, snapshot)
+  }
+}
+
+const transformTrackedIdentity = (
+  identity: TrackableIdentity,
+  plan: CompiledRedactorPlan,
+  context: TraversalContext,
+  activePolicy: ActivePolicyMatch | undefined,
+  state: TraversalState,
+  branchState: TraversalBranchState,
+  traverse: () => TraversalResult,
+): TraversalResult => {
+  const canonicalPath = context.canonicalPath ?? ''
+  const originalPath = branchState.activePaths.get(identity)
+
+  if (originalPath !== undefined) {
+    const circularMarker = createCircularMarker(originalPath ?? '', canonicalPath)
+
+    return {
+      cacheValue: circularMarker,
+      changed: true,
+      pathStable: false,
+      value: circularMarker,
+    }
+  }
+
+  const completedRecords = state.completedIdentities.get(identity)
+  const ruleContextKey = buildRuleContextKey(activePolicy)
+  const completedResult = completedRecords === undefined
+    ? undefined
+    : resolveCompletedTraversal(completedRecords, canonicalPath, ruleContextKey, identity)
+
+  if (completedResult !== undefined) {
+    return completedResult
+  }
+
+  if (completedRecords !== undefined) {
+    const snapshot = state.completedSnapshots.get(identity)
+
+    if (snapshot !== undefined) {
+      return replayCompletedTraversal(
+        identity,
+        snapshot,
+        plan,
+        activePolicy,
+        context,
+        ruleContextKey,
+        state,
+        branchState,
+      )
+    }
+  }
+
+  return withActiveIdentity(branchState, identity, canonicalPath, () => {
+    const result = traverse()
+
+    storeCompletedTraversal(state, identity, {
+      canonicalPath,
+      pathStable: result.pathStable,
+      ruleContextKey,
+      value: result.cacheValue,
+    })
+
+    return result
+  })
+}
+
 const transformArray = (
   value: readonly unknown[],
   plan: CompiledRedactorPlan,
@@ -625,7 +715,7 @@ const transformArray = (
       transformedValue[index] = itemResult.value
   }
 
-  storeCompletedSnapshot(state, value as TraversableContainer, {
+  storeCompletedSnapshot(state, value, {
     items: snapshotItems,
     kind: 'array',
   })
@@ -846,7 +936,7 @@ const transformCompletedObject = (
 }
 
 const replayCompletedTraversal = (
-  value: TraversableContainer,
+  value: TrackableIdentity,
   snapshot: CompletedTraversalSnapshot,
   plan: CompiledRedactorPlan,
   inheritedPolicy: ActivePolicyMatch | undefined,
@@ -856,7 +946,7 @@ const replayCompletedTraversal = (
   branchState: TraversalBranchState,
 ): TraversalResult => {
   const canonicalPath = context.canonicalPath ?? ''
-  const result = withActiveContainer(branchState, value, canonicalPath, () => {
+  const result = withActiveIdentity(branchState, value, canonicalPath, () => {
     return snapshot.kind === 'array'
       ? transformCompletedArray(
         snapshot,
@@ -884,13 +974,13 @@ const replayCompletedTraversal = (
     canonicalPath,
     pathStable: result.pathStable,
     ruleContextKey,
-    value: result.cacheValue as TraversableContainer,
+    value: result.cacheValue,
   })
 
   return result
 }
 
-const transformNode = (
+const transformResolvedNode = (
   value: unknown,
   plan: CompiledRedactorPlan,
   context: TraversalContext,
@@ -905,7 +995,7 @@ const transformNode = (
     context.inheritedPolicy,
   )
 
-  if (activePolicy !== undefined && (!activePolicy.policy.retainStructure || !isTraversableContainer(value))) {
+  if (activePolicy !== undefined && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) {
     const fnContext = buildFunctionCensorContext(
       context.pathSegments,
       activePolicy.rulePath,
@@ -936,61 +1026,111 @@ const transformNode = (
     }
   }
 
-  const canonicalPath = context.canonicalPath ?? ''
-  const originalPath = branchState.activePaths.get(value)
+  const inheritedPolicy = activePolicy
 
-  if (originalPath !== undefined) {
-    const circularMarker = createCircularMarker(originalPath ?? '', canonicalPath)
+  return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
+    return Array.isArray(value)
+      ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState)
+      : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState)
+  })
+}
+
+const transformSupportedRuntimeValue = (
+  value: unknown,
+  plan: CompiledRedactorPlan,
+  context: TraversalContext,
+  activePolicy: ActivePolicyMatch | undefined,
+  state: TraversalState,
+  branchState: TraversalBranchState,
+): TraversalResult | undefined => {
+  const transformedValue = resolveTransformedValue(value, plan.transformers)
+
+  if (transformedValue === undefined) {
+    return undefined
+  }
+
+  const traverseResolvedValue = (): TraversalResult => {
+    const result = transformResolvedNode(transformedValue, plan, context, state, branchState)
 
     return {
-      cacheValue: circularMarker,
+      cacheValue: result.cacheValue,
       changed: true,
-      pathStable: false,
-      value: circularMarker,
+      pathStable: result.pathStable,
+      value: result.value,
     }
   }
 
-  const completedRecords = state.completedIdentities.get(value)
-  const ruleContextKey = buildRuleContextKey(activePolicy)
-  const completedResult = completedRecords === undefined
-    ? undefined
-    : resolveCompletedTraversal(completedRecords, canonicalPath, ruleContextKey, value)
-
-  if (completedResult !== undefined) {
-    return completedResult
+  if (!isSupportedTransformableObject(value)) {
+    return traverseResolvedValue()
   }
 
-  if (completedRecords !== undefined) {
-    const snapshot = state.completedSnapshots.get(value)
+  return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
+    const result = traverseResolvedValue()
 
-    if (snapshot !== undefined) {
-      return replayCompletedTraversal(
-        value,
-        snapshot,
-        plan,
-        activePolicy,
-        context,
-        ruleContextKey,
-        state,
-        branchState,
-      )
+    syncCompletedSnapshot(state, value, transformedValue)
+
+    return result
+  })
+}
+
+const transformNode = (
+  value: unknown,
+  plan: CompiledRedactorPlan,
+  context: TraversalContext,
+  state: TraversalState,
+  branchState: TraversalBranchState,
+): TraversalResult => {
+  const activePolicy = selectActivePolicy(
+    plan,
+    resolveExactPathRule(plan, context.canonicalPath),
+    resolveDynamicPathRule(plan, context.pathSegments),
+    context.directKeyMatch,
+    context.inheritedPolicy,
+  )
+
+  if (activePolicy !== undefined && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) {
+    const fnContext = buildFunctionCensorContext(
+      context.pathSegments,
+      activePolicy.rulePath,
+      context.rootInput,
+    )
+    const redactedValue = applyRedaction(value, activePolicy.policy, fnContext)
+
+    return {
+      cacheValue: redactedValue,
+      changed: true,
+      pathStable: !usesPathSensitivePolicy(activePolicy),
+      value: redactedValue,
+    }
+  }
+
+  const transformedResult = transformSupportedRuntimeValue(value, plan, context, activePolicy, state, branchState)
+
+  if (transformedResult !== undefined) {
+    return transformedResult
+  }
+
+  if (!isTraversableContainer(value)) {
+    const substringResult = transformSubstringValue(value, plan, context)
+
+    if (substringResult !== undefined) {
+      return substringResult
+    }
+
+    return {
+      cacheValue: value,
+      changed: false,
+      pathStable: true,
+      value,
     }
   }
 
   const inheritedPolicy = activePolicy
-  return withActiveContainer(branchState, value, canonicalPath, () => {
-    const result = Array.isArray(value)
+
+  return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
+    return Array.isArray(value)
       ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState)
       : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState)
-
-    storeCompletedTraversal(state, value, {
-      canonicalPath,
-      pathStable: result.pathStable,
-      ruleContextKey,
-      value: result.cacheValue as TraversableContainer,
-    })
-
-    return result
   })
 }
 

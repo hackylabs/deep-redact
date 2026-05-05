@@ -12,6 +12,7 @@ import type {
   StringTest,
   SubstringRule,
 } from '../../types/public.js'
+import { compileTransformers, type CompiledTransformersPlan } from './compile-transformers.js'
 import {
   isDynamicPathSegment,
   parsePathSelector,
@@ -87,6 +88,7 @@ export interface CompiledRedactorPlan {
   readonly regexKeyRules: CompiledRegexKeyRules
   readonly serialise?: SerialiseOption
   readonly substringRules: readonly CompiledSubstringRule[]
+  readonly transformers: CompiledTransformersPlan
 }
 
 const createLookupTable = <T>(): Record<string, T> => {
@@ -317,5 +319,6 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
     regexKeyRules: compileRegexKeyRules(options.keys ?? [], defaults),
     serialise: options.serialise,
     substringRules: compileSubstringRules(options.stringTests ?? [], defaults),
+    transformers: compileTransformers(options.transformers),
   })
 }

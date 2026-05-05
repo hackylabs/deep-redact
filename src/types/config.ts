@@ -1,4 +1,5 @@
 import type { Censor, PathEntry } from './paths.js'
+import type { TransformersOption } from './transformers.js'
 
 export type SerialiseOption = boolean | ((value: unknown) => string)
 export interface KeyRule {
@@ -25,5 +26,6 @@ export interface DeepRedactOptions {
   readonly retainStructure?: boolean
   readonly serialise?: SerialiseOption
   readonly stringTests?: readonly StringTest[]
+  readonly transformers?: TransformersOption
   readonly replaceStringByLength?: boolean
 }

@@ -1,3 +1,93 @@
+//#region src/transformers/built-ins.ts
+const bigintTransformer = (value) => {
+	if (typeof value !== "bigint") return value;
+	return {
+		_transformer: "bigint",
+		value: {
+			radix: 10,
+			number: value.toString(10)
+		}
+	};
+};
+const dateTransformer = (value) => {
+	if (!(value instanceof Date)) return value;
+	return {
+		_transformer: "date",
+		datetime: value.toISOString()
+	};
+};
+const errorTransformer = (value) => {
+	if (!(value instanceof Error)) return value;
+	return {
+		_transformer: "error",
+		value: {
+			type: value.constructor.name,
+			message: value.message,
+			stack: value.stack
+		}
+	};
+};
+const mapTransformer = (value) => {
+	if (!(value instanceof Map)) return value;
+	return {
+		_transformer: "map",
+		value: Object.fromEntries(value.entries())
+	};
+};
+const regexTransformer = (value) => {
+	if (!(value instanceof RegExp)) return value;
+	return {
+		_transformer: "regex",
+		value: {
+			source: value.source,
+			flags: value.flags
+		}
+	};
+};
+const setTransformer = (value) => {
+	if (!(value instanceof Set)) return value;
+	return {
+		_transformer: "set",
+		value: Array.from(value.values())
+	};
+};
+const urlTransformer = (value) => {
+	if (!(value instanceof URL)) return value;
+	return {
+		_transformer: "url",
+		value: value.href
+	};
+};
+//#endregion
+//#region src/core/compiler/compile-transformers.ts
+const emptyTransformers = Object.freeze([]);
+const mergeTransformers = (configured, builtIns = emptyTransformers) => {
+	return Object.freeze([...configured ?? emptyTransformers, ...builtIns]);
+};
+const compileByType = (configured) => {
+	return Object.freeze({
+		bigint: mergeTransformers(configured?.bigint, Object.freeze([bigintTransformer])),
+		object: mergeTransformers(configured?.object)
+	});
+};
+const compileByConstructor = (configured) => {
+	return Object.freeze({
+		Date: mergeTransformers(configured?.Date, Object.freeze([dateTransformer])),
+		Error: mergeTransformers(configured?.Error, Object.freeze([errorTransformer])),
+		Map: mergeTransformers(configured?.Map, Object.freeze([mapTransformer])),
+		RegExp: mergeTransformers(configured?.RegExp, Object.freeze([regexTransformer])),
+		Set: mergeTransformers(configured?.Set, Object.freeze([setTransformer])),
+		URL: mergeTransformers(configured?.URL, Object.freeze([urlTransformer]))
+	});
+};
+const compileTransformers = (configured) => {
+	return Object.freeze({
+		byType: compileByType(configured?.byType),
+		byConstructor: compileByConstructor(configured?.byConstructor),
+		fallback: mergeTransformers(configured?.fallback)
+	});
+};
+//#endregion
 //#region src/core/validation/regex-safety.ts
 const cloneRegExp = (pattern) => {
 	return new RegExp(pattern.source, pattern.flags);
@@ -490,7 +580,8 @@ const compileRedactorPlan = (options = {}) => {
 		exactPathRules: compiledPathRules.exactPathRules,
 		regexKeyRules: compileRegexKeyRules(options.keys ?? [], defaults),
 		serialise: options.serialise,
-		substringRules: compileSubstringRules(options.stringTests ?? [], defaults)
+		substringRules: compileSubstringRules(options.stringTests ?? [], defaults),
+		transformers: compileTransformers(options.transformers)
 	});
 };
 //#endregion
@@ -516,6 +607,60 @@ const applyRedaction = (value, policy, context) => {
 	return literalCensor;
 };
 //#endregion
+//#region src/transformers/resolve-transformer.ts
+const supportedConstructorMatchers = Object.freeze([
+	{
+		name: "Date",
+		matches: (value) => value instanceof Date
+	},
+	{
+		name: "Error",
+		matches: (value) => value instanceof Error
+	},
+	{
+		name: "Map",
+		matches: (value) => value instanceof Map
+	},
+	{
+		name: "RegExp",
+		matches: (value) => value instanceof RegExp
+	},
+	{
+		name: "Set",
+		matches: (value) => value instanceof Set
+	},
+	{
+		name: "URL",
+		matches: (value) => value instanceof URL
+	}
+]);
+const resolveSupportedConstructorName = (value) => {
+	if (value === null || typeof value !== "object" || Array.isArray(value)) return;
+	for (const matcher of supportedConstructorMatchers) if (matcher.matches(value)) return matcher.name;
+};
+const isSupportedTransformableObject = (value) => {
+	return resolveSupportedConstructorName(value) !== void 0;
+};
+const isSupportedTransformableValue = (value) => {
+	return typeof value === "bigint" || isSupportedTransformableObject(value);
+};
+const applyFirstChangingTransformer = (value, transformers) => {
+	for (const transformer of transformers) {
+		const transformed = transformer(value);
+		if (transformed !== value) return transformed;
+	}
+};
+const resolveTransformedValue = (value, plan) => {
+	if (typeof value === "bigint") return applyFirstChangingTransformer(value, [...plan.byType.bigint, ...plan.fallback]);
+	const constructorName = resolveSupportedConstructorName(value);
+	if (constructorName === void 0) return;
+	return applyFirstChangingTransformer(value, [
+		...plan.byType.object,
+		...plan.byConstructor[constructorName],
+		...plan.fallback
+	]);
+};
+//#endregion
 //#region src/core/runtime/redact-value.ts
 const isPlainObject$1 = (value) => {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -524,6 +669,9 @@ const isPlainObject$1 = (value) => {
 };
 const isTraversableContainer = (value) => {
 	return Array.isArray(value) || isPlainObject$1(value);
+};
+const canRetainStructure = (value) => {
+	return isTraversableContainer(value) || isSupportedTransformableValue(value);
 };
 const hasLookupValue = (table, key) => {
 	return Object.hasOwn(table, key);
@@ -605,7 +753,7 @@ const storeCompletedTraversal = (state, value, record) => {
 const storeCompletedSnapshot = (state, value, snapshot) => {
 	state.completedSnapshots.set(value, snapshot);
 };
-const withActiveContainer = (branchState, value, canonicalPath, run) => {
+const withActiveIdentity = (branchState, value, canonicalPath, run) => {
 	branchState.activePaths.set(value, canonicalPath);
 	try {
 		return run();
@@ -739,6 +887,42 @@ const transformSubstringValue = (value, plan, context) => {
 		const result = isRootInput ? applyRootPrimitiveSubstringMatch(value, rule, plan, context) : applySubstringRule(value, rule, context);
 		if (result !== void 0) return result;
 	}
+};
+const syncCompletedSnapshot = (state, identity, value) => {
+	if (!isTraversableContainer(value)) return;
+	const snapshot = state.completedSnapshots.get(value);
+	if (snapshot !== void 0) state.completedSnapshots.set(identity, snapshot);
+};
+const transformTrackedIdentity = (identity, plan, context, activePolicy, state, branchState, traverse) => {
+	const canonicalPath = context.canonicalPath ?? "";
+	const originalPath = branchState.activePaths.get(identity);
+	if (originalPath !== void 0) {
+		const circularMarker = createCircularMarker(originalPath ?? "", canonicalPath);
+		return {
+			cacheValue: circularMarker,
+			changed: true,
+			pathStable: false,
+			value: circularMarker
+		};
+	}
+	const completedRecords = state.completedIdentities.get(identity);
+	const ruleContextKey = buildRuleContextKey(activePolicy);
+	const completedResult = completedRecords === void 0 ? void 0 : resolveCompletedTraversal(completedRecords, canonicalPath, ruleContextKey, identity);
+	if (completedResult !== void 0) return completedResult;
+	if (completedRecords !== void 0) {
+		const snapshot = state.completedSnapshots.get(identity);
+		if (snapshot !== void 0) return replayCompletedTraversal(identity, snapshot, plan, activePolicy, context, ruleContextKey, state, branchState);
+	}
+	return withActiveIdentity(branchState, identity, canonicalPath, () => {
+		const result = traverse();
+		storeCompletedTraversal(state, identity, {
+			canonicalPath,
+			pathStable: result.pathStable,
+			ruleContextKey,
+			value: result.cacheValue
+		});
+		return result;
+	});
 };
 const transformArray = (value, plan, inheritedPolicy, canonicalPath, pathSegments, rootInput, state, branchState) => {
 	const cacheValue = new Array(value.length);
@@ -921,7 +1105,7 @@ const transformCompletedObject = (snapshot, plan, inheritedPolicy, canonicalPath
 };
 const replayCompletedTraversal = (value, snapshot, plan, inheritedPolicy, context, ruleContextKey, state, branchState) => {
 	const canonicalPath = context.canonicalPath ?? "";
-	const result = withActiveContainer(branchState, value, canonicalPath, () => {
+	const result = withActiveIdentity(branchState, value, canonicalPath, () => {
 		return snapshot.kind === "array" ? transformCompletedArray(snapshot, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState) : transformCompletedObject(snapshot, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState);
 	});
 	storeCompletedTraversal(state, value, {
@@ -932,9 +1116,9 @@ const replayCompletedTraversal = (value, snapshot, plan, inheritedPolicy, contex
 	});
 	return result;
 };
-const transformNode = (value, plan, context, state, branchState) => {
+const transformResolvedNode = (value, plan, context, state, branchState) => {
 	const activePolicy = selectActivePolicy(plan, resolveExactPathRule(plan, context.canonicalPath), resolveDynamicPathRule(plan, context.pathSegments), context.directKeyMatch, context.inheritedPolicy);
-	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !isTraversableContainer(value))) {
+	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) {
 		const fnContext = buildFunctionCensorContext(context.pathSegments, activePolicy.rulePath, context.rootInput);
 		const redactedValue = applyRedaction(value, activePolicy.policy, fnContext);
 		return {
@@ -954,35 +1138,57 @@ const transformNode = (value, plan, context, state, branchState) => {
 			value
 		};
 	}
-	const canonicalPath = context.canonicalPath ?? "";
-	const originalPath = branchState.activePaths.get(value);
-	if (originalPath !== void 0) {
-		const circularMarker = createCircularMarker(originalPath ?? "", canonicalPath);
+	const inheritedPolicy = activePolicy;
+	return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
+		return Array.isArray(value) ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState) : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState);
+	});
+};
+const transformSupportedRuntimeValue = (value, plan, context, activePolicy, state, branchState) => {
+	const transformedValue = resolveTransformedValue(value, plan.transformers);
+	if (transformedValue === void 0) return;
+	const traverseResolvedValue = () => {
+		const result = transformResolvedNode(transformedValue, plan, context, state, branchState);
 		return {
-			cacheValue: circularMarker,
+			cacheValue: result.cacheValue,
 			changed: true,
-			pathStable: false,
-			value: circularMarker
+			pathStable: result.pathStable,
+			value: result.value
+		};
+	};
+	if (!isSupportedTransformableObject(value)) return traverseResolvedValue();
+	return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
+		const result = traverseResolvedValue();
+		syncCompletedSnapshot(state, value, transformedValue);
+		return result;
+	});
+};
+const transformNode = (value, plan, context, state, branchState) => {
+	const activePolicy = selectActivePolicy(plan, resolveExactPathRule(plan, context.canonicalPath), resolveDynamicPathRule(plan, context.pathSegments), context.directKeyMatch, context.inheritedPolicy);
+	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) {
+		const fnContext = buildFunctionCensorContext(context.pathSegments, activePolicy.rulePath, context.rootInput);
+		const redactedValue = applyRedaction(value, activePolicy.policy, fnContext);
+		return {
+			cacheValue: redactedValue,
+			changed: true,
+			pathStable: !usesPathSensitivePolicy(activePolicy),
+			value: redactedValue
 		};
 	}
-	const completedRecords = state.completedIdentities.get(value);
-	const ruleContextKey = buildRuleContextKey(activePolicy);
-	const completedResult = completedRecords === void 0 ? void 0 : resolveCompletedTraversal(completedRecords, canonicalPath, ruleContextKey, value);
-	if (completedResult !== void 0) return completedResult;
-	if (completedRecords !== void 0) {
-		const snapshot = state.completedSnapshots.get(value);
-		if (snapshot !== void 0) return replayCompletedTraversal(value, snapshot, plan, activePolicy, context, ruleContextKey, state, branchState);
+	const transformedResult = transformSupportedRuntimeValue(value, plan, context, activePolicy, state, branchState);
+	if (transformedResult !== void 0) return transformedResult;
+	if (!isTraversableContainer(value)) {
+		const substringResult = transformSubstringValue(value, plan, context);
+		if (substringResult !== void 0) return substringResult;
+		return {
+			cacheValue: value,
+			changed: false,
+			pathStable: true,
+			value
+		};
 	}
 	const inheritedPolicy = activePolicy;
-	return withActiveContainer(branchState, value, canonicalPath, () => {
-		const result = Array.isArray(value) ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState) : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState);
-		storeCompletedTraversal(state, value, {
-			canonicalPath,
-			pathStable: result.pathStable,
-			ruleContextKey,
-			value: result.cacheValue
-		});
-		return result;
+	return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
+		return Array.isArray(value) ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState) : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState);
 	});
 };
 const redactValue = (value, plan) => {
@@ -1077,7 +1283,8 @@ const rootOptionNames = new Set([
 	"replaceStringByLength",
 	"retainStructure",
 	"serialise",
-	"stringTests"
+	"stringTests",
+	"transformers"
 ]);
 const pathRuleOptionNames = new Set([
 	"path",
@@ -1091,6 +1298,20 @@ const keyRuleOptionNames = new Set([
 	"caseSensitiveKeyMatch",
 	"fuzzyKeyMatch",
 	"key"
+]);
+const transformerOptionNames = new Set([
+	"byType",
+	"byConstructor",
+	"fallback"
+]);
+const transformerByTypeOptionNames = new Set(["bigint", "object"]);
+const transformerByConstructorOptionNames = new Set([
+	"Date",
+	"Error",
+	"Map",
+	"RegExp",
+	"Set",
+	"URL"
 ]);
 const isPlainObject = (value) => {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -1226,6 +1447,39 @@ const validateStringTests = (value, path, issues) => {
 		if (typeof entry.replacer !== "function") pushIssue(issues, `${entryPath}.replacer`, "replacer must be a function.");
 	});
 };
+const validateTransformerEntries = (value, path, issues) => {
+	if (value === void 0) return;
+	if (!Array.isArray(value)) {
+		pushIssue(issues, path, `${path.split(".").at(-1) ?? "transformers"} must be an array.`);
+		return;
+	}
+	value.forEach((entry, index) => {
+		if (typeof entry !== "function") pushIssue(issues, `${path}[${index}]`, "Transformer entries must be functions.");
+	});
+};
+const validateTransformerBuckets = (value, path, allowedOptions, issues) => {
+	if (value === void 0) return;
+	if (!isPlainObject(value)) {
+		pushIssue(issues, path, `${path.split(".").at(-1) ?? "bucket"} must be an object.`);
+		return;
+	}
+	validateAllowedOptions(value, allowedOptions, path, issues);
+	for (const [bucketName, entries] of Object.entries(value)) {
+		if (!allowedOptions.has(bucketName)) continue;
+		validateTransformerEntries(entries, `${path}.${bucketName}`, issues);
+	}
+};
+const validateTransformers = (value, path, issues) => {
+	if (value === void 0) return;
+	if (!isPlainObject(value)) {
+		pushIssue(issues, path, "transformers must be an object.");
+		return;
+	}
+	validateAllowedOptions(value, transformerOptionNames, path, issues);
+	validateTransformerBuckets(value.byType, `${path}.byType`, transformerByTypeOptionNames, issues);
+	validateTransformerBuckets(value.byConstructor, `${path}.byConstructor`, transformerByConstructorOptionNames, issues);
+	validateTransformerEntries(value.fallback, `${path}.fallback`, issues);
+};
 const validatePathRule = (value, path, defaults, issues, selectorCandidates) => {
 	if (!isPlainObject(value)) {
 		pushIssue(issues, path, `${path.split(".").at(-1) ?? "entry"} must be a string selector or path-rule object.`);
@@ -1285,6 +1539,7 @@ const validateConfig = (options) => {
 	validateBooleanOption(options.fuzzyKeyMatch, "options", "fuzzyKeyMatch", issues);
 	validateKeys(options.keys, "options.keys", issues);
 	validateStringTests(options.stringTests, "options.stringTests", issues);
+	validateTransformers(options.transformers, "options.transformers", issues);
 	validateBooleanOption(options.remove, "options", "remove", issues);
 	validateBooleanOption(options.retainStructure, "options", "retainStructure", issues);
 	validateBooleanOption(options.replaceStringByLength, "options", "replaceStringByLength", issues);

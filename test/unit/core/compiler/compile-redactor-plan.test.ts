@@ -448,6 +448,159 @@ describe('compiled exact-selector rule plan', () => {
     }))
   })
 
+  it('compiles transformer buckets into frozen ordered plans without sharing caller-owned arrays', () => {
+    const bigintFirst = (value: unknown) => value
+    const bigintSecond = (value: unknown) => value
+    const objectTransformer = (value: unknown) => value
+    const dateTransformer = (value: unknown) => value
+    const fallbackTransformer = (value: unknown) => value
+    const bigintBucket = [bigintFirst, bigintSecond]
+    const objectBucket = [objectTransformer]
+    const dateBucket = [dateTransformer]
+    const fallbackBucket = [fallbackTransformer]
+    const plan = compileRedactorPlan({
+      transformers: {
+        byType: {
+          bigint: bigintBucket,
+          object: objectBucket,
+        },
+        byConstructor: {
+          Date: dateBucket,
+        },
+        fallback: fallbackBucket,
+      },
+    })
+
+    bigintBucket.push(() => 'mutated')
+    objectBucket.push(() => 'mutated')
+    dateBucket.push(() => 'mutated')
+    fallbackBucket.push(() => 'mutated')
+
+    expect(Object.isFrozen(plan.transformers)).toBe(true)
+    expect(Object.isFrozen(plan.transformers.byType)).toBe(true)
+    expect(Object.isFrozen(plan.transformers.byConstructor)).toBe(true)
+    expect(Object.isFrozen(plan.transformers.byType.bigint)).toBe(true)
+    expect(Object.isFrozen(plan.transformers.byType.object)).toBe(true)
+    expect(Object.isFrozen(plan.transformers.byConstructor.Date)).toBe(true)
+    expect(Object.isFrozen(plan.transformers.fallback)).toBe(true)
+    expect(plan.transformers.byType.bigint).toHaveLength(3)
+    expect(plan.transformers.byType.bigint[0]).toBe(bigintFirst)
+    expect(plan.transformers.byType.bigint[1]).toBe(bigintSecond)
+    expect(plan.transformers.byType.bigint[2]?.(42n)).toEqual({
+      _transformer: 'bigint',
+      value: {
+        radix: 10,
+        number: '42',
+      },
+    })
+    expect(plan.transformers.byType.object).toEqual([objectTransformer])
+    expect(plan.transformers.byConstructor.Date).toHaveLength(2)
+    expect(plan.transformers.byConstructor.Date[0]).toBe(dateTransformer)
+    expect(plan.transformers.byConstructor.Date[1]?.(new Date('2026-01-02T03:04:05.000Z'))).toEqual({
+      _transformer: 'date',
+      datetime: '2026-01-02T03:04:05.000Z',
+    })
+    expect(plan.transformers.fallback).toEqual([fallbackTransformer])
+  })
+
+  it('preserves user declaration order in constructor buckets before the built-in default', () => {
+    const first = (value: unknown) => value
+    const second = (value: unknown) => value
+    const third = (value: unknown) => value
+    const plan = compileRedactorPlan({
+      transformers: {
+        byConstructor: {
+          URL: [first, second, third],
+        },
+      },
+    })
+
+    expect(plan.transformers.byConstructor.URL.slice(0, 3)).toEqual([
+      first,
+      second,
+      third,
+    ])
+    expect(plan.transformers.byConstructor.URL).toHaveLength(4)
+    expect(plan.transformers.byConstructor.URL[3]?.(new URL('https://example.com/private?token=secret'))).toEqual({
+      _transformer: 'url',
+      value: 'https://example.com/private?token=secret',
+    })
+  })
+
+  it('rejects unsupported transformer buckets and malformed bucket containers during validation', () => {
+    const report = validateConfig({
+      transformers: {
+        byBucket: {},
+        byType: {
+          bigint: [(_value: unknown) => _value],
+          string: [(_value: unknown) => _value],
+        },
+        byConstructor: {
+          Date: (_value: unknown) => _value,
+          Promise: [(_value: unknown) => _value],
+        },
+        fallback: (_value: unknown) => _value,
+      },
+    })
+
+    expect(report.valid).toBe(false)
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.transformers',
+      message: expect.stringMatching(/unsupported option "byBucket"/i),
+    }))
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.transformers.byType',
+      message: expect.stringMatching(/unsupported option "string"/i),
+    }))
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.transformers.byConstructor',
+      message: expect.stringMatching(/unsupported option "Promise"/i),
+    }))
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.transformers.byConstructor.Date',
+      message: expect.stringMatching(/must be an array/i),
+    }))
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.transformers.fallback',
+      message: expect.stringMatching(/must be an array/i),
+    }))
+  })
+
+  it('rejects non-function transformer entries during validation', () => {
+    const report = validateConfig({
+      transformers: {
+        byType: {
+          bigint: [
+            (_value: unknown) => _value,
+            42,
+          ],
+        },
+        byConstructor: {
+          Date: [
+            null,
+          ],
+        },
+        fallback: [
+          undefined,
+        ],
+      },
+    })
+
+    expect(report.valid).toBe(false)
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.transformers.byType.bigint[1]',
+      message: expect.stringMatching(/transformer entries must be functions/i),
+    }))
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.transformers.byConstructor.Date[0]',
+      message: expect.stringMatching(/transformer entries must be functions/i),
+    }))
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.transformers.fallback[0]',
+      message: expect.stringMatching(/transformer entries must be functions/i),
+    }))
+  })
+
   it.each([
     ['wildcard', '*', /unsupported wildcard key selector/i],
     ['recursive wildcard', '**', /unsupported recursive wildcard key selector/i],

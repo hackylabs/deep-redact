@@ -16,6 +16,24 @@ const structuredStringTest: deepRedactPackage.StringTest = substringRule
 const regexPathSegment: deepRedactPackage.RegexPathSegment = /^tenant-\d+$/
 const structuredSegment: deepRedactPackage.StructuredPathSegment = /^tenant-\d+$/
 const structuredSelector: deepRedactPackage.StructuredPathSelector = ['tenants', /^tenant-\d+$/, 'token']
+const passthroughTransformer: deepRedactPackage.Transformer = (value: unknown) => value
+const transformersByType: deepRedactPackage.TransformersByType = {
+  bigint: [passthroughTransformer],
+  object: [passthroughTransformer],
+}
+const transformersByConstructor: deepRedactPackage.TransformersByConstructor = {
+  Date: [passthroughTransformer],
+  Error: [passthroughTransformer],
+  Map: [passthroughTransformer],
+  RegExp: [passthroughTransformer],
+  Set: [passthroughTransformer],
+  URL: [passthroughTransformer],
+}
+const transformers: deepRedactPackage.TransformersOption = {
+  byType: transformersByType,
+  byConstructor: transformersByConstructor,
+  fallback: [passthroughTransformer],
+}
 
 // PathSegments and FunctionCensorContext accessible in CJS
 const wildcardSegment: deepRedactPackage.PublicWildcardSegment = { any: true }
@@ -46,6 +64,7 @@ const redact = deepRedactPackage.deepRedact({
   replaceStringByLength: false,
   keys: ['password', regexKeySelector, structuredKeyRule],
   stringTests: [bareStringTest, structuredStringTest],
+  transformers,
   paths: [
     'user.password',
     ['users', 0, 'email'],
@@ -79,6 +98,10 @@ void structuredStringTest
 void regexPathSegment
 void structuredSegment
 void structuredSelector
+void passthroughTransformer
+void transformersByType
+void transformersByConstructor
+void transformers
 void exampleSegments
 void exampleCtx
 void oneArgCensor

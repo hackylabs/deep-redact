@@ -9,6 +9,12 @@ export type {
   SubstringRule,
 } from './config.js'
 export type {
+  Transformer,
+  TransformersByConstructor,
+  TransformersByType,
+  TransformersOption,
+} from './transformers.js'
+export type {
   Censor,
   FunctionCensorContext,
   IgnorePathSegment,
