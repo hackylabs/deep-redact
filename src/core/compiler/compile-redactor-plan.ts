@@ -12,6 +12,10 @@ import type {
   StringTest,
   SubstringRule,
 } from '../../types/public.js'
+import {
+  compileIgnoredValueTypes,
+  type CompiledIgnoredValueTypesPlan,
+} from './compile-ignored-value-types.js'
 import { compileTransformers, type CompiledTransformersPlan } from './compile-transformers.js'
 import {
   isDynamicPathSegment,
@@ -85,6 +89,7 @@ export interface CompiledRedactorPlan {
   readonly dynamicPathRules: readonly CompiledDynamicPathRule[]
   readonly exactPathRules: Readonly<Record<string, CompiledExactPathRule>>
   readonly exactKeyRules: CompiledExactKeyRules
+  readonly ignoredValueTypes: CompiledIgnoredValueTypesPlan
   readonly regexKeyRules: CompiledRegexKeyRules
   readonly serialise?: SerialiseOption
   readonly substringRules: readonly CompiledSubstringRule[]
@@ -316,6 +321,7 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
     dynamicPathRules: compiledPathRules.dynamicPathRules,
     exactKeyRules: compileExactKeyRules(options.keys ?? [], defaults, keyDefaults),
     exactPathRules: compiledPathRules.exactPathRules,
+    ignoredValueTypes: compileIgnoredValueTypes(options.ignoredValueTypes),
     regexKeyRules: compileRegexKeyRules(options.keys ?? [], defaults),
     serialise: options.serialise,
     substringRules: compileSubstringRules(options.stringTests ?? [], defaults),

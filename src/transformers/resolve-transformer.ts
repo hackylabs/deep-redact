@@ -27,11 +27,12 @@ const supportedConstructorMatchers = Object.freeze([
   },
 ] as const)
 
-type SupportedConstructorName = (typeof supportedConstructorMatchers)[number]['name']
+export type SupportedTransformableConstructorName = (typeof supportedConstructorMatchers)[number]['name']
+export type SupportedTransformableValueKind = 'bigint' | SupportedTransformableConstructorName
 
 const resolveSupportedConstructorName = (
   value: unknown,
-): SupportedConstructorName | undefined => {
+): SupportedTransformableConstructorName | undefined => {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return undefined
   }
@@ -45,6 +46,16 @@ const resolveSupportedConstructorName = (
   return undefined
 }
 
+export const resolveSupportedTransformableValueKind = (
+  value: unknown,
+): SupportedTransformableValueKind | undefined => {
+  if (typeof value === 'bigint') {
+    return 'bigint'
+  }
+
+  return resolveSupportedConstructorName(value)
+}
+
 export const isSupportedTransformableObject = (
   value: unknown,
 ): value is object => {
@@ -54,7 +65,7 @@ export const isSupportedTransformableObject = (
 export const isSupportedTransformableValue = (
   value: unknown,
 ): boolean => {
-  return typeof value === 'bigint' || isSupportedTransformableObject(value)
+  return resolveSupportedTransformableValueKind(value) !== undefined
 }
 
 const applyFirstChangingTransformer = (
@@ -76,22 +87,22 @@ export const resolveTransformedValue = (
   value: unknown,
   plan: CompiledTransformersPlan,
 ): unknown | undefined => {
-  if (typeof value === 'bigint') {
+  const supportedValueKind = resolveSupportedTransformableValueKind(value)
+
+  if (supportedValueKind === undefined) {
+    return undefined
+  }
+
+  if (supportedValueKind === 'bigint') {
     return applyFirstChangingTransformer(value, [
       ...plan.byType.bigint,
       ...plan.fallback,
     ])
   }
 
-  const constructorName = resolveSupportedConstructorName(value)
-
-  if (constructorName === undefined) {
-    return undefined
-  }
-
   return applyFirstChangingTransformer(value, [
     ...plan.byType.object,
-    ...plan.byConstructor[constructorName],
+    ...plan.byConstructor[supportedValueKind],
     ...plan.fallback,
   ])
 }

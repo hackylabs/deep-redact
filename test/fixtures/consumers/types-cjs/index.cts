@@ -34,6 +34,11 @@ const transformers: deepRedactPackage.TransformersOption = {
   byConstructor: transformersByConstructor,
   fallback: [passthroughTransformer],
 }
+const ignoredValueTypes: deepRedactPackage.IgnoredValueTypesOption = {
+  bigint: true,
+  Error: false,
+  Map: true,
+}
 
 // PathSegments and FunctionCensorContext accessible in CJS
 const wildcardSegment: deepRedactPackage.PublicWildcardSegment = { any: true }
@@ -62,6 +67,7 @@ const redact = deepRedactPackage.deepRedact({
   fuzzyKeyMatch: false,
   caseSensitiveKeyMatch: false,
   replaceStringByLength: false,
+  ignoredValueTypes,
   keys: ['password', regexKeySelector, structuredKeyRule],
   stringTests: [bareStringTest, structuredStringTest],
   transformers,
@@ -99,6 +105,7 @@ void regexPathSegment
 void structuredSegment
 void structuredSelector
 void passthroughTransformer
+void ignoredValueTypes
 void transformersByType
 void transformersByConstructor
 void transformers

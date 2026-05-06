@@ -1,4 +1,5 @@
 import type { PathRule, PathSelector } from '../../types/paths.js'
+import type { IgnoredValueTypesOption } from '../../types/ignored-value-types.js'
 import type { DeepRedactOptions, SerialiseOption } from '../../types/public.js'
 import type { TransformersByConstructor, TransformersByType } from '../../types/transformers.js'
 import { createValidationReport, type ValidationIssue, type ValidationReport } from './validation-report.js'
@@ -17,6 +18,7 @@ const rootOptionNames = new Set<keyof DeepRedactOptions>([
   'remove',
   'replaceStringByLength',
   'retainStructure',
+  'ignoredValueTypes',
   'serialise',
   'stringTests',
   'transformers',
@@ -53,6 +55,16 @@ const transformerByTypeOptionNames = new Set<keyof TransformersByType>([
 ])
 
 const transformerByConstructorOptionNames = new Set<keyof TransformersByConstructor>([
+  'Date',
+  'Error',
+  'Map',
+  'RegExp',
+  'Set',
+  'URL',
+])
+
+const ignoredValueTypeOptionNames = new Set<keyof IgnoredValueTypesOption>([
+  'bigint',
   'Date',
   'Error',
   'Map',
@@ -420,6 +432,31 @@ const validateTransformers = (
   validateTransformerEntries(value.fallback, `${path}.fallback`, issues)
 }
 
+const validateIgnoredValueTypes = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): void => {
+  if (value === undefined) {
+    return
+  }
+
+  if (!isPlainObject(value)) {
+    pushIssue(issues, path, 'ignoredValueTypes must be an object.')
+    return
+  }
+
+  validateAllowedOptions(value, ignoredValueTypeOptionNames, path, issues)
+
+  for (const optionName of Object.keys(value)) {
+    if (!ignoredValueTypeOptionNames.has(optionName as keyof IgnoredValueTypesOption)) {
+      continue
+    }
+
+    validateBooleanOption(value[optionName], path, optionName, issues)
+  }
+}
+
 const validatePathRule = (
   value: unknown,
   path: string,
@@ -517,6 +554,7 @@ export const validateConfig = (options: unknown): ValidationReport => {
   validateBooleanOption(options.caseSensitiveKeyMatch, 'options', 'caseSensitiveKeyMatch', issues)
   validateCensorOption(options.censor, 'options', issues)
   validateBooleanOption(options.fuzzyKeyMatch, 'options', 'fuzzyKeyMatch', issues)
+  validateIgnoredValueTypes(options.ignoredValueTypes, 'options.ignoredValueTypes', issues)
   validateKeys(options.keys, 'options.keys', issues)
   validateStringTests(options.stringTests, 'options.stringTests', issues)
   validateTransformers(options.transformers, 'options.transformers', issues)

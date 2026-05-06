@@ -527,6 +527,36 @@ describe('compiled exact-selector rule plan', () => {
     })
   })
 
+  it('compiles ignored value types into a frozen membership plan without sharing the caller-owned container', () => {
+    const ignoredValueTypes: {
+      bigint: boolean
+      Error: boolean
+      Map: boolean
+      URL?: boolean
+    } = {
+      bigint: true,
+      Error: false,
+      Map: true,
+    }
+    const plan = compileRedactorPlan({
+      ignoredValueTypes,
+    })
+
+    ignoredValueTypes.bigint = false
+    ignoredValueTypes.URL = true
+
+    expect(Object.isFrozen(plan.ignoredValueTypes)).toBe(true)
+    expect(plan.ignoredValueTypes).toEqual({
+      bigint: true,
+      Date: false,
+      Error: false,
+      Map: true,
+      RegExp: false,
+      Set: false,
+      URL: false,
+    })
+  })
+
   it('rejects unsupported transformer buckets and malformed bucket containers during validation', () => {
     const report = validateConfig({
       transformers: {
@@ -598,6 +628,35 @@ describe('compiled exact-selector rule plan', () => {
     expect(report.issues).toContainEqual(expect.objectContaining({
       path: 'options.transformers.fallback[0]',
       message: expect.stringMatching(/transformer entries must be functions/i),
+    }))
+  })
+
+  it('rejects unsupported ignored value type keys, malformed containers, and non-boolean entries during validation', () => {
+    const report = validateConfig({
+      ignoredValueTypes: {
+        bigint: true,
+        Map: 'yes',
+        Promise: true,
+      },
+    })
+    const malformedReport = validateConfig({
+      ignoredValueTypes: ['Map'],
+    })
+
+    expect(report.valid).toBe(false)
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.ignoredValueTypes',
+      message: expect.stringMatching(/unsupported option "Promise"/i),
+    }))
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.ignoredValueTypes.Map',
+      message: expect.stringMatching(/Map must be a boolean/i),
+    }))
+
+    expect(malformedReport.valid).toBe(false)
+    expect(malformedReport.issues).toContainEqual(expect.objectContaining({
+      path: 'options.ignoredValueTypes',
+      message: expect.stringMatching(/ignoredValueTypes must be an object/i),
     }))
   })
 

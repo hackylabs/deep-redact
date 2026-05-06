@@ -25,6 +25,7 @@ import { cloneRegExp } from '../validation/regex-safety.js'
 import {
   isSupportedTransformableObject,
   isSupportedTransformableValue,
+  resolveSupportedTransformableValueKind,
   resolveTransformedValue,
 } from '../../transformers/resolve-transformer.js'
 
@@ -44,6 +45,7 @@ interface TraversalContext {
   readonly inheritedPolicy?: ActivePolicyMatch
   readonly pathSegments: readonly ExactPathSegment[]
   readonly rootInput: unknown
+  readonly suppressDescendantRedaction?: boolean
 }
 
 interface DirectKeyMatchResult {
@@ -661,6 +663,7 @@ const transformArray = (
   canonicalPath: string | undefined,
   pathSegments: readonly ExactPathSegment[],
   rootInput: unknown,
+  suppressDescendantRedaction: boolean | undefined,
   state: TraversalState,
   branchState: TraversalBranchState,
 ): TraversalResult => {
@@ -688,6 +691,7 @@ const transformArray = (
       inheritedPolicy,
       pathSegments: Object.freeze([...pathSegments, pathSegment]),
       rootInput,
+      suppressDescendantRedaction,
     }, state, branchState)
     pathStable &&= itemResult.pathStable
 
@@ -763,6 +767,7 @@ const transformObject = (
   canonicalPath: string | undefined,
   pathSegments: readonly ExactPathSegment[],
   rootInput: unknown,
+  suppressDescendantRedaction: boolean | undefined,
   state: TraversalState,
   branchState: TraversalBranchState,
 ): TraversalResult => {
@@ -785,6 +790,7 @@ const transformObject = (
       inheritedPolicy,
       pathSegments: Object.freeze([...pathSegments, pathSegment]),
       rootInput,
+      suppressDescendantRedaction,
     }, state, branchState)
     pathStable &&= propertyResult.pathStable
 
@@ -832,6 +838,7 @@ const transformCompletedArray = (
   canonicalPath: string | undefined,
   pathSegments: readonly ExactPathSegment[],
   rootInput: unknown,
+  suppressDescendantRedaction: boolean | undefined,
   state: TraversalState,
   branchState: TraversalBranchState,
 ): TraversalResult => {
@@ -854,6 +861,7 @@ const transformCompletedArray = (
       inheritedPolicy,
       pathSegments: Object.freeze([...pathSegments, pathSegment]),
       rootInput,
+      suppressDescendantRedaction,
     }, state, branchState)
     pathStable &&= itemResult.pathStable
 
@@ -900,6 +908,7 @@ const transformCompletedObject = (
   canonicalPath: string | undefined,
   pathSegments: readonly ExactPathSegment[],
   rootInput: unknown,
+  suppressDescendantRedaction: boolean | undefined,
   state: TraversalState,
   branchState: TraversalBranchState,
 ): TraversalResult => {
@@ -916,6 +925,7 @@ const transformCompletedObject = (
       inheritedPolicy,
       pathSegments: Object.freeze([...pathSegments, pathSegment]),
       rootInput,
+      suppressDescendantRedaction,
     }, state, branchState)
     pathStable &&= propertyResult.pathStable
 
@@ -955,6 +965,7 @@ const replayCompletedTraversal = (
         context.canonicalPath,
         context.pathSegments,
         context.rootInput,
+        context.suppressDescendantRedaction,
         state,
         branchState,
       )
@@ -965,6 +976,7 @@ const replayCompletedTraversal = (
         context.canonicalPath,
         context.pathSegments,
         context.rootInput,
+        context.suppressDescendantRedaction,
         state,
         branchState,
       )
@@ -987,13 +999,15 @@ const transformResolvedNode = (
   state: TraversalState,
   branchState: TraversalBranchState,
 ): TraversalResult => {
-  const activePolicy = selectActivePolicy(
-    plan,
-    resolveExactPathRule(plan, context.canonicalPath),
-    resolveDynamicPathRule(plan, context.pathSegments),
-    context.directKeyMatch,
-    context.inheritedPolicy,
-  )
+  const activePolicy = context.suppressDescendantRedaction
+    ? undefined
+    : selectActivePolicy(
+      plan,
+      resolveExactPathRule(plan, context.canonicalPath),
+      resolveDynamicPathRule(plan, context.pathSegments),
+      context.directKeyMatch,
+      context.inheritedPolicy,
+    )
 
   if (activePolicy !== undefined && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) {
     const fnContext = buildFunctionCensorContext(
@@ -1012,7 +1026,9 @@ const transformResolvedNode = (
   }
 
   if (!isTraversableContainer(value)) {
-    const substringResult = transformSubstringValue(value, plan, context)
+    const substringResult = context.suppressDescendantRedaction
+      ? undefined
+      : transformSubstringValue(value, plan, context)
 
     if (substringResult !== undefined) {
       return substringResult
@@ -1030,8 +1046,28 @@ const transformResolvedNode = (
 
   return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
     return Array.isArray(value)
-      ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState)
-      : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState)
+      ? transformArray(
+        value,
+        plan,
+        inheritedPolicy,
+        context.canonicalPath,
+        context.pathSegments,
+        context.rootInput,
+        context.suppressDescendantRedaction,
+        state,
+        branchState,
+      )
+      : transformObject(
+        value,
+        plan,
+        inheritedPolicy,
+        context.canonicalPath,
+        context.pathSegments,
+        context.rootInput,
+        context.suppressDescendantRedaction,
+        state,
+        branchState,
+      )
   })
 }
 
@@ -1043,14 +1079,25 @@ const transformSupportedRuntimeValue = (
   state: TraversalState,
   branchState: TraversalBranchState,
 ): TraversalResult | undefined => {
+  const supportedValueKind = resolveSupportedTransformableValueKind(value)
+
+  if (supportedValueKind === undefined) {
+    return undefined
+  }
+
   const transformedValue = resolveTransformedValue(value, plan.transformers)
 
   if (transformedValue === undefined) {
     return undefined
   }
 
-  const traverseResolvedValue = (): TraversalResult => {
-    const result = transformResolvedNode(transformedValue, plan, context, state, branchState)
+  const traverseResolvedValue = (
+    suppressDescendantRedaction = false,
+  ): TraversalResult => {
+    const result = transformResolvedNode(transformedValue, plan, {
+      ...context,
+      suppressDescendantRedaction,
+    }, state, branchState)
 
     return {
       cacheValue: result.cacheValue,
@@ -1058,6 +1105,22 @@ const transformSupportedRuntimeValue = (
       pathStable: result.pathStable,
       value: result.value,
     }
+  }
+
+  const ignoreDescendantRedaction = plan.ignoredValueTypes[supportedValueKind]
+
+  if (ignoreDescendantRedaction) {
+    if (!isSupportedTransformableObject(value)) {
+      return traverseResolvedValue(true)
+    }
+
+    return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
+      const result = traverseResolvedValue(true)
+
+      syncCompletedSnapshot(state, value, transformedValue)
+
+      return result
+    })
   }
 
   if (!isSupportedTransformableObject(value)) {
@@ -1080,13 +1143,15 @@ const transformNode = (
   state: TraversalState,
   branchState: TraversalBranchState,
 ): TraversalResult => {
-  const activePolicy = selectActivePolicy(
-    plan,
-    resolveExactPathRule(plan, context.canonicalPath),
-    resolveDynamicPathRule(plan, context.pathSegments),
-    context.directKeyMatch,
-    context.inheritedPolicy,
-  )
+  const activePolicy = context.suppressDescendantRedaction
+    ? undefined
+    : selectActivePolicy(
+      plan,
+      resolveExactPathRule(plan, context.canonicalPath),
+      resolveDynamicPathRule(plan, context.pathSegments),
+      context.directKeyMatch,
+      context.inheritedPolicy,
+    )
 
   if (activePolicy !== undefined && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) {
     const fnContext = buildFunctionCensorContext(
@@ -1111,7 +1176,9 @@ const transformNode = (
   }
 
   if (!isTraversableContainer(value)) {
-    const substringResult = transformSubstringValue(value, plan, context)
+    const substringResult = context.suppressDescendantRedaction
+      ? undefined
+      : transformSubstringValue(value, plan, context)
 
     if (substringResult !== undefined) {
       return substringResult
@@ -1129,8 +1196,28 @@ const transformNode = (
 
   return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
     return Array.isArray(value)
-      ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState)
-      : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, state, branchState)
+      ? transformArray(
+        value,
+        plan,
+        inheritedPolicy,
+        context.canonicalPath,
+        context.pathSegments,
+        context.rootInput,
+        context.suppressDescendantRedaction,
+        state,
+        branchState,
+      )
+      : transformObject(
+        value,
+        plan,
+        inheritedPolicy,
+        context.canonicalPath,
+        context.pathSegments,
+        context.rootInput,
+        context.suppressDescendantRedaction,
+        state,
+        branchState,
+      )
   })
 }
 

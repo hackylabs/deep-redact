@@ -8,6 +8,7 @@ export type {
   StringTest,
   SubstringRule,
 } from './config.js'
+export type { IgnoredValueTypesOption } from './ignored-value-types.js'
 export type {
   Transformer,
   TransformersByConstructor,

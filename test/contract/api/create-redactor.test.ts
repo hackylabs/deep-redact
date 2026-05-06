@@ -1,6 +1,71 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createRedactor, deepRedact, type FunctionCensorContext } from '../../../src/index.js'
 
+const buildBigInt = (value: bigint) => ({
+  _transformer: 'bigint',
+  value: {
+    radix: 10,
+    number: value.toString(10),
+  },
+})
+
+const buildDate = (value: Date) => ({
+  _transformer: 'date',
+  datetime: value.toISOString(),
+})
+
+const buildError = (value: Error) => ({
+  _transformer: 'error',
+  value: {
+    type: value.constructor.name,
+    message: value.message,
+    stack: value.stack,
+  },
+})
+
+const buildMap = (value: Map<string, unknown>) => ({
+  _transformer: 'map',
+  value: Object.fromEntries(value.entries()),
+})
+
+const buildRegex = (value: RegExp) => ({
+  _transformer: 'regex',
+  value: {
+    source: value.source,
+    flags: value.flags,
+  },
+})
+
+const buildSet = (value: Set<unknown>) => ({
+  _transformer: 'set',
+  value: Array.from(value.values()),
+})
+
+const buildUrl = (value: URL) => ({
+  _transformer: 'url',
+  value: value.href,
+})
+
+class StoryTransformerError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'StoryTransformerError'
+  }
+}
+
+const createStoryError = (message: string): StoryTransformerError => {
+  const error = new StoryTransformerError(message)
+  error.stack = `StoryTransformerError: ${message}\n    at transformer story fixture`
+
+  return error
+}
+
+const circularMarker = (path: string, value = '') => ({
+  _transformer: 'circular',
+  path,
+  value,
+})
+
 describe('Reusable redactor factory contract', () => {
   it('returns a callable redactor and defers serialisation work until invocation', () => {
     const serialise = vi.fn((value: unknown) => JSON.stringify(value))
@@ -72,6 +137,9 @@ describe('Reusable redactor factory contract', () => {
     ['unsupported root option', { serialize: true }, /unsupported option "serialize"/i],
     ['unsupported legacy key option', { blacklistedKeys: ['password'] }, /unsupported option "blacklistedKeys"/i],
     ['invalid serialise value', { serialise: 'json' }, /serialise must be a boolean or function/i],
+    ['invalid ignored-value-types container', { ignoredValueTypes: ['Map'] }, /ignoredValueTypes must be an object/i],
+    ['unsupported ignored-value-type key', { ignoredValueTypes: { Promise: true } }, /unsupported option "Promise"/i],
+    ['invalid ignored-value-type flag', { ignoredValueTypes: { Map: 'yes' } }, /Map must be a boolean/i],
     ['legacy array transformers option', { transformers: [(_value: unknown) => _value] }, /transformers must be an object/i],
     ['unsupported transformer bucket', { transformers: { byBucket: {} } }, /unsupported option "byBucket"/i],
     ['unsupported transformer type bucket', { transformers: { byType: { string: [(_value: unknown) => _value] } } }, /unsupported option "string"/i],
@@ -2596,71 +2664,6 @@ describe('Reusable redactor factory contract', () => {
 })
 
 describe('Built-in and custom transformer resolution', () => {
-  const buildBigInt = (value: bigint) => ({
-    _transformer: 'bigint',
-    value: {
-      radix: 10,
-      number: value.toString(10),
-    },
-  })
-
-  const buildDate = (value: Date) => ({
-    _transformer: 'date',
-    datetime: value.toISOString(),
-  })
-
-  const buildError = (value: Error) => ({
-    _transformer: 'error',
-    value: {
-      type: value.constructor.name,
-      message: value.message,
-      stack: value.stack,
-    },
-  })
-
-  const buildMap = (value: Map<string, unknown>) => ({
-    _transformer: 'map',
-    value: Object.fromEntries(value.entries()),
-  })
-
-  const buildRegex = (value: RegExp) => ({
-    _transformer: 'regex',
-    value: {
-      source: value.source,
-      flags: value.flags,
-    },
-  })
-
-  const buildSet = (value: Set<unknown>) => ({
-    _transformer: 'set',
-    value: Array.from(value.values()),
-  })
-
-  const buildUrl = (value: URL) => ({
-    _transformer: 'url',
-    value: value.href,
-  })
-
-  class StoryTransformerError extends Error {
-    constructor(message: string) {
-      super(message)
-      this.name = 'StoryTransformerError'
-    }
-  }
-
-  const createStoryError = (message: string): StoryTransformerError => {
-    const error = new StoryTransformerError(message)
-    error.stack = `StoryTransformerError: ${message}\n    at transformer story fixture`
-
-    return error
-  }
-
-  const circularMarker = (path: string, value = '') => ({
-    _transformer: 'circular',
-    path,
-    value,
-  })
-
   it('returns the public built-in output shapes for supported root runtime values', () => {
     const bigintValue = 42n
     const dateValue = new Date('2026-01-02T03:04:05.000Z')
@@ -2971,6 +2974,231 @@ describe('Built-in and custom transformer resolution', () => {
 
     expect(redact(payload)).toBe(payload)
     expect(byTypeObject).not.toHaveBeenCalled()
+  })
+})
+
+describe('Ignored value types suppress descendant redaction inside transformed runtime values', () => {
+  it('keeps the safe transformed root output for ignored bigint values', () => {
+    const redact = deepRedact({
+      ignoredValueTypes: {
+        bigint: true,
+      },
+      keys: ['number'],
+      paths: ['value.number'],
+    })
+
+    expect(redact(42n)).toEqual(buildBigInt(42n))
+  })
+
+  it('keeps the safe transformed root output for ignored date values', () => {
+    const dateValue = new Date('2026-01-02T03:04:05.000Z')
+    const redact = deepRedact({
+      ignoredValueTypes: {
+        Date: true,
+      },
+      keys: ['datetime'],
+    })
+
+    expect(redact(dateValue)).toEqual(buildDate(dateValue))
+  })
+
+  it('keeps the safe transformed root output for ignored map values', () => {
+    const mapValue = new Map<string, unknown>([
+      ['password', 'secret'],
+      ['count', 2],
+    ])
+    const redact = deepRedact({
+      ignoredValueTypes: {
+        Map: true,
+      },
+      paths: ['value.password'],
+    })
+
+    expect(redact(mapValue)).toEqual(buildMap(mapValue))
+  })
+
+  it('keeps the safe transformed root output for ignored regular expression values', () => {
+    const regexValue = /token=secret/gi
+    const redact = deepRedact({
+      ignoredValueTypes: {
+        RegExp: true,
+      },
+      paths: ['value.source'],
+      stringTests: [/secret/g],
+    })
+
+    expect(redact(regexValue)).toEqual(buildRegex(regexValue))
+  })
+
+  it('locks the ignore decision to the raw supported value before a custom transformer changes the output shape', () => {
+    const redact = deepRedact({
+      ignoredValueTypes: {
+        Map: true,
+      },
+      paths: ['branch.custom.password'],
+      transformers: {
+        byConstructor: {
+          Map: [
+            (value: unknown) => {
+              if (!(value instanceof Map)) {
+                return value
+              }
+
+              return {
+                custom: {
+                  password: String(value.get('password')),
+                  safe: true,
+                },
+              }
+            },
+          ],
+        },
+      },
+    })
+
+    expect(redact({
+      branch: new Map<string, unknown>([
+        ['password', 'secret'],
+      ]),
+    })).toEqual({
+      branch: {
+        custom: {
+          password: 'secret',
+          safe: true,
+        },
+      },
+    })
+  })
+
+  it('suppresses descendant redaction only for matching branches and keeps non-matching siblings on the normal traversal path', () => {
+    const ignoredMap = new Map<string, unknown>([
+      ['password', 'secret'],
+      ['nested', { secret: 'value' }],
+    ])
+    const redact = deepRedact({
+      ignoredValueTypes: {
+        Map: true,
+      },
+      paths: [
+        'ignored.value.password',
+        'ignored.value.nested.secret',
+        'active.value.number',
+      ],
+    })
+
+    expect(redact({
+      active: 42n,
+      ignored: ignoredMap,
+    })).toEqual({
+      active: {
+        _transformer: 'bigint',
+        value: {
+          radix: 10,
+          number: '[REDACTED]',
+        },
+      },
+      ignored: buildMap(ignoredMap),
+    })
+  })
+
+  it('keeps whole-value rule precedence when an ignored transformed branch is already claimed by a terminal rule', () => {
+    const redact = deepRedact({
+      ignoredValueTypes: {
+        Map: true,
+      },
+      keys: ['map'],
+      paths: ['map.value.password'],
+    })
+
+    expect(redact({
+      map: new Map<string, unknown>([
+        ['password', 'secret'],
+      ]),
+    })).toEqual({
+      map: '[REDACTED]',
+    })
+  })
+
+  it('does not run descendant redaction inside ignored map, set, and error branches', () => {
+    const errorValue = createStoryError('token=secret')
+    const mapValue = new Map<string, unknown>([
+      ['password', 'secret'],
+      ['nested', { secret: 'value' }],
+    ])
+    const setValue = new Set<unknown>([
+      { password: 'secret' },
+      'visible',
+    ])
+    const redact = deepRedact({
+      ignoredValueTypes: {
+        Error: true,
+        Map: true,
+        Set: true,
+      },
+      paths: [
+        'runtime.error.value.message',
+        'runtime.map.value.password',
+        'runtime.map.value.nested.secret',
+        'runtime.set.value.0.password',
+      ],
+    })
+
+    expect(redact({
+      runtime: {
+        error: errorValue,
+        map: mapValue,
+        set: setValue,
+      },
+    })).toEqual({
+      runtime: {
+        error: buildError(errorValue),
+        map: buildMap(mapValue),
+        set: buildSet(setValue),
+      },
+    })
+  })
+
+  it('does not apply substring rules inside ignored transformed representations', () => {
+    const urlValue = new URL('https://example.com/private?token=secret')
+    const redact = deepRedact({
+      ignoredValueTypes: {
+        URL: true,
+      },
+      stringTests: [/token=[^&\s]+/g],
+    })
+
+    expect(redact(urlValue)).toEqual(buildUrl(urlValue))
+  })
+
+  it('preserves circular markers inside ignored map and set transformed output', () => {
+    const mapValue = new Map<string, unknown>()
+    mapValue.set('self', mapValue)
+    const setValue = new Set<unknown>()
+    setValue.add(setValue)
+    const redact = deepRedact({
+      ignoredValueTypes: {
+        Map: true,
+        Set: true,
+      },
+    })
+
+    expect(redact({
+      map: mapValue,
+      set: setValue,
+    })).toEqual({
+      map: {
+        _transformer: 'map',
+        value: {
+          self: circularMarker('map.value.self', 'map'),
+        },
+      },
+      set: {
+        _transformer: 'set',
+        value: [
+          circularMarker('set.value.0', 'set'),
+        ],
+      },
+    })
   })
 })
 

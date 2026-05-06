@@ -4,6 +4,7 @@ import {
   type Censor,
   type DeepRedactOptions,
   type FunctionCensorContext,
+  type IgnoredValueTypesOption,
   type IgnorePathSegment,
   type KeyRule,
   type KeySelector,
@@ -123,11 +124,17 @@ const transformers: TransformersOption = {
   byConstructor: transformersByConstructor,
   fallback: [passthroughTransformer],
 }
+const ignoredValueTypes: IgnoredValueTypesOption = {
+  bigint: true,
+  Error: false,
+  Map: true,
+}
 
 const options: DeepRedactOptions = {
   censor: twoArgCensor,
   fuzzyKeyMatch: false,
   caseSensitiveKeyMatch: false,
+  ignoredValueTypes,
   keys: ['password', regexKeySelector, structuredKeyRule],
   paths,
   stringTests: [bareStringTest, structuredStringTest],
@@ -168,6 +175,7 @@ void regexPathSegment
 void structuredSegment
 void structuredSelector
 void passthroughTransformer
+void ignoredValueTypes
 void transformersByType
 void transformersByConstructor
 void transformers

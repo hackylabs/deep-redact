@@ -4,6 +4,7 @@ export type {
   Censor,
   DeepRedactOptions,
   FunctionCensorContext,
+  IgnoredValueTypesOption,
   IgnorePathSegment,
   KeyRule,
   KeySelector,

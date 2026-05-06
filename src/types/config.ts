@@ -1,4 +1,5 @@
 import type { Censor, PathEntry } from './paths.js'
+import type { IgnoredValueTypesOption } from './ignored-value-types.js'
 import type { TransformersOption } from './transformers.js'
 
 export type SerialiseOption = boolean | ((value: unknown) => string)
@@ -27,5 +28,6 @@ export interface DeepRedactOptions {
   readonly serialise?: SerialiseOption
   readonly stringTests?: readonly StringTest[]
   readonly transformers?: TransformersOption
+  readonly ignoredValueTypes?: IgnoredValueTypesOption
   readonly replaceStringByLength?: boolean
 }
