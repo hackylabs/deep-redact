@@ -1,6 +1,6 @@
 # Story 3.4: Exclude Ignored Value Types from Descendant Redaction While Preserving Safe Output
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
