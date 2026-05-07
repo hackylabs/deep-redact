@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createRedactor, deepRedact, type FunctionCensorContext } from '../../../src/index.js'
+import {
+  createRedactor,
+  deepRedact,
+  type DiagnosticEvent,
+  type FunctionCensorContext,
+} from '../../../src/index.js'
 
 const buildBigInt = (value: bigint) => ({
   _transformer: 'bigint',
@@ -136,6 +141,9 @@ describe('Reusable redactor factory contract', () => {
     ],
     ['unsupported root option', { serialize: true }, /unsupported option "serialize"/i],
     ['unsupported legacy key option', { blacklistedKeys: ['password'] }, /unsupported option "blacklistedKeys"/i],
+    ['invalid diagnostics container', { diagnostics: ['sink'] }, /diagnostics must be an object/i],
+    ['unsupported diagnostics option', { diagnostics: { console: true } }, /unsupported option "console"/i],
+    ['invalid diagnostics sink', { diagnostics: { sink: 'console.error' } }, /sink must be a function/i],
     ['invalid serialise value', { serialise: 'json' }, /serialise must be a boolean or function/i],
     ['invalid ignored-value-types container', { ignoredValueTypes: ['Map'] }, /ignoredValueTypes must be an object/i],
     ['unsupported ignored-value-type key', { ignoredValueTypes: { Promise: true } }, /unsupported option "Promise"/i],
@@ -3198,6 +3206,458 @@ describe('Ignored value types suppress descendant redaction inside transformed r
           circularMarker('set.value.0', 'set'),
         ],
       },
+    })
+  })
+})
+
+describe('Nested runtime failures degrade locally to [UNSUPPORTED] with structured diagnostics', () => {
+  const unsupportedMessage = 'Nested value could not be redacted safely and was replaced with [UNSUPPORTED].'
+
+  const createDiagnosticSink = () => {
+    const events: DiagnosticEvent[] = []
+    const sink = vi.fn((event: DiagnosticEvent) => {
+      events.push(event)
+    })
+
+    return {
+      events,
+      sink,
+    }
+  }
+
+  const expectFailureEvent = (
+    event: DiagnosticEvent,
+    options: {
+      readonly errorName: string
+      readonly path: string
+      readonly stage: string
+      readonly valueType: string
+    },
+  ) => {
+    expect(Object.keys(event).sort()).toEqual([
+      'details',
+      'event',
+      'message',
+      'path',
+      'valueType',
+    ])
+    expect(event).toEqual(expect.objectContaining({
+      event: 'redaction.failure',
+      path: options.path,
+      valueType: options.valueType,
+      message: unsupportedMessage,
+      details: expect.objectContaining({
+        errorName: options.errorName,
+        stage: options.stage,
+      }),
+    }))
+
+    const serialisedEvent = JSON.stringify(event)
+    expect(serialisedEvent).not.toMatch(/token=secret|password=secret|password=hunter2/i)
+    expect(serialisedEvent).not.toMatch(/\[REDACTED\]/)
+  }
+
+  it('degrades a failing transformed branch locally while transformed, circular, revisited, and ignored siblings continue', () => {
+    const { events, sink } = createDiagnosticSink()
+    const circularPayload: Record<string, unknown> = {
+      safe: 'visible',
+    }
+    const repeated = {
+      safe: 'visible',
+      token: 'secret',
+    }
+    const failingMap = new Map<string, unknown>([
+      ['password', 'secret'],
+    ])
+    const ignoredMap = new Map<string, unknown>([
+      ['password', 'secret'],
+    ])
+    circularPayload.self = circularPayload
+
+    const redact = deepRedact({
+      diagnostics: { sink },
+      ignoredValueTypes: {
+        Map: true,
+      },
+      keys: ['token'],
+      transformers: {
+        byConstructor: {
+          Map: [
+            (value: unknown) => {
+              if (value === failingMap) {
+                throw createStoryError('token=secret')
+              }
+
+              return value
+            },
+          ],
+        },
+      },
+    })
+
+    expect(redact({
+      active: 42n,
+      circular: circularPayload,
+      failing: failingMap,
+      ignored: ignoredMap,
+      repeat: {
+        first: repeated,
+        second: repeated,
+      },
+    })).toEqual({
+      active: buildBigInt(42n),
+      circular: {
+        safe: 'visible',
+        self: circularMarker('circular.self', 'circular'),
+      },
+      failing: '[UNSUPPORTED]',
+      ignored: buildMap(ignoredMap),
+      repeat: {
+        first: {
+          safe: 'visible',
+          token: '[REDACTED]',
+        },
+        second: {
+          safe: 'visible',
+          token: '[REDACTED]',
+        },
+      },
+    })
+
+    expect(events).toHaveLength(1)
+    expectFailureEvent(events[0]!, {
+      errorName: 'StoryTransformerError',
+      path: 'failing',
+      stage: 'transformer',
+      valueType: 'Map',
+    })
+  })
+
+  it('keeps object properties and array positions occupied when function censors fail', () => {
+    const { events, sink } = createDiagnosticSink()
+    const censor = vi.fn((_value: unknown, context: FunctionCensorContext) => {
+      const path = context.matchedPath.join('.')
+
+      if (path === 'profile.secret' || path === 'aliases.1') {
+        throw createStoryError('password=hunter2')
+      }
+
+      return '[REDACTED]'
+    })
+    const redact = deepRedact({
+      diagnostics: { sink },
+      paths: [
+        {
+          path: 'profile.secret',
+          censor,
+        },
+        {
+          path: 'aliases.1',
+          censor,
+        },
+      ],
+    })
+
+    expect(redact({
+      aliases: ['first', 'second', 'third'],
+      profile: {
+        safe: 'visible',
+        secret: 'alpha',
+      },
+    })).toEqual({
+      aliases: ['first', '[UNSUPPORTED]', 'third'],
+      profile: {
+        safe: 'visible',
+        secret: '[UNSUPPORTED]',
+      },
+    })
+
+    expect(censor).toHaveBeenCalledTimes(2)
+    expect(events).toHaveLength(2)
+    expectFailureEvent(events[0]!, {
+      errorName: 'StoryTransformerError',
+      path: 'aliases.1',
+      stage: 'censor',
+      valueType: 'string',
+    })
+    expectFailureEvent(events[1]!, {
+      errorName: 'StoryTransformerError',
+      path: 'profile.secret',
+      stage: 'censor',
+      valueType: 'string',
+    })
+  })
+
+  it('degrades only the matching string node when a structured substring replacer throws', () => {
+    const { events, sink } = createDiagnosticSink()
+    const redact = deepRedact({
+      diagnostics: { sink },
+      paths: ['session.token'],
+      stringTests: [
+        {
+          pattern: /token=[^&\s]+/g,
+          replacer: () => {
+            throw createStoryError('token=secret')
+          },
+        },
+      ],
+    })
+
+    expect(redact({
+      safe: 'visible',
+      session: {
+        token: 'secret',
+      },
+      unsafe: {
+        text: 'prefix token=secret suffix',
+      },
+    })).toEqual({
+      safe: 'visible',
+      session: {
+        token: '[REDACTED]',
+      },
+      unsafe: {
+        text: '[UNSUPPORTED]',
+      },
+    })
+
+    expect(events).toHaveLength(1)
+    expectFailureEvent(events[0]!, {
+      errorName: 'StoryTransformerError',
+      path: 'unsafe.text',
+      stage: 'substring-replacer',
+      valueType: 'string',
+    })
+  })
+
+  it('keeps the parent object present when a nested getter throws during traversal even without a diagnostics sink', () => {
+    const nested: Record<string, unknown> = {
+      safe: 'visible',
+    }
+    let result: unknown
+
+    Object.defineProperty(nested, 'secret', {
+      enumerable: true,
+      get() {
+        throw createStoryError('token=secret')
+      },
+    })
+
+    const redact = deepRedact({
+      paths: ['account.token'],
+    })
+
+    expect(() => {
+      result = redact({
+        account: {
+          token: 'secret',
+        },
+        nested,
+      })
+    }).not.toThrow()
+    expect(result).toEqual({
+      account: {
+        token: '[REDACTED]',
+      },
+      nested: {
+        safe: 'visible',
+        secret: '[UNSUPPORTED]',
+      },
+    })
+  })
+
+  it('emits one structured diagnostic per failing path when a failed identity is revisited', () => {
+    const { events, sink } = createDiagnosticSink()
+    const shared: Record<string, unknown> = {
+      safe: 'visible',
+    }
+
+    Object.defineProperty(shared, 'secret', {
+      enumerable: true,
+      get() {
+        throw createStoryError('token=secret')
+      },
+    })
+
+    const redact = deepRedact({
+      diagnostics: { sink },
+    })
+
+    expect(redact({
+      first: shared,
+      second: shared,
+    })).toEqual({
+      first: {
+        safe: 'visible',
+        secret: '[UNSUPPORTED]',
+      },
+      second: {
+        safe: 'visible',
+        secret: '[UNSUPPORTED]',
+      },
+    })
+
+    expect(events).toHaveLength(2)
+    expect(events.map((event) => event.path).sort()).toEqual([
+      'first.secret',
+      'second.secret',
+    ])
+    expectFailureEvent(events.find((event) => event.path === 'first.secret')!, {
+      errorName: 'StoryTransformerError',
+      path: 'first.secret',
+      stage: 'traversal-read',
+      valueType: 'getter',
+    })
+    expectFailureEvent(events.find((event) => event.path === 'second.secret')!, {
+      errorName: 'StoryTransformerError',
+      path: 'second.secret',
+      stage: 'traversal-read',
+      valueType: 'getter',
+    })
+  })
+
+  it('degrades a hostile nested object without rethrowing when diagnostics cannot inspect its type safely', () => {
+    const { events, sink } = createDiagnosticSink()
+    const hostile = new Proxy<Record<string, unknown>>({}, {
+      get(target, property, receiver) {
+        if (property === 'constructor') {
+          throw createStoryError('token=secret')
+        }
+
+        return Reflect.get(target, property, receiver)
+      },
+      getOwnPropertyDescriptor() {
+        return {
+          configurable: true,
+          enumerable: true,
+        }
+      },
+      ownKeys() {
+        throw createStoryError('password=secret')
+      },
+    })
+    let result: unknown
+
+    const redact = deepRedact({
+      diagnostics: { sink },
+      paths: ['account.token'],
+    })
+
+    expect(() => {
+      result = redact({
+        account: {
+          token: 'secret',
+        },
+        hostile,
+      })
+    }).not.toThrow()
+    expect(result).toEqual({
+      account: {
+        token: '[REDACTED]',
+      },
+      hostile: '[UNSUPPORTED]',
+    })
+
+    expect(events).toHaveLength(1)
+    expectFailureEvent(events[0]!, {
+      errorName: 'StoryTransformerError',
+      path: 'hostile',
+      stage: 'traversal-read',
+      valueType: 'object',
+    })
+  })
+
+  it('degrades each failing node independently and emits one structured event per path in a single call', () => {
+    const { events, sink } = createDiagnosticSink()
+    const failingMap = new Map<string, unknown>([
+      ['password', 'secret'],
+    ])
+    const getterBranch: Record<string, unknown> = {
+      safe: 'visible',
+    }
+
+    Object.defineProperty(getterBranch, 'secret', {
+      enumerable: true,
+      get() {
+        throw createStoryError('token=secret')
+      },
+    })
+
+    const redact = deepRedact({
+      diagnostics: { sink },
+      paths: ['stable.token'],
+      stringTests: [
+        {
+          pattern: /password=[^&\s]+/g,
+          replacer: () => {
+            throw createStoryError('password=secret')
+          },
+        },
+      ],
+      transformers: {
+        byConstructor: {
+          Map: [
+            (value: unknown) => {
+              if (value === failingMap) {
+                throw createStoryError('token=secret')
+              }
+
+              return value
+            },
+          ],
+        },
+      },
+    })
+
+    expect(redact({
+      failingMap,
+      getterBranch,
+      notes: {
+        text: 'prefix password=secret suffix',
+      },
+      stable: {
+        token: 'secret',
+      },
+      transformed: 42n,
+    })).toEqual({
+      failingMap: '[UNSUPPORTED]',
+      getterBranch: {
+        safe: 'visible',
+        secret: '[UNSUPPORTED]',
+      },
+      notes: {
+        text: '[UNSUPPORTED]',
+      },
+      stable: {
+        token: '[REDACTED]',
+      },
+      transformed: buildBigInt(42n),
+    })
+
+    expect(events).toHaveLength(3)
+    expect(events.map((event) => event.path).sort()).toEqual([
+      'failingMap',
+      'getterBranch.secret',
+      'notes.text',
+    ])
+    expect(new Set(events.map((event) => event.path)).size).toBe(3)
+    expectFailureEvent(events[0]!, {
+      errorName: 'StoryTransformerError',
+      path: 'failingMap',
+      stage: 'transformer',
+      valueType: 'Map',
+    })
+    expectFailureEvent(events[1]!, {
+      errorName: 'StoryTransformerError',
+      path: 'getterBranch.secret',
+      stage: 'traversal-read',
+      valueType: 'getter',
+    })
+    expectFailureEvent(events[2]!, {
+      errorName: 'StoryTransformerError',
+      path: 'notes.text',
+      stage: 'substring-replacer',
+      valueType: 'string',
     })
   })
 })

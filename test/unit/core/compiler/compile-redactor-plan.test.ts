@@ -557,6 +557,28 @@ describe('compiled exact-selector rule plan', () => {
     })
   })
 
+  it('compiles diagnostics into a frozen plan without sharing the caller-owned container', () => {
+    const firstSink = (_event: unknown) => undefined
+    const secondSink = (_event: unknown) => undefined
+    const diagnostics: {
+      sink?: (event: unknown) => void
+    } = {
+      sink: firstSink,
+    }
+    const plan = compileRedactorPlan({
+      diagnostics,
+    })
+
+    diagnostics.sink = secondSink
+
+    expect(Object.isFrozen(plan.diagnostics)).toBe(true)
+    expect(plan.diagnostics).toEqual({
+      eventName: 'redaction.failure',
+      sink: firstSink,
+    })
+    expect(plan.diagnostics.sink).toBe(firstSink)
+  })
+
   it('rejects unsupported transformer buckets and malformed bucket containers during validation', () => {
     const report = validateConfig({
       transformers: {
@@ -657,6 +679,34 @@ describe('compiled exact-selector rule plan', () => {
     expect(malformedReport.issues).toContainEqual(expect.objectContaining({
       path: 'options.ignoredValueTypes',
       message: expect.stringMatching(/ignoredValueTypes must be an object/i),
+    }))
+  })
+
+  it('rejects unsupported diagnostics options, malformed containers, and non-function sinks during validation', () => {
+    const report = validateConfig({
+      diagnostics: {
+        console: true,
+        sink: 'console.error',
+      },
+    })
+    const malformedReport = validateConfig({
+      diagnostics: ['sink'],
+    })
+
+    expect(report.valid).toBe(false)
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.diagnostics',
+      message: expect.stringMatching(/unsupported option "console"/i),
+    }))
+    expect(report.issues).toContainEqual(expect.objectContaining({
+      path: 'options.diagnostics.sink',
+      message: expect.stringMatching(/sink must be a function/i),
+    }))
+
+    expect(malformedReport.valid).toBe(false)
+    expect(malformedReport.issues).toContainEqual(expect.objectContaining({
+      path: 'options.diagnostics',
+      message: expect.stringMatching(/diagnostics must be an object/i),
     }))
   })
 

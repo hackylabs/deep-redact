@@ -13,6 +13,10 @@ import type {
   SubstringRule,
 } from '../../types/public.js'
 import {
+  compileDiagnostics,
+  type CompiledDiagnosticsPlan,
+} from './compile-diagnostics.js'
+import {
   compileIgnoredValueTypes,
   type CompiledIgnoredValueTypesPlan,
 } from './compile-ignored-value-types.js'
@@ -85,6 +89,7 @@ export interface CompiledStructuredSubstringRule {
 export type CompiledSubstringRule = CompiledWholeValueSubstringRule | CompiledStructuredSubstringRule
 
 export interface CompiledRedactorPlan {
+  readonly diagnostics: CompiledDiagnosticsPlan
   readonly defaults: CompiledRedactionPolicy
   readonly dynamicPathRules: readonly CompiledDynamicPathRule[]
   readonly exactPathRules: Readonly<Record<string, CompiledExactPathRule>>
@@ -317,6 +322,7 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
   const compiledPathRules = compilePathRules(options.paths ?? [], defaults)
 
   return Object.freeze({
+    diagnostics: compileDiagnostics(options.diagnostics),
     defaults,
     dynamicPathRules: compiledPathRules.dynamicPathRules,
     exactKeyRules: compileExactKeyRules(options.keys ?? [], defaults, keyDefaults),

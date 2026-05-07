@@ -12,6 +12,7 @@ import { getUnsupportedRegexMessage, isRegExp } from './regex-safety.js'
 const rootOptionNames = new Set<keyof DeepRedactOptions>([
   'caseSensitiveKeyMatch',
   'censor',
+  'diagnostics',
   'fuzzyKeyMatch',
   'keys',
   'paths',
@@ -71,6 +72,10 @@ const ignoredValueTypeOptionNames = new Set<keyof IgnoredValueTypesOption>([
   'RegExp',
   'Set',
   'URL',
+])
+
+const diagnosticsOptionNames = new Set([
+  'sink',
 ])
 
 type ConfigRecord = Record<string, unknown>
@@ -457,6 +462,27 @@ const validateIgnoredValueTypes = (
   }
 }
 
+const validateDiagnostics = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): void => {
+  if (value === undefined) {
+    return
+  }
+
+  if (!isPlainObject(value)) {
+    pushIssue(issues, path, 'diagnostics must be an object.')
+    return
+  }
+
+  validateAllowedOptions(value, diagnosticsOptionNames, path, issues)
+
+  if (value.sink !== undefined && typeof value.sink !== 'function') {
+    pushIssue(issues, `${path}.sink`, 'sink must be a function.')
+  }
+}
+
 const validatePathRule = (
   value: unknown,
   path: string,
@@ -553,6 +579,7 @@ export const validateConfig = (options: unknown): ValidationReport => {
   validateAllowedOptions(options, rootOptionNames, 'options', issues)
   validateBooleanOption(options.caseSensitiveKeyMatch, 'options', 'caseSensitiveKeyMatch', issues)
   validateCensorOption(options.censor, 'options', issues)
+  validateDiagnostics(options.diagnostics, 'options.diagnostics', issues)
   validateBooleanOption(options.fuzzyKeyMatch, 'options', 'fuzzyKeyMatch', issues)
   validateIgnoredValueTypes(options.ignoredValueTypes, 'options.ignoredValueTypes', issues)
   validateKeys(options.keys, 'options.keys', issues)

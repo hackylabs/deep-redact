@@ -1,6 +1,11 @@
 import type { DeepRedactOptions } from './config.js'
 
 export type {
+  DiagnosticEvent,
+  DiagnosticsOptions,
+  DiagnosticSink,
+} from './diagnostics.js'
+export type {
   DeepRedactOptions,
   KeyRule,
   KeySelector,

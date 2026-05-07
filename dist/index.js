@@ -1,3 +1,11 @@
+//#region src/core/compiler/compile-diagnostics.ts
+const compileDiagnostics = (diagnostics) => {
+	return Object.freeze({
+		eventName: "redaction.failure",
+		sink: diagnostics?.sink
+	});
+};
+//#endregion
 //#region src/core/compiler/compile-ignored-value-types.ts
 const compileIgnoredValueTypes = (configured) => {
 	return Object.freeze({
@@ -587,6 +595,7 @@ const compileRedactorPlan = (options = {}) => {
 	const keyDefaults = createKeyMatchDefaults(options);
 	const compiledPathRules = compilePathRules(options.paths ?? [], defaults);
 	return Object.freeze({
+		diagnostics: compileDiagnostics(options.diagnostics),
 		defaults,
 		dynamicPathRules: compiledPathRules.dynamicPathRules,
 		exactKeyRules: compileExactKeyRules(options.keys ?? [], defaults, keyDefaults),
@@ -679,7 +688,92 @@ const resolveTransformedValue = (value, plan) => {
 	]);
 };
 //#endregion
+//#region src/core/diagnostics/sanitise-diagnostics.ts
+const resolveObjectValueType = (value) => {
+	const constructorName = value.constructor?.name;
+	if (typeof constructorName === "string" && constructorName.length > 0 && constructorName !== "Object") return constructorName;
+	return "object";
+};
+const resolveDiagnosticValueType = (value, override) => {
+	if (override !== void 0) return override;
+	const supportedValueKind = resolveSupportedTransformableValueKind(value);
+	if (supportedValueKind !== void 0) return supportedValueKind;
+	if (Array.isArray(value)) return "array";
+	if (value === null) return "null";
+	if (typeof value === "object") return resolveObjectValueType(value);
+	return typeof value;
+};
+const resolveThrownType = (error) => {
+	if (error === null) return "null";
+	if (typeof error === "object") {
+		const constructorName = error.constructor?.name;
+		return typeof constructorName === "string" && constructorName.length > 0 ? constructorName : "object";
+	}
+	return typeof error;
+};
+const sanitiseDiagnosticDetails = (stage, error) => {
+	if (error instanceof Error) return Object.freeze({
+		errorName: error.name || "Error",
+		stage
+	});
+	return Object.freeze({
+		stage,
+		thrownType: resolveThrownType(error)
+	});
+};
+//#endregion
+//#region src/core/diagnostics/diagnostic-event.ts
+const unsupportedMessage = "Nested value could not be redacted safely and was replaced with [UNSUPPORTED].";
+const createFallbackDiagnosticDetails = (stage) => {
+	return Object.freeze({
+		stage,
+		thrownType: "unknown"
+	});
+};
+const resolveFallbackValueType = (value, override) => {
+	if (override !== void 0) return override;
+	if (Array.isArray(value)) return "array";
+	if (value === null) return "null";
+	return typeof value === "object" ? "object" : typeof value;
+};
+const createFailureDiagnosticSnapshot = (input) => {
+	let details;
+	let valueType;
+	try {
+		details = sanitiseDiagnosticDetails(input.stage, input.error);
+	} catch {
+		details = createFallbackDiagnosticDetails(input.stage);
+	}
+	try {
+		valueType = resolveDiagnosticValueType(input.value, input.valueType);
+	} catch {
+		valueType = resolveFallbackValueType(input.value, input.valueType);
+	}
+	return Object.freeze({
+		details,
+		valueType
+	});
+};
+const createDiagnosticEvent = (plan, path, snapshot) => {
+	return Object.freeze({
+		details: snapshot.details,
+		event: plan.eventName,
+		message: unsupportedMessage,
+		path,
+		valueType: snapshot.valueType
+	});
+};
+//#endregion
+//#region src/core/diagnostics/diagnostics-sink.ts
+const emitDiagnosticEvent = (plan, event) => {
+	if (plan.sink === void 0) return;
+	try {
+		plan.sink(event);
+	} catch {}
+};
+//#endregion
 //#region src/core/runtime/redact-value.ts
+const unsupportedValue = "[UNSUPPORTED]";
 const isPlainObject$1 = (value) => {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
 	const prototype = Object.getPrototypeOf(value);
@@ -693,6 +787,14 @@ const canRetainStructure = (value) => {
 };
 const hasLookupValue = (table, key) => {
 	return Object.hasOwn(table, key);
+};
+const setObjectEntry = (target, key, value) => {
+	Object.defineProperty(target, key, {
+		configurable: true,
+		enumerable: true,
+		value,
+		writable: true
+	});
 };
 const findMatchingRegexKey = (matchers, key) => {
 	return matchers.find((matcher) => {
@@ -723,6 +825,28 @@ const createTraversalState = () => {
 };
 const createTraversalBranchState = () => {
 	return { activePaths: /* @__PURE__ */ new WeakMap() };
+};
+const emitFailureDiagnostic = (plan, context, options) => {
+	const diagnostic = createFailureDiagnosticSnapshot({
+		error: options.error,
+		stage: options.stage,
+		value: options.value,
+		valueType: options.valueType
+	});
+	emitDiagnosticEvent(plan.diagnostics, createDiagnosticEvent(plan.diagnostics, context.canonicalPath ?? "", diagnostic));
+	return diagnostic;
+};
+const createUnsupportedTraversalResult = () => {
+	return {
+		cacheValue: unsupportedValue,
+		changed: true,
+		pathStable: false,
+		value: unsupportedValue
+	};
+};
+const createFailureTraversalResult = (plan, context, options) => {
+	emitFailureDiagnostic(plan, context, options);
+	return createUnsupportedTraversalResult();
 };
 const renderRulePathSegment = (segment) => {
 	if (typeof segment === "string") return `property:${segment}`;
@@ -857,6 +981,34 @@ const buildFunctionCensorContext = (pathSegments, rulePath, rootInput) => {
 		rootInput
 	};
 };
+const applyConfiguredRedaction = (value, policy, rulePath, pathStable, plan, context) => {
+	try {
+		const redactedValue = applyRedaction(value, policy, buildFunctionCensorContext(context.pathSegments, rulePath, context.rootInput));
+		return {
+			cacheValue: redactedValue,
+			changed: true,
+			pathStable,
+			value: redactedValue
+		};
+	} catch (error) {
+		return createFailureTraversalResult(plan, context, {
+			error,
+			stage: "censor",
+			value
+		});
+	}
+};
+const transformNestedNode = (value, plan, context, state, branchState) => {
+	try {
+		return transformNode(value, plan, context, state, branchState);
+	} catch (error) {
+		return createFailureTraversalResult(plan, context, {
+			error,
+			stage: "traversal",
+			value
+		});
+	}
+};
 const buildSubstringRulePath = (pattern) => {
 	return Object.freeze([cloneRegExp(pattern)]);
 };
@@ -866,9 +1018,9 @@ const patternMatchesString = (pattern, value) => {
 	pattern.lastIndex = 0;
 	return matched;
 };
-const applySubstringRule = (value, rule, context) => {
+const applySubstringRule = (value, rule, plan, context) => {
 	if (!patternMatchesString(rule.pattern, value)) return;
-	if (rule.kind === "structured-replacer") {
+	if (rule.kind === "structured-replacer") try {
 		const replacement = rule.replacer(value, cloneRegExp(rule.pattern));
 		return {
 			cacheValue: replacement,
@@ -876,33 +1028,25 @@ const applySubstringRule = (value, rule, context) => {
 			pathStable: true,
 			value: replacement
 		};
+	} catch (error) {
+		return createFailureTraversalResult(plan, context, {
+			error,
+			stage: "substring-replacer",
+			value
+		});
 	}
-	const fnContext = buildFunctionCensorContext(context.pathSegments, buildSubstringRulePath(rule.pattern), context.rootInput);
-	const redactedValue = applyRedaction(value, rule.policy, fnContext);
-	return {
-		cacheValue: redactedValue,
-		changed: true,
-		pathStable: typeof rule.policy.censor !== "function",
-		value: redactedValue
-	};
+	return applyConfiguredRedaction(value, rule.policy, buildSubstringRulePath(rule.pattern), typeof rule.policy.censor !== "function", plan, context);
 };
 const applyRootPrimitiveSubstringMatch = (value, rule, plan, context) => {
 	if (!patternMatchesString(rule.pattern, value)) return;
-	const fnContext = buildFunctionCensorContext(context.pathSegments, buildSubstringRulePath(rule.pattern), context.rootInput);
 	const policy = rule.kind === "whole-value" ? rule.policy : plan.defaults;
-	const redactedValue = applyRedaction(value, policy, fnContext);
-	return {
-		cacheValue: redactedValue,
-		changed: true,
-		pathStable: typeof policy.censor !== "function",
-		value: redactedValue
-	};
+	return applyConfiguredRedaction(value, policy, buildSubstringRulePath(rule.pattern), typeof policy.censor !== "function", plan, context);
 };
 const transformSubstringValue = (value, plan, context) => {
 	if (typeof value !== "string") return;
 	const isRootInput = context.pathSegments.length === 0;
 	for (const rule of plan.substringRules) {
-		const result = isRootInput ? applyRootPrimitiveSubstringMatch(value, rule, plan, context) : applySubstringRule(value, rule, context);
+		const result = isRootInput ? applyRootPrimitiveSubstringMatch(value, rule, plan, context) : applySubstringRule(value, rule, plan, context);
 		if (result !== void 0) return result;
 	}
 };
@@ -944,44 +1088,62 @@ const transformTrackedIdentity = (identity, plan, context, activePolicy, state, 
 };
 const transformArray = (value, plan, inheritedPolicy, canonicalPath, pathSegments, rootInput, suppressDescendantRedaction, state, branchState) => {
 	const cacheValue = new Array(value.length);
+	const transformedValue = new Array(value.length);
 	const snapshotItems = new Array(value.length);
-	let transformedValue;
 	const removedIndexes = [];
 	let changed = false;
 	let pathStable = true;
 	for (let index = 0; index < value.length; index += 1) {
 		if (!(index in value)) continue;
-		const item = value[index];
-		snapshotItems[index] = {
-			present: true,
-			value: item
-		};
 		const pathSegment = createIndexPathSegment(index);
-		const itemResult = transformNode(item, plan, {
+		const itemContext = {
 			canonicalPath: appendCanonicalPathSegment(canonicalPath, pathSegment),
 			inheritedPolicy,
 			pathSegments: Object.freeze([...pathSegments, pathSegment]),
 			rootInput,
 			suppressDescendantRedaction
-		}, state, branchState);
+		};
+		let item;
+		try {
+			item = value[index];
+		} catch (error) {
+			snapshotItems[index] = {
+				diagnostic: emitFailureDiagnostic(plan, itemContext, {
+					error,
+					stage: "traversal-read",
+					value,
+					valueType: "getter"
+				}),
+				present: true
+			};
+			const failureResult = createUnsupportedTraversalResult();
+			cacheValue[index] = failureResult.cacheValue;
+			transformedValue[index] = failureResult.value;
+			changed = true;
+			pathStable &&= failureResult.pathStable;
+			continue;
+		}
+		snapshotItems[index] = {
+			present: true,
+			value: item
+		};
+		const itemResult = transformNestedNode(item, plan, itemContext, state, branchState);
 		pathStable &&= itemResult.pathStable;
 		if (isRemovedValue(itemResult.value)) {
-			if (transformedValue === void 0) transformedValue = value.slice();
 			changed = true;
 			removedIndexes.push(index);
 			continue;
 		}
 		cacheValue[index] = itemResult.cacheValue;
-		if (!itemResult.changed) continue;
-		if (transformedValue === void 0) transformedValue = value.slice();
-		changed = true;
 		transformedValue[index] = itemResult.value;
+		if (!itemResult.changed) continue;
+		changed = true;
 	}
 	storeCompletedSnapshot(state, value, {
 		items: snapshotItems,
 		kind: "array"
 	});
-	if (transformedValue === void 0) return {
+	if (!changed) return {
 		cacheValue,
 		changed: false,
 		pathStable,
@@ -1013,33 +1175,68 @@ const transformObject = (value, plan, inheritedPolicy, canonicalPath, pathSegmen
 	const snapshotEntries = [];
 	let changed = false;
 	let pathStable = true;
-	let transformedValue;
-	for (const [key, propertyValue] of Object.entries(value)) {
-		snapshotEntries.push({
-			key,
-			value: propertyValue
+	const transformedValue = {};
+	let propertyKeys;
+	try {
+		propertyKeys = Object.keys(value);
+	} catch (error) {
+		return createFailureTraversalResult(plan, {
+			canonicalPath,
+			inheritedPolicy,
+			pathSegments,
+			rootInput,
+			suppressDescendantRedaction
+		}, {
+			error,
+			stage: "traversal-read",
+			value
 		});
+	}
+	for (const key of propertyKeys) {
 		const pathSegment = createPropertyPathSegment(key);
-		const propertyResult = transformNode(propertyValue, plan, {
+		const propertyContext = {
 			canonicalPath: appendCanonicalPathSegment(canonicalPath, pathSegment),
 			directKeyMatch: resolveDirectKeyMatch(plan, key),
 			inheritedPolicy,
 			pathSegments: Object.freeze([...pathSegments, pathSegment]),
 			rootInput,
 			suppressDescendantRedaction
-		}, state, branchState);
-		pathStable &&= propertyResult.pathStable;
-		if (isRemovedValue(propertyResult.value)) {
-			if (transformedValue === void 0) transformedValue = { ...value };
+		};
+		let propertyValue;
+		try {
+			propertyValue = value[key];
+		} catch (error) {
+			const diagnostic = emitFailureDiagnostic(plan, propertyContext, {
+				error,
+				stage: "traversal-read",
+				value,
+				valueType: "getter"
+			});
+			snapshotEntries.push({
+				diagnostic,
+				key
+			});
+			const failureResult = createUnsupportedTraversalResult();
+			setObjectEntry(cacheValue, key, failureResult.cacheValue);
+			setObjectEntry(transformedValue, key, failureResult.value);
 			changed = true;
-			delete transformedValue[key];
+			pathStable &&= failureResult.pathStable;
 			continue;
 		}
-		cacheValue[key] = propertyResult.cacheValue;
+		snapshotEntries.push({
+			key,
+			value: propertyValue
+		});
+		const propertyResult = transformNestedNode(propertyValue, plan, propertyContext, state, branchState);
+		pathStable &&= propertyResult.pathStable;
+		if (isRemovedValue(propertyResult.value)) {
+			changed = true;
+			continue;
+		}
+		setObjectEntry(cacheValue, key, propertyResult.cacheValue);
+		setObjectEntry(transformedValue, key, propertyResult.value);
 		if (!propertyResult.changed) continue;
-		if (transformedValue === void 0) transformedValue = { ...value };
 		changed = true;
-		transformedValue[key] = propertyResult.value;
 	}
 	storeCompletedSnapshot(state, value, {
 		entries: snapshotEntries,
@@ -1062,7 +1259,15 @@ const transformCompletedArray = (snapshot, plan, inheritedPolicy, canonicalPath,
 		if (itemSnapshot === void 0 || !itemSnapshot.present) continue;
 		const pathSegment = createIndexPathSegment(index);
 		const itemPath = appendCanonicalPathSegment(canonicalPath, pathSegment);
-		const itemResult = transformNode(itemSnapshot.value, plan, {
+		if (itemSnapshot.diagnostic !== void 0) {
+			emitDiagnosticEvent(plan.diagnostics, createDiagnosticEvent(plan.diagnostics, itemPath, itemSnapshot.diagnostic));
+			const failureResult = createUnsupportedTraversalResult();
+			cacheValue[index] = failureResult.cacheValue;
+			transformedValue[index] = failureResult.value;
+			pathStable &&= failureResult.pathStable;
+			continue;
+		}
+		const itemResult = transformNestedNode(itemSnapshot.value, plan, {
 			canonicalPath: itemPath,
 			inheritedPolicy,
 			pathSegments: Object.freeze([...pathSegments, pathSegment]),
@@ -1105,7 +1310,15 @@ const transformCompletedObject = (snapshot, plan, inheritedPolicy, canonicalPath
 	for (const entry of snapshot.entries) {
 		const pathSegment = createPropertyPathSegment(entry.key);
 		const propertyPath = appendCanonicalPathSegment(canonicalPath, pathSegment);
-		const propertyResult = transformNode(entry.value, plan, {
+		if (entry.diagnostic !== void 0) {
+			emitDiagnosticEvent(plan.diagnostics, createDiagnosticEvent(plan.diagnostics, propertyPath, entry.diagnostic));
+			const failureResult = createUnsupportedTraversalResult();
+			setObjectEntry(cacheValue, entry.key, failureResult.cacheValue);
+			setObjectEntry(transformedValue, entry.key, failureResult.value);
+			pathStable &&= failureResult.pathStable;
+			continue;
+		}
+		const propertyResult = transformNestedNode(entry.value, plan, {
 			canonicalPath: propertyPath,
 			directKeyMatch: resolveDirectKeyMatch(plan, entry.key),
 			inheritedPolicy,
@@ -1115,8 +1328,8 @@ const transformCompletedObject = (snapshot, plan, inheritedPolicy, canonicalPath
 		}, state, branchState);
 		pathStable &&= propertyResult.pathStable;
 		if (isRemovedValue(propertyResult.value)) continue;
-		cacheValue[entry.key] = propertyResult.cacheValue;
-		transformedValue[entry.key] = propertyResult.value;
+		setObjectEntry(cacheValue, entry.key, propertyResult.cacheValue);
+		setObjectEntry(transformedValue, entry.key, propertyResult.value);
 	}
 	return {
 		cacheValue,
@@ -1140,16 +1353,7 @@ const replayCompletedTraversal = (value, snapshot, plan, inheritedPolicy, contex
 };
 const transformResolvedNode = (value, plan, context, state, branchState) => {
 	const activePolicy = context.suppressDescendantRedaction ? void 0 : selectActivePolicy(plan, resolveExactPathRule(plan, context.canonicalPath), resolveDynamicPathRule(plan, context.pathSegments), context.directKeyMatch, context.inheritedPolicy);
-	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) {
-		const fnContext = buildFunctionCensorContext(context.pathSegments, activePolicy.rulePath, context.rootInput);
-		const redactedValue = applyRedaction(value, activePolicy.policy, fnContext);
-		return {
-			cacheValue: redactedValue,
-			changed: true,
-			pathStable: !usesPathSensitivePolicy(activePolicy),
-			value: redactedValue
-		};
-	}
+	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) return applyConfiguredRedaction(value, activePolicy.policy, activePolicy.rulePath, !usesPathSensitivePolicy(activePolicy), plan, context);
 	if (!isTraversableContainer(value)) {
 		const substringResult = context.suppressDescendantRedaction ? void 0 : transformSubstringValue(value, plan, context);
 		if (substringResult !== void 0) return substringResult;
@@ -1168,47 +1372,46 @@ const transformResolvedNode = (value, plan, context, state, branchState) => {
 const transformSupportedRuntimeValue = (value, plan, context, activePolicy, state, branchState) => {
 	const supportedValueKind = resolveSupportedTransformableValueKind(value);
 	if (supportedValueKind === void 0) return;
-	const transformedValue = resolveTransformedValue(value, plan.transformers);
-	if (transformedValue === void 0) return;
-	const traverseResolvedValue = (suppressDescendantRedaction = false) => {
-		const result = transformResolvedNode(transformedValue, plan, {
-			...context,
-			suppressDescendantRedaction
-		}, state, branchState);
-		return {
-			cacheValue: result.cacheValue,
-			changed: true,
-			pathStable: result.pathStable,
-			value: result.value
+	try {
+		const transformedValue = resolveTransformedValue(value, plan.transformers);
+		if (transformedValue === void 0) return;
+		const traverseResolvedValue = (suppressDescendantRedaction = false) => {
+			const result = transformResolvedNode(transformedValue, plan, {
+				...context,
+				suppressDescendantRedaction
+			}, state, branchState);
+			return {
+				cacheValue: result.cacheValue,
+				changed: true,
+				pathStable: result.pathStable,
+				value: result.value
+			};
 		};
-	};
-	if (plan.ignoredValueTypes[supportedValueKind]) {
-		if (!isSupportedTransformableObject(value)) return traverseResolvedValue(true);
+		if (plan.ignoredValueTypes[supportedValueKind]) {
+			if (!isSupportedTransformableObject(value)) return traverseResolvedValue(true);
+			return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
+				const result = traverseResolvedValue(true);
+				syncCompletedSnapshot(state, value, transformedValue);
+				return result;
+			});
+		}
+		if (!isSupportedTransformableObject(value)) return traverseResolvedValue();
 		return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
-			const result = traverseResolvedValue(true);
+			const result = traverseResolvedValue();
 			syncCompletedSnapshot(state, value, transformedValue);
 			return result;
 		});
+	} catch (error) {
+		return createFailureTraversalResult(plan, context, {
+			error,
+			stage: "transformer",
+			value
+		});
 	}
-	if (!isSupportedTransformableObject(value)) return traverseResolvedValue();
-	return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
-		const result = traverseResolvedValue();
-		syncCompletedSnapshot(state, value, transformedValue);
-		return result;
-	});
 };
 const transformNode = (value, plan, context, state, branchState) => {
 	const activePolicy = context.suppressDescendantRedaction ? void 0 : selectActivePolicy(plan, resolveExactPathRule(plan, context.canonicalPath), resolveDynamicPathRule(plan, context.pathSegments), context.directKeyMatch, context.inheritedPolicy);
-	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) {
-		const fnContext = buildFunctionCensorContext(context.pathSegments, activePolicy.rulePath, context.rootInput);
-		const redactedValue = applyRedaction(value, activePolicy.policy, fnContext);
-		return {
-			cacheValue: redactedValue,
-			changed: true,
-			pathStable: !usesPathSensitivePolicy(activePolicy),
-			value: redactedValue
-		};
-	}
+	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) return applyConfiguredRedaction(value, activePolicy.policy, activePolicy.rulePath, !usesPathSensitivePolicy(activePolicy), plan, context);
 	const transformedResult = transformSupportedRuntimeValue(value, plan, context, activePolicy, state, branchState);
 	if (transformedResult !== void 0) return transformedResult;
 	if (!isTraversableContainer(value)) {
@@ -1311,6 +1514,7 @@ const validatePathSelectors = (selectorCandidates, issues) => {
 const rootOptionNames = new Set([
 	"caseSensitiveKeyMatch",
 	"censor",
+	"diagnostics",
 	"fuzzyKeyMatch",
 	"keys",
 	"paths",
@@ -1358,6 +1562,7 @@ const ignoredValueTypeOptionNames = new Set([
 	"Set",
 	"URL"
 ]);
+const diagnosticsOptionNames = new Set(["sink"]);
 const isPlainObject = (value) => {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
 	const prototype = Object.getPrototypeOf(value);
@@ -1537,6 +1742,15 @@ const validateIgnoredValueTypes = (value, path, issues) => {
 		validateBooleanOption(value[optionName], path, optionName, issues);
 	}
 };
+const validateDiagnostics = (value, path, issues) => {
+	if (value === void 0) return;
+	if (!isPlainObject(value)) {
+		pushIssue(issues, path, "diagnostics must be an object.");
+		return;
+	}
+	validateAllowedOptions(value, diagnosticsOptionNames, path, issues);
+	if (value.sink !== void 0 && typeof value.sink !== "function") pushIssue(issues, `${path}.sink`, "sink must be a function.");
+};
 const validatePathRule = (value, path, defaults, issues, selectorCandidates) => {
 	if (!isPlainObject(value)) {
 		pushIssue(issues, path, `${path.split(".").at(-1) ?? "entry"} must be a string selector or path-rule object.`);
@@ -1593,6 +1807,7 @@ const validateConfig = (options) => {
 	validateAllowedOptions(options, rootOptionNames, "options", issues);
 	validateBooleanOption(options.caseSensitiveKeyMatch, "options", "caseSensitiveKeyMatch", issues);
 	validateCensorOption(options.censor, "options", issues);
+	validateDiagnostics(options.diagnostics, "options.diagnostics", issues);
 	validateBooleanOption(options.fuzzyKeyMatch, "options", "fuzzyKeyMatch", issues);
 	validateIgnoredValueTypes(options.ignoredValueTypes, "options.ignoredValueTypes", issues);
 	validateKeys(options.keys, "options.keys", issues);

@@ -1,4 +1,5 @@
 import type { Censor, PathEntry } from './paths.js'
+import type { DiagnosticsOptions } from './diagnostics.js'
 import type { IgnoredValueTypesOption } from './ignored-value-types.js'
 import type { TransformersOption } from './transformers.js'
 
@@ -20,6 +21,7 @@ export interface SubstringRule {
 export interface DeepRedactOptions {
   readonly caseSensitiveKeyMatch?: boolean
   readonly censor?: Censor
+  readonly diagnostics?: DiagnosticsOptions
   readonly fuzzyKeyMatch?: boolean
   readonly keys?: readonly KeySelector[]
   readonly paths?: readonly PathEntry[]

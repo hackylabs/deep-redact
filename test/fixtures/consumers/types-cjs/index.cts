@@ -39,6 +39,22 @@ const ignoredValueTypes: deepRedactPackage.IgnoredValueTypesOption = {
   Error: false,
   Map: true,
 }
+const diagnosticEvent: deepRedactPackage.DiagnosticEvent = {
+  event: 'redaction.failure',
+  path: 'user.password',
+  valueType: 'string',
+  message: 'Nested value could not be redacted safely and was replaced with [UNSUPPORTED].',
+  details: {
+    stage: 'censor',
+  },
+}
+const diagnosticSink = (event: deepRedactPackage.DiagnosticEvent) => {
+  void event.event
+  void event.path
+  void event.valueType
+  void event.message
+  void event.details
+}
 
 // PathSegments and FunctionCensorContext accessible in CJS
 const wildcardSegment: deepRedactPackage.PublicWildcardSegment = { any: true }
@@ -66,6 +82,9 @@ const redact = deepRedactPackage.deepRedact({
   censor: twoArgCensor,
   fuzzyKeyMatch: false,
   caseSensitiveKeyMatch: false,
+  diagnostics: {
+    sink: diagnosticSink,
+  },
   replaceStringByLength: false,
   ignoredValueTypes,
   keys: ['password', regexKeySelector, structuredKeyRule],
@@ -106,6 +125,8 @@ void structuredSegment
 void structuredSelector
 void passthroughTransformer
 void ignoredValueTypes
+void diagnosticEvent
+void diagnosticSink
 void transformersByType
 void transformersByConstructor
 void transformers

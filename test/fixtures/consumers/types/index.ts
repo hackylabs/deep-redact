@@ -2,6 +2,7 @@ import {
   createRedactor,
   deepRedact,
   type Censor,
+  type DiagnosticEvent,
   type DeepRedactOptions,
   type FunctionCensorContext,
   type IgnoredValueTypesOption,
@@ -129,11 +130,36 @@ const ignoredValueTypes: IgnoredValueTypesOption = {
   Error: false,
   Map: true,
 }
+const diagnosticEvent: DiagnosticEvent = {
+  event: 'redaction.failure',
+  path: 'user.password',
+  valueType: 'string',
+  message: 'Nested value could not be redacted safely and was replaced with [UNSUPPORTED].',
+  details: {
+    stage: 'censor',
+  },
+}
+const diagnosticSink = (event: DiagnosticEvent) => {
+  const eventName: string = event.event
+  const eventPath: string = event.path
+  const valueType: string = event.valueType
+  const message: string = event.message
+  const details: Record<string, unknown> | undefined = event.details
+
+  void eventName
+  void eventPath
+  void valueType
+  void message
+  void details
+}
 
 const options: DeepRedactOptions = {
   censor: twoArgCensor,
   fuzzyKeyMatch: false,
   caseSensitiveKeyMatch: false,
+  diagnostics: {
+    sink: diagnosticSink,
+  },
   ignoredValueTypes,
   keys: ['password', regexKeySelector, structuredKeyRule],
   paths,
@@ -176,6 +202,8 @@ void structuredSegment
 void structuredSelector
 void passthroughTransformer
 void ignoredValueTypes
+void diagnosticEvent
+void diagnosticSink
 void transformersByType
 void transformersByConstructor
 void transformers
