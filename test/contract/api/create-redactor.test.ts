@@ -5,6 +5,15 @@ import {
   type DiagnosticEvent,
   type FunctionCensorContext,
 } from '../../../src/index.js'
+import {
+  createCanonicalMixedPayload,
+  createCanonicalMixedPayloadExpectedResult,
+  createCanonicalMixedPayloadRedactor,
+  structuredDeterminismFixtureSets,
+  type StructuredDeterminismFixture,
+  type StructuredDeterminismFixtureSet,
+  type StructuredDeterminismRun,
+} from '../../fixtures/structured-determinism/index.js'
 
 const buildBigInt = (value: bigint) => ({
   _transformer: 'bigint',
@@ -70,6 +79,54 @@ const circularMarker = (path: string, value = '') => ({
   path,
   value,
 })
+
+const runStructuredDeterminismFixture = (
+  redact: (value: unknown) => unknown,
+  fixture: StructuredDeterminismFixture,
+): {
+  readonly redactionSnapshot: unknown
+  readonly result: unknown
+  readonly run: StructuredDeterminismRun
+} => {
+  const run = fixture.createRun()
+  const result = redact(run.payload)
+  const redactionSnapshot = run.snapshot?.()
+
+  expect(result).toStrictEqual(run.expected)
+
+  run.assertExpected?.(result)
+
+  run.assertResult?.(result)
+
+  return {
+    redactionSnapshot,
+    result,
+    run,
+  }
+}
+
+const structuredDeterminismCases = structuredDeterminismFixtureSets.flatMap((fixtureSet) => {
+  return fixtureSet.fixtures.map((fixture) => {
+    return [
+      fixtureSet.title,
+      fixture.title,
+      fixtureSet,
+      fixture,
+    ] as const satisfies readonly [
+      string,
+      string,
+      StructuredDeterminismFixtureSet,
+      StructuredDeterminismFixture,
+    ]
+  })
+})
+
+const structuredDeterminismWarmUpCases = structuredDeterminismCases.filter(([
+  ,
+  ,
+  ,
+  fixture,
+]) => fixture.createWarmUp !== undefined)
 
 describe('Reusable redactor factory contract', () => {
   it('returns a callable redactor and defers serialisation work until invocation', () => {
@@ -1086,244 +1143,9 @@ describe('Reusable redactor factory contract', () => {
       }))
     })
 
-    it('returns structurally identical output across repeated runs with the same overlapping-rule payload when serialise is omitted', () => {
-      const exactPathCensor = vi.fn(() => '[EXACT-PATH]')
-      const structuredPathCensor = vi.fn(() => '[STRUCTURED-PATH]')
-      const keyCensor = createKeyCensor()
-      const substringReplacer = createSubstringReplacer()
-      const payload = createPrecedencePayload()
-      const originalPayload = structuredClone(payload)
-      const redact = deepRedact({
-        censor: keyCensor,
-        keys: ['token', /token$/i],
-        paths: [
-          {
-            path: 'records.exact.token',
-            censor: exactPathCensor,
-          },
-          {
-            path: ['records', /^structured$/, 'token'],
-            censor: structuredPathCensor,
-          },
-        ],
-        stringTests: [
-          {
-            pattern: /token=[^&\s]+/,
-            replacer: substringReplacer,
-          },
-        ],
-      })
-
-      const first = redact(payload)
-      const second = redact(payload)
-      const expected = {
-        records: {
-          exact: { token: '[EXACT-PATH]' },
-          structured: { token: '[STRUCTURED-PATH]' },
-          key: { token: '[EXACT-KEY]' },
-          regex: { sessionToken: '[REGEX-KEY]' },
-          substring: { note: 'token=[SUBSTRING]' },
-        },
-      }
-
-      expect(first).toEqual(expected)
-      expect(second).toEqual(expected)
-      expect(first).toEqual(second)
-      expect(first).not.toBe(payload)
-      expect(second).not.toBe(payload)
-      expect(payload).toEqual(originalPayload)
-    })
   })
 
   describe('Canonical nested mixed payload traversal', () => {
-    const createCanonicalMixedPayloadKeyCensor = () => vi.fn((_value: unknown, ctx: FunctionCensorContext) => {
-      const firstRuleSegment = ctx.rulePath[0]
-
-      return firstRuleSegment instanceof RegExp ? '[REGEX-KEY]' : '[EXACT-KEY]'
-    })
-
-    const createCanonicalMixedPayloadSubstringReplacer = () => vi.fn((value: string, pattern: RegExp) => {
-      return value.replace(pattern, 'token=[SUBSTRING]')
-    })
-
-    const createCanonicalMixedPayload = (
-      options: {
-        readonly batchOneKeep?: string
-        readonly freeText?: string
-        readonly metadataPublic?: string
-        readonly objectInArraySubstring?: string
-        readonly regexSessionToken?: string
-        readonly sessionNote?: string
-      } = {},
-    ) => ({
-      identity: {
-        exact: {
-          password: 'token=exact-path',
-          safeNumber: 42,
-          safeBoolean: false,
-          safeNull: null,
-          safeUndefined: undefined,
-        },
-        retained: {
-          directSecret: 'token=retained-exact-key',
-          sessionToken: 'token=retained-regex-key',
-          note: 'token=retained-substring',
-          override: 'token=retained-override',
-          nestedArray: [
-            'token=retained-array-item',
-            {
-              sessionToken: 'token=retained-object-in-array',
-              publicNote: 'token=retained-public-note',
-            },
-          ],
-        },
-        batches: [
-          {
-            note: 'token=dynamic-zero',
-            keep: 'visible batch zero',
-            flag: true,
-          },
-          {
-            note: 'token=dynamic-one',
-            keep: options.batchOneKeep ?? 'visible batch one',
-            count: 2,
-            safeUndefined: undefined,
-          },
-        ],
-        freeText: options.freeText ?? 'token=free-text',
-        safeRootBoolean: true,
-      },
-      sessions: [
-        {
-          directSecret: 'token=exact-key-array',
-          sessionToken: options.regexSessionToken ?? 'token=regex-key-array',
-          note: options.sessionNote ?? 'visible session note',
-          flags: [true, null, undefined],
-        },
-        {
-          eventList: [
-            'visible event',
-            {
-              note: options.objectInArraySubstring ?? 'token=substring-object-in-array',
-              safeNumber: 9,
-            },
-          ],
-          safeNull: null,
-        },
-      ],
-      metadata: {
-        public: options.metadataPublic ?? 'visible metadata',
-        nullable: null,
-        safeUndefined: undefined,
-      },
-    })
-
-    const createCanonicalMixedPayloadExpectedResult = (
-      options: {
-        readonly batchOneKeep?: string
-        readonly metadataPublic?: string
-        readonly sessionNote?: string
-      } = {},
-    ) => ({
-      identity: {
-        exact: {
-          password: '[EXACT-PATH]',
-          safeNumber: 42,
-          safeBoolean: false,
-          safeNull: null,
-          safeUndefined: undefined,
-        },
-        retained: {
-          directSecret: '[INHERITED-PATH]',
-          sessionToken: '[INHERITED-PATH]',
-          note: '[INHERITED-PATH]',
-          override: '[EXACT-PATH]',
-          nestedArray: [
-            '[INHERITED-PATH]',
-            {
-              sessionToken: '[INHERITED-PATH]',
-              publicNote: '[INHERITED-PATH]',
-            },
-          ],
-        },
-        batches: [
-          {
-            note: '[DYNAMIC-PATH]',
-            keep: 'visible batch zero',
-            flag: true,
-          },
-          {
-            note: '[DYNAMIC-PATH]',
-            keep: options.batchOneKeep ?? 'visible batch one',
-            count: 2,
-            safeUndefined: undefined,
-          },
-        ],
-        freeText: 'token=[SUBSTRING]',
-        safeRootBoolean: true,
-      },
-      sessions: [
-        {
-          directSecret: '[EXACT-KEY]',
-          sessionToken: '[REGEX-KEY]',
-          note: options.sessionNote ?? 'visible session note',
-          flags: [true, null, undefined],
-        },
-        {
-          eventList: [
-            'visible event',
-            {
-              note: 'token=[SUBSTRING]',
-              safeNumber: 9,
-            },
-          ],
-          safeNull: null,
-        },
-      ],
-      metadata: {
-        public: options.metadataPublic ?? 'visible metadata',
-        nullable: null,
-        safeUndefined: undefined,
-      },
-    })
-
-    const createCanonicalMixedPayloadRedactor = (
-      keyCensor = createCanonicalMixedPayloadKeyCensor(),
-      substringReplacer = createCanonicalMixedPayloadSubstringReplacer(),
-    ) => ({
-      keyCensor,
-      substringReplacer,
-      redact: deepRedact({
-        censor: keyCensor,
-        keys: ['directSecret', /token$/i],
-        paths: [
-          {
-            path: 'identity.exact.password',
-            censor: '[EXACT-PATH]',
-          },
-          {
-            path: 'identity.retained',
-            censor: '[INHERITED-PATH]',
-            retainStructure: true,
-          },
-          {
-            path: 'identity.retained.override',
-            censor: '[EXACT-PATH]',
-          },
-          {
-            path: 'identity.batches.*.note',
-            censor: '[DYNAMIC-PATH]',
-          },
-        ],
-        stringTests: [
-          {
-            pattern: /token=[^&\s]+/,
-            replacer: substringReplacer,
-          },
-        ],
-      }),
-    })
-
     it('redacts the canonical mixed payload in one pass while preserving untouched supported siblings', () => {
       const payload = createCanonicalMixedPayload()
       const originalPayload = structuredClone(payload)
@@ -1336,38 +1158,6 @@ describe('Reusable redactor factory contract', () => {
       expect(payload).toStrictEqual(originalPayload)
       expect(keyCensor).toHaveBeenCalledTimes(2)
       expect(substringReplacer).toHaveBeenCalledTimes(2)
-    })
-
-    it('keeps repeated canonical mixed-payload calls independent across fixture instances', () => {
-      const firstPayload = createCanonicalMixedPayload()
-      const secondPayload = createCanonicalMixedPayload({
-        batchOneKeep: 'visible batch one second call',
-        freeText: 'token=free-text-second',
-        metadataPublic: 'visible metadata second call',
-        objectInArraySubstring: 'token=substring-object-in-array-second',
-        regexSessionToken: 'token=regex-key-array-second',
-        sessionNote: 'visible session note second call',
-      })
-      const firstOriginalPayload = structuredClone(firstPayload)
-      const secondOriginalPayload = structuredClone(secondPayload)
-      const firstExpected = createCanonicalMixedPayloadExpectedResult()
-      const secondExpected = createCanonicalMixedPayloadExpectedResult({
-        batchOneKeep: 'visible batch one second call',
-        metadataPublic: 'visible metadata second call',
-        sessionNote: 'visible session note second call',
-      })
-      const { redact, keyCensor, substringReplacer } = createCanonicalMixedPayloadRedactor()
-      const firstResult = redact(firstPayload)
-      const secondResult = redact(secondPayload)
-
-      expect(firstResult).toStrictEqual(firstExpected)
-      expect(secondResult).toStrictEqual(secondExpected)
-      expect(firstResult).not.toBe(firstPayload)
-      expect(secondResult).not.toBe(secondPayload)
-      expect(firstPayload).toStrictEqual(firstOriginalPayload)
-      expect(secondPayload).toStrictEqual(secondOriginalPayload)
-      expect(keyCensor).toHaveBeenCalledTimes(4)
-      expect(substringReplacer).toHaveBeenCalledTimes(4)
     })
   })
 
@@ -3723,109 +3513,6 @@ describe('Circular references and revisited identities', () => {
     }
   }
 
-  const createSameContextAliasFixture = (): {
-    readonly payload: Record<string, unknown>
-    readonly getTokenReads: () => number
-  } => {
-    let tokenReads = 0
-    const shared: Record<string, unknown> = {
-      safe: 'visible',
-    }
-    Object.defineProperty(shared, 'token', {
-      configurable: true,
-      enumerable: true,
-      get() {
-        tokenReads += 1
-        return 'secret'
-      },
-    })
-
-    return {
-      getTokenReads: () => tokenReads,
-      payload: {
-        left: { shared },
-        right: { shared },
-      },
-    }
-  }
-
-  const createDifferentContextAliasFixture = (): {
-    readonly payload: Record<string, unknown>
-    readonly getTokenReads: () => number
-  } => {
-    let tokenReads = 0
-    const shared: Record<string, unknown> = {
-      safe: 'visible',
-    }
-    Object.defineProperty(shared, 'token', {
-      configurable: true,
-      enumerable: true,
-      get() {
-        tokenReads += 1
-        return 'secret'
-      },
-    })
-
-    return {
-      getTokenReads: () => tokenReads,
-      payload: {
-        exact: { shared },
-        regex: { sessionShared: shared },
-      },
-    }
-  }
-
-  const createMatchedAfterUnmatchedAliasFixture = (): {
-    readonly payload: Record<string, unknown>
-    readonly getTokenReads: () => number
-  } => {
-    let tokenReads = 0
-    const shared: Record<string, unknown> = {
-      safe: 'visible',
-    }
-    Object.defineProperty(shared, 'token', {
-      configurable: true,
-      enumerable: true,
-      get() {
-        tokenReads += 1
-        return 'secret'
-      },
-    })
-
-    return {
-      getTokenReads: () => tokenReads,
-      payload: {
-        plain: { item: shared },
-        sensitive: { password: shared },
-      },
-    }
-  }
-
-  const createCyclicAliasFixture = (): Record<string, unknown> => {
-    const shared: Record<string, unknown> = {
-      safe: 'visible',
-    }
-    shared.self = shared
-
-    return {
-      left: shared,
-      right: shared,
-    }
-  }
-
-  const createRepeatedInvocationFixture = (): Record<string, unknown> => {
-    const payload: Record<string, unknown> = {
-      records: [{
-        safe: 'visible',
-        token: 'secret',
-      }],
-    }
-    const records = payload.records as Array<Record<string, unknown>>
-    records[0]!.parent = records
-
-    return payload
-  }
-
   it('replaces a direct object self-reference with the public circular marker while preserving siblings', () => {
     const redact = deepRedact({})
 
@@ -3881,117 +3568,58 @@ describe('Circular references and revisited identities', () => {
       },
     })
   })
+})
 
-  it('replays same-context path-sensitive revisits with the current branch path without descending into the original identity again', () => {
-    const baselineFixture = createSameContextAliasFixture()
-    const fixture = createSameContextAliasFixture()
-    const redact = deepRedact({
-      censor: (_value, context) => String(context.matchedPath.join('.')),
-      keys: ['shared'],
-      retainStructure: true,
-    })
-    redact({
-      left: baselineFixture.payload.left,
-    })
-    const baselineTokenReads = baselineFixture.getTokenReads()
-    const result = redact(fixture.payload) as {
-      left: { shared: Record<string, unknown> }
-      right: { shared: Record<string, unknown> }
-    }
-    expect(result.left.shared).toEqual({
-      safe: 'left.shared.safe',
-      token: 'left.shared.token',
-    })
-    expect(result.right.shared).toEqual({
-      safe: 'right.shared.safe',
-      token: 'right.shared.token',
-    })
-    expect(fixture.getTokenReads()).toBe(baselineTokenReads)
+describe('Structured determinism fixture corpus', () => {
+  it.each(structuredDeterminismCases)('returns stable structured output across repeated runs for %s / %s', (
+    _fixtureSetTitle,
+    _fixtureTitle,
+    fixtureSet,
+    fixture,
+  ) => {
+    const redact = fixtureSet.createRedactor()
+    const firstRun = runStructuredDeterminismFixture(redact, fixture)
+    const secondRun = runStructuredDeterminismFixture(redact, fixture)
+
+    expect(secondRun.result).toStrictEqual(firstRun.result)
   })
 
-  it('replays different-context revisits with path-correct output even when both rules share the compiled default policy object', () => {
-    const baselineFixture = createDifferentContextAliasFixture()
-    const fixture = createDifferentContextAliasFixture()
-    const redact = deepRedact({
-      censor: (_value, context) => String(context.matchedPath.join('.')),
-      keys: ['shared', /Shared$/],
-      retainStructure: true,
-    })
-    redact({
-      exact: baselineFixture.payload.exact,
-    })
-    const baselineTokenReads = baselineFixture.getTokenReads()
-    const result = redact(fixture.payload) as {
-      exact: { shared: Record<string, unknown> }
-      regex: { sessionShared: Record<string, unknown> }
-    }
-    expect(result.exact.shared).toEqual({
-      safe: 'exact.shared.safe',
-      token: 'exact.shared.token',
-    })
-    expect(result.regex.sessionShared).toEqual({
-      safe: 'regex.sessionShared.safe',
-      token: 'regex.sessionShared.token',
-    })
-    expect(fixture.getTokenReads()).toBe(baselineTokenReads)
-  })
+  it.each(structuredDeterminismCases)('keeps %s / %s deterministic after other named fixtures on the same compiled redactor', (
+    _fixtureSetTitle,
+    _fixtureTitle,
+    fixtureSet,
+    fixture,
+  ) => {
+    const redact = fixtureSet.createRedactor()
+    const firstRun = runStructuredDeterminismFixture(redact, fixture)
 
-  it('applies later matched retained redaction after an earlier unmatched visit without re-entering the completed identity', () => {
-    const baselineFixture = createMatchedAfterUnmatchedAliasFixture()
-    const fixture = createMatchedAfterUnmatchedAliasFixture()
-    const redact = deepRedact({
-      censor: (_value, context) => String(context.matchedPath.join('.')),
-      keys: ['password'],
-      retainStructure: true,
-    })
-    redact({
-      plain: baselineFixture.payload.plain,
-    })
-    const baselineTokenReads = baselineFixture.getTokenReads()
-    const result = redact(fixture.payload) as {
-      plain: { item: Record<string, unknown> }
-      sensitive: { password: Record<string, unknown> }
+    for (const otherFixture of fixtureSet.fixtures) {
+      if (otherFixture.name === fixture.name) {
+        continue
+      }
+
+      runStructuredDeterminismFixture(redact, otherFixture)
     }
 
-    expect(result.plain.item.safe).toBe('visible')
-    expect(result.sensitive.password).toEqual({
-      safe: 'sensitive.password.safe',
-      token: 'sensitive.password.token',
-    })
-    expect(fixture.getTokenReads()).toBe(baselineTokenReads)
+    const secondRun = runStructuredDeterminismFixture(redact, fixture)
+
+    expect(secondRun.result).toStrictEqual(firstRun.result)
   })
 
-  it('replays revisited cyclic aliases with branch-local circular marker paths', () => {
-    const redact = deepRedact({})
+  it.each(structuredDeterminismWarmUpCases)('replays the fixture-specific warm-up proof for %s / %s', (
+    _fixtureSetTitle,
+    _fixtureTitle,
+    fixtureSet,
+    fixture,
+  ) => {
+    const redact = fixtureSet.createRedactor()
+    const warmUp = fixture.createWarmUp!()
 
-    expect(redact(createCyclicAliasFixture())).toEqual({
-      left: {
-        safe: 'visible',
-        self: circularMarker('left.self', 'left'),
-      },
-      right: {
-        safe: 'visible',
-        self: circularMarker('right.self', 'right'),
-      },
-    })
-  })
+    redact(warmUp.payload)
 
-  it('returns identical output across repeated invocations with equivalent fresh cyclic fixtures while leaving inputs unchanged', () => {
-    const redact = deepRedact({
-      keys: ['token'],
-    })
-    const firstPayload = createRepeatedInvocationFixture()
-    const secondPayload = createRepeatedInvocationFixture()
-    const firstResult = redact(firstPayload)
-    const secondResult = redact(secondPayload)
-    const firstRecords = firstPayload.records as Array<Record<string, unknown>>
-    const secondRecords = secondPayload.records as Array<Record<string, unknown>>
+    const run = runStructuredDeterminismFixture(redact, fixture)
 
-    expect(firstResult).toEqual(secondResult)
-    expect(firstRecords[0]!.token).toBe('secret')
-    expect(firstRecords[0]!.parent).toBe(firstRecords)
-    expect(secondRecords[0]!.token).toBe('secret')
-    expect(secondRecords[0]!.parent).toBe(secondRecords)
+    warmUp.assertRun?.(run.run, warmUp.snapshot(), run.redactionSnapshot)
   })
 })
 

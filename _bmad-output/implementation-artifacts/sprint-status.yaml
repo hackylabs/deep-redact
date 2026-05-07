@@ -34,7 +34,7 @@
 # - Scrum Master typically creates the next story after the previous one is 'done'
 
 generated: 2026-04-13T09:43:13+0100
-last_updated: 2026-05-07T05:18:21+0100
+last_updated: 2026-05-07T20:14:12+0100
 project: deep-redact
 project_key: NOKEY
 tracking_system: file-system
@@ -67,8 +67,8 @@ development_status:
   3-5-degrade-nested-runtime-failures-to-unsupported-with-deterministic-diagnostics: done
   epic-3-retrospective: optional
 
-  epic-4: backlog
-  4-1-return-deterministic-structured-output-across-repeated-runs: backlog
+  epic-4: in-progress
+  4-1-return-deterministic-structured-output-across-repeated-runs: done
   4-2-return-deterministic-serialised-output-across-repeated-runs: backlog
   4-3-prove-exact-path-fast-lane-and-generic-traversal-are-behaviourally-equivalent: backlog
   4-4-publish-and-prove-a-normative-precedence-matrix-for-overlapping-targeting-rules: backlog
