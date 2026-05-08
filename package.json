@@ -8,6 +8,10 @@
   "funding": "https://ko-fi.com/hackylabs",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
+  "volta": {
+    "node": "24.14.1",
+    "pnpm": "10.33.0"
+  },
   "engines": {
     "node": ">=22.18.0"
   },

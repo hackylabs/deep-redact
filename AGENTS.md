@@ -1,4 +1,4 @@
-# Agent Instructions
+# Agent Instructions (Codex / OpenAI Agents)
 
 ## Language
 
@@ -28,6 +28,12 @@ source .agents/initialise-env.sh && pnpm run test
 ```
 
 The bootstrap must activate Node `24.14.1` from `.nvmrc` and `.node-version`, align with `pnpm@10.33.0` from `package.json`, and place the repository `node_modules/.bin` directory on `PATH`. Treat a bootstrap failure as a blocker rather than continuing with an ambient Node 20 or another unpinned toolchain.
+
+Common resolver pins are intentionally duplicated:
+- `.nvmrc` for nvm-compatible tools.
+- `.node-version` for fnm, asdf, and related tools.
+- `.tool-versions` for asdf and mise.
+- `package.json` `volta` metadata for Volta shims.
 
 ## Planning Artefacts
 

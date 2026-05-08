@@ -5,6 +5,8 @@ benchmark.json
 load-test-results.json
 dist
 _bmad
-.agents
+.agents/*
+!.agents/
+!.agents/initialise-env.sh
 .claude
 .gemini
