@@ -4,8 +4,8 @@ import type { Transformer } from '../types'
  * Registry for organizing transformers by type and constructor for efficient lookup
  */
 export class TransformerRegistry {
-  private typeTransformers: Map<string, Transformer[]> = new Map()
-  private constructorTransformers: Map<Function, Transformer[]> = new Map()
+  private typeTransformers = new Map<string, Transformer[]>()
+  private constructorTransformers = new Map<Function, Transformer[]>()
   private fallbackTransformers: Transformer[] = []
 
   /**
@@ -99,9 +99,9 @@ export class TransformerRegistry {
    * Get all registered transformers for debugging
    */
   getRegisteredTransformers(): {
-    types: Map<string, Transformer[]>
-    constructors: Map<Function, Transformer[]>
-    fallback: Transformer[]
+    types: Map<string, Transformer[]>;
+    constructors: Map<Function, Transformer[]>;
+    fallback: Transformer[];
   } {
     return {
       types: new Map(this.typeTransformers),

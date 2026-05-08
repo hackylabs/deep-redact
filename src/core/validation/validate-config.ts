@@ -147,10 +147,10 @@ const validateSerialiseOption = (
 
 const validateConflictingOptions = (
   value: {
-    readonly censor?: unknown
-    readonly remove?: unknown
-    readonly retainStructure?: unknown
-    readonly replaceStringByLength?: unknown
+    readonly censor?: unknown;
+    readonly remove?: unknown;
+    readonly retainStructure?: unknown;
+    readonly replaceStringByLength?: unknown;
   },
   path: string,
   issues: ValidationIssue[],
@@ -173,10 +173,10 @@ const validateConflictingOptions = (
 }
 
 interface EffectiveRuleDefaults {
-  readonly censor?: unknown
-  readonly remove: boolean
-  readonly retainStructure: boolean
-  readonly replaceStringByLength: boolean
+  readonly censor?: unknown;
+  readonly remove: boolean;
+  readonly retainStructure: boolean;
+  readonly replaceStringByLength: boolean;
 }
 
 const regexLikeKeySelectorPattern = /^\/.+\/[A-Za-z]*$/
@@ -259,7 +259,7 @@ const validateKeys = (
     return
   }
 
-  value.forEach((entry, index) => {
+  for (const [index, entry] of value.entries()) {
     const entryPath = `${path}[${index}]`
 
     if (isRegExp(entry)) {
@@ -269,21 +269,21 @@ const validateKeys = (
         pushIssue(issues, entryPath, unsupportedRegexMessage)
       }
 
-      return
+      continue
     }
 
     if (typeof entry === 'string') {
       validateLiteralKeySelector(entry, entryPath, issues)
-      return
+      continue
     }
 
     if (isPlainObject(entry)) {
       validateKeyRule(entry, entryPath, issues)
-      return
+      continue
     }
 
     pushIssue(issues, entryPath, 'key selectors must be strings or RegExp instances or key-rule objects.')
-  })
+  }
 }
 
 const zeroLengthProbeValues = Object.freeze([
@@ -342,31 +342,31 @@ const validateStringTests = (
     return
   }
 
-  value.forEach((entry, index) => {
+  for (const [index, entry] of value.entries()) {
     const entryPath = `${path}[${index}]`
 
     if (isRegExp(entry)) {
       validateSubstringPattern(entry, entryPath, issues)
-      return
+      continue
     }
 
     if (!isPlainObject(entry)) {
       pushIssue(issues, entryPath, 'string test entries must be RegExp instances or substring rule objects.')
-      return
+      continue
     }
 
     validateAllowedOptions(entry, substringRuleOptionNames, entryPath, issues)
 
-    if (!isRegExp(entry.pattern)) {
-      pushIssue(issues, `${entryPath}.pattern`, 'pattern must be a RegExp instance.')
-    } else {
+    if (isRegExp(entry.pattern)) {
       validateSubstringPattern(entry.pattern, `${entryPath}.pattern`, issues)
+    } else {
+      pushIssue(issues, `${entryPath}.pattern`, 'pattern must be a RegExp instance.')
     }
 
     if (typeof entry.replacer !== 'function') {
       pushIssue(issues, `${entryPath}.replacer`, 'replacer must be a function.')
     }
-  })
+  }
 }
 
 const validateTransformerEntries = (
@@ -383,11 +383,11 @@ const validateTransformerEntries = (
     return
   }
 
-  value.forEach((entry, index) => {
+  for (const [index, entry] of value.entries()) {
     if (typeof entry !== 'function') {
       pushIssue(issues, `${path}[${index}]`, 'Transformer entries must be functions.')
     }
-  })
+  }
 }
 
 const validateTransformerBuckets = (
@@ -497,13 +497,13 @@ const validatePathRule = (
 
   validateAllowedOptions(value, pathRuleOptionNames, path, issues)
 
-  if (!isPathSelector(value.path)) {
-    pushIssue(issues, `${path}.path`, 'path must be a string or structured selector array.')
-  } else {
+  if (isPathSelector(value.path)) {
     selectorCandidates.push({
       configPath: `${path}.path`,
       selector: value.path,
     })
+  } else {
+    pushIssue(issues, `${path}.path`, 'path must be a string or structured selector array.')
   }
 
   validateCensorOption(value.censor, path, issues)
@@ -543,7 +543,7 @@ const validatePaths = (
     return
   }
 
-  value.forEach((entry, index) => {
+  for (const [index, entry] of value.entries()) {
     const entryPath = `${path}[${index}]`
 
     if (isPathSelector(entry)) {
@@ -551,16 +551,16 @@ const validatePaths = (
         configPath: entryPath,
         selector: entry,
       })
-      return
+      continue
     }
 
     if (!isPlainObject(entry)) {
       pushIssue(issues, entryPath, `${entryPath.split('.').at(-1) ?? 'entry'} must be a string selector or path-rule object.`)
-      return
+      continue
     }
 
     validatePathRule(entry, entryPath, defaults, issues, selectorCandidates)
-  })
+  }
 }
 
 export const validateConfig = (options: unknown): ValidationReport => {

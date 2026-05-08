@@ -11,7 +11,7 @@ export const isRegExp = (value: unknown): value is RegExp => {
 }
 
 interface RegexSafetyOptions {
-  readonly allowGlobal?: boolean
+  readonly allowGlobal?: boolean;
 }
 
 const splitRegexAlternatives = (source: string): readonly string[] => {

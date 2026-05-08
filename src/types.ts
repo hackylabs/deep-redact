@@ -10,33 +10,33 @@ export interface OrganisedTransformers {
    * Transformers for primitive types (based on typeof result)
    */
   byType?: {
-    bigint?: Transformer[]
-    string?: Transformer[]
-    number?: Transformer[]
-    boolean?: Transformer[]
-    symbol?: Transformer[]
-    function?: Transformer[]
-    object?: Transformer[]
-    undefined?: Transformer[]
-  }
+    bigint?: Transformer[];
+    string?: Transformer[];
+    number?: Transformer[];
+    boolean?: Transformer[];
+    symbol?: Transformer[];
+    function?: Transformer[];
+    object?: Transformer[];
+    undefined?: Transformer[];
+  };
 
   /**
    * Transformers for specific constructors (based on instanceof checks)
    */
   byConstructor?: {
-    Date?: Transformer[]
-    Error?: Transformer[]
-    Map?: Transformer[]
-    Set?: Transformer[]
-    RegExp?: Transformer[]
-    URL?: Transformer[]
-    [key: string]: Transformer[] | undefined
-  }
+    Date?: Transformer[];
+    Error?: Transformer[];
+    Map?: Transformer[];
+    Set?: Transformer[];
+    RegExp?: Transformer[];
+    URL?: Transformer[];
+    [key: string]: Transformer[] | undefined;
+  };
 
   /**
    * Transformers that run on all values (like the current system)
    */
-  fallback?: Transformer[]
+  fallback?: Transformer[];
 }
 
 /**
@@ -51,7 +51,7 @@ export interface BlacklistKeyConfig {
    * @example true // match any key that contains the string 'address', such as 'homeAddress', 'workAddress', 'addressLine1', etc.
    * @example false // match only keys that contain 'address' from start to end.
    */
-  fuzzyKeyMatch?: boolean
+  fuzzyKeyMatch?: boolean;
 
   /**
    * Perform a case-sensitive match on the key
@@ -59,7 +59,7 @@ export interface BlacklistKeyConfig {
    * @example false // match any key that contains the string 'address' regardless of upper, lower, snake, camel or any other case.
    * @example true // match only keys that are exactly 'address' in the same case.
    */
-  caseSensitiveKeyMatch?: boolean
+  caseSensitiveKeyMatch?: boolean;
 
   /**
    * Retain the structure of the object, but redact the values.
@@ -67,14 +67,14 @@ export interface BlacklistKeyConfig {
    * @example true // retain the structure of the object, but redact the values. { a: '1' } => becomes { a: '[REDACTED]' }
    * @example false // redact the entire object. { a: '1' } => becomes '[REDACTED]'
    */
-  retainStructure?: boolean
+  retainStructure?: boolean;
 
   /**
    * Remove the redacted data instead of replacing it with the `replacement` value.
    * @default false // replace the redacted data with the `replacement` value.
    * @example true // remove the redacted data.
    */
-  remove?: boolean
+  remove?: boolean;
 
   /**
    * The replacement value for redacted data. Can be a string, or a function that takes the original value and returns any value.
@@ -85,7 +85,7 @@ export interface BlacklistKeyConfig {
    * @param value The original value that is being redacted.
    * @returns The redacted value or undefined to remove the value.
    */
-  replacement?: string | ((value: unknown) => unknown)
+  replacement?: string | ((value: unknown) => unknown);
 
   /**
    * Replace string values with a redacted string of the same length, using the `replacement` option. Ignored if `remove` is true, `replacement` is a function, or the value is not a string.
@@ -93,19 +93,19 @@ export interface BlacklistKeyConfig {
    * @example true // if `replacement` equals `*` then `joe.bloggs@example.com` becomes `**********************`
    * @example false // if `replacement` equals `*` then `joe.bloggs@example.com` becomes `*`
    */
-  replaceStringByLength?: boolean
+  replaceStringByLength?: boolean;
 
   /**
    * The key to redact. Can be a string or a RegExp.
    * @example 'address' // redact any key that is 'address'.
    * @example /^address$/ // redact any key that is exactly 'address'.
    */
-  key: string | RegExp
+  key: string | RegExp;
 }
 
 export interface ComplexStringTest {
-  pattern: RegExp,
-  replacer: (value: string, pattern: RegExp) => string
+  pattern: RegExp;
+  replacer: (value: string, pattern: RegExp) => string;
 }
 
 export interface BaseDeepRedactConfig {
@@ -115,7 +115,7 @@ export interface BaseDeepRedactConfig {
    * @example ['password', 'ssn'] // redact any key that is 'password' or 'ssn'.
    * @example [{ key: 'address', fuzzyKeyMatch: true, caseSensitiveKeyMatch: false }] // redact any key that contains 'address' regardless of case.
    */
-  blacklistedKeys?: Array<string | RegExp | BlacklistKeyConfig>
+  blacklistedKeys?: Array<string | RegExp | BlacklistKeyConfig>;
 
   /**
    * Redact a string value that matches a test pattern.
@@ -124,7 +124,7 @@ export interface BaseDeepRedactConfig {
    *   /^[\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}$/,  // redact any string that looks like an IP address.
    * ]
    */
-  stringTests?: Array<RegExp | ComplexStringTest>
+  stringTests?: Array<RegExp | ComplexStringTest>;
 
   /**
    * Perform a fuzzy match on the key. This will match any key that contains the string, rather than a case-sensitive match.
@@ -132,7 +132,7 @@ export interface BaseDeepRedactConfig {
    * @example true // match any key that contains the string 'address', such as 'homeAddress', 'workAddress', 'addressLine1', etc.
    * @example false // match only keys that contain 'address' from start to end.
    */
-  fuzzyKeyMatch?: boolean
+  fuzzyKeyMatch?: boolean;
 
   /**
    * Perform a case-sensitive match on the key
@@ -140,7 +140,7 @@ export interface BaseDeepRedactConfig {
    * @example false // match any key that contains the string 'address' regardless of upper, lower, snake, camel or any other case.
    * @example true // match only keys that are exactly 'address' in the same case.
    */
-  caseSensitiveKeyMatch?: boolean
+  caseSensitiveKeyMatch?: boolean;
 
   /**
    * Retain the structure of the object, but redact the values.
@@ -148,7 +148,7 @@ export interface BaseDeepRedactConfig {
    * @example true // retain the structure of the object, but redact the values. { a: '1' } => becomes { a: '[REDACTED]' }
    * @example false // redact the entire object. { a: '1' } => becomes '[REDACTED]'
    */
-  retainStructure?: boolean
+  retainStructure?: boolean;
 
   /**
    * Replace string values with a redacted string of the same length, using the `replacement` option. Ignored if `remove` is true, `replacement` is a function, or the value is not a string.
@@ -156,7 +156,7 @@ export interface BaseDeepRedactConfig {
    * @example true // if `replacement` equals `*` then `joe.bloggs@example.com` becomes `**********************`
    * @example false // if `replacement` equals `*` then `joe.bloggs@example.com` becomes `*`
    */
-  replaceStringByLength?: boolean
+  replaceStringByLength?: boolean;
 
   /**
    * The replacement value for redacted data. Can be a string, or a function that takes the original value and returns any value.
@@ -166,19 +166,19 @@ export interface BaseDeepRedactConfig {
    * @param value The original value that is being redacted.
    * @returns The redacted value or undefined to remove the value.
    */
-  replacement?: string | Transformer
+  replacement?: string | Transformer;
 
   /**
    * Remove the redacted data instead of replacing it with the `replacement` value.
    */
-  remove?: boolean
+  remove?: boolean;
 
   /**
    * The types of values that should be redacted. If the value is not one of these types, it will not be redacted.
    * @default ['string']
    * @example ['string', 'number'] // redact only strings and numbers, leave other types unchanged.
    */
-  types?: Types[]
+  types?: Types[];
 
   /**
    * Serialise the redacted data. If true, the redacted data will be returned as a JSON string. If false, it will be returned as an object.
@@ -186,12 +186,12 @@ export interface BaseDeepRedactConfig {
    * @example true // return the redacted data as a JSON string.
    * @example false // return the redacted data as the same type as the original data.
    */
-  serialise?: boolean,
+  serialise?: boolean;
 
   /**
    * Alias of `serialise` for International-English users.
    */
-  serialize?: boolean
+  serialize?: boolean;
 
   /**
    * Configuration for transformers to apply when transforming unsupported values.
@@ -227,27 +227,27 @@ export interface BaseDeepRedactConfig {
    *   ]
    * }
    */
-  transformers?: TransformerConfig
+  transformers?: TransformerConfig;
 }
 
 export type DeepRedactConfig = Partial<Omit<BaseDeepRedactConfig, '_blacklistedKeysTransformed' | 'blacklistedKeys' | 'stringTests'>> & ({
-  blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys']
-  stringTests: BaseDeepRedactConfig['stringTests']
+  blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys'];
+  stringTests: BaseDeepRedactConfig['stringTests'];
 } | {
-  blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys']
+  blacklistedKeys: BaseDeepRedactConfig['blacklistedKeys'];
 } | {
-  stringTests: BaseDeepRedactConfig['stringTests']
+  stringTests: BaseDeepRedactConfig['stringTests'];
 })
 
 export type RedactorUtilsConfig = Omit<BaseDeepRedactConfig, 'serialise' | 'serialize'>
 
 export type StackReference = WeakMap<object, unknown>
 
-export type Stack = Array<{ 
-  parent: any, 
-  key: string, 
-  value: unknown, 
-  path: Array<string | number>, 
-  redactingParent: boolean
-  keyConfig: BlacklistKeyConfig | undefined
+export type Stack = Array<{
+  parent: any;
+  key: string;
+  value: unknown;
+  path: Array<string | number>;
+  redactingParent: boolean;
+  keyConfig: BlacklistKeyConfig | undefined;
 }>

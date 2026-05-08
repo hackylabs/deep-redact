@@ -1,4 +1,4 @@
-import type { Transformer } from "../../types.js"
+import type { Transformer } from '../../types.js'
 
 export const _regex: Transformer = (value: unknown) => {
     if (!(value instanceof RegExp)) return value

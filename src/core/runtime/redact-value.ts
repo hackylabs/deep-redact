@@ -41,70 +41,70 @@ type TrackableIdentity = object
 type PolicySource = 'dynamic-path' | 'exact-key' | 'exact-path' | 'regex-key'
 
 interface ActivePolicyMatch {
-  readonly policy: CompiledRedactionPolicy
-  readonly source: PolicySource
-  readonly rulePath: PathSegments
+  readonly policy: CompiledRedactionPolicy;
+  readonly source: PolicySource;
+  readonly rulePath: PathSegments;
 }
 
 interface TraversalContext {
-  readonly canonicalPath?: string
-  readonly directKeyMatch?: DirectKeyMatchResult
-  readonly inheritedPolicy?: ActivePolicyMatch
-  readonly pathSegments: readonly ExactPathSegment[]
-  readonly rootInput: unknown
-  readonly suppressDescendantRedaction?: boolean
+  readonly canonicalPath?: string;
+  readonly directKeyMatch?: DirectKeyMatchResult;
+  readonly inheritedPolicy?: ActivePolicyMatch;
+  readonly pathSegments: readonly ExactPathSegment[];
+  readonly rootInput: unknown;
+  readonly suppressDescendantRedaction?: boolean;
 }
 
 interface DirectKeyMatchResult {
-  readonly source: 'exact-key' | 'regex-key'
-  readonly rulePath: PathSegments
+  readonly source: 'exact-key' | 'regex-key';
+  readonly rulePath: PathSegments;
 }
 
 interface TraversalResult {
-  readonly cacheValue: RemovedValue | unknown
-  readonly changed: boolean
-  readonly pathStable: boolean
-  readonly value: RemovedValue | unknown
+  readonly cacheValue: RemovedValue | unknown;
+  readonly changed: boolean;
+  readonly pathStable: boolean;
+  readonly value: RemovedValue | unknown;
 }
 
 interface CompletedTraversalRecord {
-  readonly canonicalPath: string
-  readonly pathStable: boolean
-  readonly ruleContextKey: string
-  readonly value: RemovedValue | unknown
+  readonly canonicalPath: string;
+  readonly pathStable: boolean;
+  readonly ruleContextKey: string;
+  readonly value: RemovedValue | unknown;
 }
 
 interface CompletedArraySnapshotEntry {
-  readonly diagnostic?: FailureDiagnosticSnapshot
-  readonly present: boolean
-  readonly value?: unknown
+  readonly diagnostic?: FailureDiagnosticSnapshot;
+  readonly present: boolean;
+  readonly value?: unknown;
 }
 
 interface CompletedObjectSnapshotEntry {
-  readonly diagnostic?: FailureDiagnosticSnapshot
-  readonly key: string
-  readonly value?: unknown
+  readonly diagnostic?: FailureDiagnosticSnapshot;
+  readonly key: string;
+  readonly value?: unknown;
 }
 
 interface CompletedArraySnapshot {
-  readonly items: readonly CompletedArraySnapshotEntry[]
-  readonly kind: 'array'
+  readonly items: readonly CompletedArraySnapshotEntry[];
+  readonly kind: 'array';
 }
 
 interface CompletedObjectSnapshot {
-  readonly entries: readonly CompletedObjectSnapshotEntry[]
-  readonly kind: 'object'
+  readonly entries: readonly CompletedObjectSnapshotEntry[];
+  readonly kind: 'object';
 }
 
 type CompletedTraversalSnapshot = CompletedArraySnapshot | CompletedObjectSnapshot
 
 interface TraversalState {
-  readonly completedIdentities: WeakMap<TrackableIdentity, CompletedTraversalRecord[]>
-  readonly completedSnapshots: WeakMap<TrackableIdentity, CompletedTraversalSnapshot>
+  readonly completedIdentities: WeakMap<TrackableIdentity, CompletedTraversalRecord[]>;
+  readonly completedSnapshots: WeakMap<TrackableIdentity, CompletedTraversalSnapshot>;
 }
 
 interface TraversalBranchState {
-  readonly activePaths: WeakMap<TrackableIdentity, string>
+  readonly activePaths: WeakMap<TrackableIdentity, string>;
 }
 
 const unsupportedValue = '[UNSUPPORTED]'
@@ -210,10 +210,10 @@ const emitFailureDiagnostic = (
   plan: CompiledRedactorPlan,
   context: TraversalContext,
   options: {
-    readonly error: unknown
-    readonly stage: RuntimeFailureStage
-    readonly value: unknown
-    readonly valueType?: string
+    readonly error: unknown;
+    readonly stage: RuntimeFailureStage;
+    readonly value: unknown;
+    readonly valueType?: string;
   },
 ): FailureDiagnosticSnapshot => {
   const diagnostic = createFailureDiagnosticSnapshot({
@@ -244,10 +244,10 @@ const createFailureTraversalResult = (
   plan: CompiledRedactorPlan,
   context: TraversalContext,
   options: {
-    readonly error: unknown
-    readonly stage: RuntimeFailureStage
-    readonly value: unknown
-    readonly valueType?: string
+    readonly error: unknown;
+    readonly stage: RuntimeFailureStage;
+    readonly value: unknown;
+    readonly valueType?: string;
   },
 ): TraversalResult => {
   emitFailureDiagnostic(plan, context, options)
@@ -298,7 +298,7 @@ const buildRuleContextKey = (
     return 'none'
   }
 
-  return `${activePolicy.source}:${activePolicy.rulePath.map(renderRulePathSegment).join('|')}`
+  return `${activePolicy.source}:${activePolicy.rulePath.map((segment) => renderRulePathSegment(segment)).join('|')}`
 }
 
 const usesPathSensitivePolicy = (
@@ -543,12 +543,12 @@ const buildFunctionCensorContext = (
   const matchedPath = Object.freeze(pathSegments.map((seg) => seg.value)) as PathSegments
   const rulePathCopy = Object.freeze([...rulePath]) as PathSegments
   const terminalKey = matchedPath.length > 0
-    ? (matchedPath[matchedPath.length - 1] as string | number)
+    ? (matchedPath.at(-1) as string | number)
     : undefined
 
-  return terminalKey !== undefined
-    ? { matchedPath, rulePath: rulePathCopy, rootInput, terminalKey }
-    : { matchedPath, rulePath: rulePathCopy, rootInput }
+  return terminalKey === undefined
+    ? { matchedPath, rulePath: rulePathCopy, rootInput }
+    : { matchedPath, rulePath: rulePathCopy, rootInput, terminalKey }
 }
 
 const applyConfiguredRedaction = (

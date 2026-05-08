@@ -72,7 +72,7 @@ export const setTransformer: Transformer = (value: unknown) => {
 
   return {
     _transformer: 'set',
-    value: Array.from(value.values()),
+    value: [...value.values()],
   }
 }
 

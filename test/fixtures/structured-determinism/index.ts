@@ -5,36 +5,36 @@ import {
 } from '../../../src/index.js'
 
 export interface StructuredDeterminismRun<Result = unknown> {
-  readonly assertExpected?: (result: Result) => void
-  readonly payload: unknown
-  readonly expected: Result
-  readonly originalPayload?: unknown
-  readonly assertResult?: (result: Result) => void
-  readonly snapshot?: () => unknown
+  readonly assertExpected?: (result: Result) => void;
+  readonly payload: unknown;
+  readonly expected: Result;
+  readonly originalPayload?: unknown;
+  readonly assertResult?: (result: Result) => void;
+  readonly snapshot?: () => unknown;
 }
 
 export interface StructuredDeterminismWarmUp<Snapshot = unknown> {
-  readonly payload: unknown
-  readonly snapshot: () => Snapshot
+  readonly payload: unknown;
+  readonly snapshot: () => Snapshot;
   readonly assertRun?: (
     run: StructuredDeterminismRun,
     warmUpSnapshot: Snapshot,
     runSnapshot: unknown,
-  ) => void
+  ) => void;
 }
 
 export interface StructuredDeterminismFixture<Result = unknown> {
-  readonly name: string
-  readonly title: string
-  readonly createRun: () => StructuredDeterminismRun<Result>
-  readonly createWarmUp?: () => StructuredDeterminismWarmUp
+  readonly name: string;
+  readonly title: string;
+  readonly createRun: () => StructuredDeterminismRun<Result>;
+  readonly createWarmUp?: () => StructuredDeterminismWarmUp;
 }
 
 export interface StructuredDeterminismFixtureSet {
-  readonly name: string
-  readonly title: string
-  readonly createRedactor: () => (value: unknown) => unknown
-  readonly fixtures: readonly StructuredDeterminismFixture[]
+  readonly name: string;
+  readonly title: string;
+  readonly createRedactor: () => (value: unknown) => unknown;
+  readonly fixtures: readonly StructuredDeterminismFixture[];
 }
 
 const createCircularMarker = (
@@ -61,12 +61,12 @@ const createPathSensitiveCensor = (
 const createSharedTokenFixture = <TPayload extends Record<string, unknown>>(
   buildPayload: (shared: Record<string, unknown>) => TPayload,
   options: {
-    readonly safe?: string
-    readonly token?: string
+    readonly safe?: string;
+    readonly token?: string;
   } = {},
 ): {
-  readonly payload: TPayload
-  readonly getTokenReads: () => number
+  readonly payload: TPayload;
+  readonly getTokenReads: () => number;
 } => {
   let tokenReads = 0
   const shared: Record<string, unknown> = {
@@ -103,11 +103,11 @@ const createPrecedenceSubstringReplacer = () => vi.fn(replaceTokenSubstring)
 
 const createPrecedencePayload = (
   options: {
-    readonly exactToken?: string
-    readonly keyToken?: string
-    readonly regexToken?: string
-    readonly structuredToken?: string
-    readonly substringNote?: string
+    readonly exactToken?: string;
+    readonly keyToken?: string;
+    readonly regexToken?: string;
+    readonly structuredToken?: string;
+    readonly substringNote?: string;
   } = {},
 ) => ({
   records: {
@@ -121,7 +121,7 @@ const createPrecedencePayload = (
 
 const createPrecedenceExpectedResult = (
   options: {
-    readonly substringNote?: string
+    readonly substringNote?: string;
   } = {},
 ) => ({
   records: {
@@ -197,12 +197,12 @@ const createCanonicalMixedPayloadSubstringReplacer = () => vi.fn(replaceTokenSub
 
 export const createCanonicalMixedPayload = (
   options: {
-    readonly batchOneKeep?: string
-    readonly freeText?: string
-    readonly metadataPublic?: string
-    readonly objectInArraySubstring?: string
-    readonly regexSessionToken?: string
-    readonly sessionNote?: string
+    readonly batchOneKeep?: string;
+    readonly freeText?: string;
+    readonly metadataPublic?: string;
+    readonly objectInArraySubstring?: string;
+    readonly regexSessionToken?: string;
+    readonly sessionNote?: string;
   } = {},
 ) => ({
   identity: {
@@ -269,11 +269,11 @@ export const createCanonicalMixedPayload = (
 
 export const createCanonicalMixedPayloadExpectedResult = (
   options: {
-    readonly batchOneKeep?: string
-    readonly metadataPublic?: string
-    readonly objectInArraySubstring?: string
-    readonly regexSessionToken?: string
-    readonly sessionNote?: string
+    readonly batchOneKeep?: string;
+    readonly metadataPublic?: string;
+    readonly objectInArraySubstring?: string;
+    readonly regexSessionToken?: string;
+    readonly sessionNote?: string;
   } = {},
 ) => ({
   identity: {
@@ -457,8 +457,8 @@ const createAliasReplayFixture = (
   name: string,
   title: string,
   createFixture: () => {
-    readonly payload: Record<string, unknown>
-    readonly getTokenReads: () => number
+    readonly payload: Record<string, unknown>;
+    readonly getTokenReads: () => number;
   },
   expected: Record<string, unknown>,
   createWarmUpPayload: ((payload: Record<string, unknown>) => unknown) | undefined,
@@ -525,8 +525,8 @@ const sameContextAliasFixture = createAliasReplayFixture(
   }),
   (result) => {
     const typedResult = result as {
-      left: { shared: Record<string, unknown> }
-      right: { shared: Record<string, unknown> }
+      left: { shared: Record<string, unknown> };
+      right: { shared: Record<string, unknown> };
     }
 
     expect(typedResult.left.shared).not.toBe(typedResult.right.shared)
@@ -556,8 +556,8 @@ const differentContextAliasFixture = createAliasReplayFixture(
   }),
   (result) => {
     const typedResult = result as {
-      exact: { shared: Record<string, unknown> }
-      regex: { sessionShared: Record<string, unknown> }
+      exact: { shared: Record<string, unknown> };
+      regex: { sessionShared: Record<string, unknown> };
     }
 
     expect(typedResult.exact.shared).not.toBe(typedResult.regex.sessionShared)
@@ -585,19 +585,19 @@ const matchedAfterUnmatchedAliasFixture = createAliasReplayFixture(
   createMatchedAfterUnmatchedWarmUpPayload,
   (result) => {
     const typedResult = result as {
-      plain: { item: Record<string, unknown> }
-      sensitive: { password: Record<string, unknown> }
+      plain: { item: Record<string, unknown> };
+      sensitive: { password: Record<string, unknown> };
     }
 
     expect(typedResult.plain.item).not.toBe(typedResult.sensitive.password)
   },
   (result, payload) => {
     const typedResult = result as {
-      plain: { item: Record<string, unknown> }
-      sensitive: { password: Record<string, unknown> }
+      plain: { item: Record<string, unknown> };
+      sensitive: { password: Record<string, unknown> };
     }
     const typedPayload = payload as {
-      plain: { item: Record<string, unknown> }
+      plain: { item: Record<string, unknown> };
     }
 
     expect(typedResult.plain.item).toBe(typedPayload.plain.item)
@@ -630,19 +630,19 @@ const matchedAfterUnmatchedAliasVariantFixture = createAliasReplayFixture(
   createMatchedAfterUnmatchedWarmUpPayload,
   (result) => {
     const typedResult = result as {
-      plain: { item: Record<string, unknown> }
-      sensitive: { password: Record<string, unknown> }
+      plain: { item: Record<string, unknown> };
+      sensitive: { password: Record<string, unknown> };
     }
 
     expect(typedResult.plain.item).not.toBe(typedResult.sensitive.password)
   },
   (result, payload) => {
     const typedResult = result as {
-      plain: { item: Record<string, unknown> }
-      sensitive: { password: Record<string, unknown> }
+      plain: { item: Record<string, unknown> };
+      sensitive: { password: Record<string, unknown> };
     }
     const typedPayload = payload as {
-      plain: { item: Record<string, unknown> }
+      plain: { item: Record<string, unknown> };
     }
 
     expect(typedResult.plain.item).toBe(typedPayload.plain.item)

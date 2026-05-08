@@ -69,7 +69,7 @@ const setTransformer = (value) => {
 	if (!(value instanceof Set)) return value;
 	return {
 		_transformer: "set",
-		value: Array.from(value.values())
+		value: [...value.values()]
 	};
 };
 const urlTransformer = (value) => {
@@ -311,7 +311,7 @@ const parseQuotedProperty = (selector, rawSelector, startIndex) => {
 	throw new PathSyntaxError(rawSelector, "Quoted property selector is not closed.");
 };
 const parseBracketSegment = (selector, rawSelector, startIndex) => {
-	let index = startIndex + 1;
+	const index = startIndex + 1;
 	if (index >= selector.length) throw new PathSyntaxError(rawSelector, "Bracket selector is not closed.");
 	if (selector[index] === "\"" || selector[index] === "'") {
 		const quotedProperty = parseQuotedProperty(selector, rawSelector, index);
@@ -415,7 +415,7 @@ const parsePathSelector = (selector) => {
 //#endregion
 //#region src/core/matching/key-normaliser.ts
 const canonicaliseKey = (value) => {
-	return value.toLowerCase().trim().replace(/[_-]/g, "");
+	return value.toLowerCase().trim().replaceAll(/[_-]/g, "");
 };
 //#endregion
 //#region src/core/matching/path-normaliser.ts
@@ -453,7 +453,7 @@ const renderSelectorSignature = (segments) => {
 	return segments.map((segment, index) => renderDynamicPathSegment(segment, index === 0)).join("");
 };
 const normaliseParsedPath = (parsedPath) => {
-	if (!parsedPath.segments.every(isExactPathSegment)) throw new TypeError("Dynamic selectors cannot be canonicalised as exact paths.");
+	if (!parsedPath.segments.every((segment) => isExactPathSegment(segment))) throw new TypeError("Dynamic selectors cannot be canonicalised as exact paths.");
 	return Object.freeze({
 		canonicalPath: renderCanonicalPath(parsedPath.segments),
 		segments: parsedPath.segments
@@ -475,7 +475,7 @@ const toPublicPathSegment = (segment) => {
 	return Object.freeze({ ignore: new RegExp(segment.matcher.source, segment.matcher.flags) });
 };
 const compileRulePath = (segments) => {
-	return Object.freeze(segments.map(toPublicPathSegment));
+	return Object.freeze(segments.map((segment) => toPublicPathSegment(segment)));
 };
 const createDefaultPolicy = (options) => {
 	return Object.freeze({
@@ -503,13 +503,13 @@ const isPathRule = (pathEntry) => {
 	return typeof pathEntry === "object" && pathEntry !== null && !Array.isArray(pathEntry) && "path" in pathEntry;
 };
 const toPathRule = (pathEntry) => {
-	return !isPathRule(pathEntry) ? { path: pathEntry } : pathEntry;
+	return isPathRule(pathEntry) ? pathEntry : { path: pathEntry };
 };
 const compilePathRule = (pathEntry, defaults) => {
 	const parsedPath = parsePathSelector(toPathRule(pathEntry).path);
 	const policy = mergePolicy(defaults, isPathRule(pathEntry) ? pathEntry : {});
 	const rulePath = compileRulePath(parsedPath.segments);
-	if (parsedPath.segments.some(isDynamicPathSegment)) return Object.freeze({
+	if (parsedPath.segments.some((segment) => isDynamicPathSegment(segment))) return Object.freeze({
 		signature: renderSelectorSignature(parsedPath.segments),
 		policy,
 		rulePath,
@@ -769,7 +769,9 @@ const emitDiagnosticEvent = (plan, event) => {
 	if (plan.sink === void 0) return;
 	try {
 		plan.sink(event);
-	} catch {}
+	} catch {
+		return;
+	}
 };
 //#endregion
 //#region src/core/runtime/redact-value.ts
@@ -861,7 +863,7 @@ const renderRulePathSegment = (segment) => {
 };
 const buildRuleContextKey = (activePolicy) => {
 	if (activePolicy === void 0) return "none";
-	return `${activePolicy.source}:${activePolicy.rulePath.map(renderRulePathSegment).join("|")}`;
+	return `${activePolicy.source}:${activePolicy.rulePath.map((segment) => renderRulePathSegment(segment)).join("|")}`;
 };
 const usesPathSensitivePolicy = (activePolicy) => {
 	return activePolicy?.source === "exact-path" || activePolicy?.source === "dynamic-path" || typeof activePolicy?.policy.censor === "function";
@@ -969,16 +971,16 @@ const selectActivePolicy = (plan, exactPathRule, dynamicPathRule, directKeyMatch
 const buildFunctionCensorContext = (pathSegments, rulePath, rootInput) => {
 	const matchedPath = Object.freeze(pathSegments.map((seg) => seg.value));
 	const rulePathCopy = Object.freeze([...rulePath]);
-	const terminalKey = matchedPath.length > 0 ? matchedPath[matchedPath.length - 1] : void 0;
-	return terminalKey !== void 0 ? {
+	const terminalKey = matchedPath.length > 0 ? matchedPath.at(-1) : void 0;
+	return terminalKey === void 0 ? {
+		matchedPath,
+		rulePath: rulePathCopy,
+		rootInput
+	} : {
 		matchedPath,
 		rulePath: rulePathCopy,
 		rootInput,
 		terminalKey
-	} : {
-		matchedPath,
-		rulePath: rulePathCopy,
-		rootInput
 	};
 };
 const applyConfiguredRedaction = (value, policy, rulePath, pathStable, plan, context) => {
@@ -1488,7 +1490,7 @@ const validatePathSelectors = (selectorCandidates, issues) => {
 	for (const selectorCandidate of selectorCandidates) try {
 		const parsedPath = parsePathSelector(selectorCandidate.selector);
 		if (!validateRegexPathSegments(parsedPath.segments, selectorCandidate.configPath, issues)) continue;
-		if (parsedPath.segments.some(isDynamicPathSegment)) {
+		if (parsedPath.segments.some((segment) => isDynamicPathSegment(segment))) {
 			const signature = renderSelectorSignature(parsedPath.segments);
 			const previousDefinitionPath = seenDynamicSelectors.get(signature);
 			if (previousDefinitionPath !== void 0) {
@@ -1634,23 +1636,23 @@ const validateKeys = (value, path, issues) => {
 		pushIssue(issues, path, "keys must be an array.");
 		return;
 	}
-	value.forEach((entry, index) => {
+	for (const [index, entry] of value.entries()) {
 		const entryPath = `${path}[${index}]`;
 		if (isRegExp(entry)) {
 			const unsupportedRegexMessage = getUnsupportedKeyRegexMessage(entry);
 			if (unsupportedRegexMessage !== void 0) pushIssue(issues, entryPath, unsupportedRegexMessage);
-			return;
+			continue;
 		}
 		if (typeof entry === "string") {
 			validateLiteralKeySelector(entry, entryPath, issues);
-			return;
+			continue;
 		}
 		if (isPlainObject(entry)) {
 			validateKeyRule(entry, entryPath, issues);
-			return;
+			continue;
 		}
 		pushIssue(issues, entryPath, "key selectors must be strings or RegExp instances or key-rule objects.");
-	});
+	}
 };
 const zeroLengthProbeValues = Object.freeze([
 	"",
@@ -1681,21 +1683,21 @@ const validateStringTests = (value, path, issues) => {
 		pushIssue(issues, path, "stringTests must be an array.");
 		return;
 	}
-	value.forEach((entry, index) => {
+	for (const [index, entry] of value.entries()) {
 		const entryPath = `${path}[${index}]`;
 		if (isRegExp(entry)) {
 			validateSubstringPattern(entry, entryPath, issues);
-			return;
+			continue;
 		}
 		if (!isPlainObject(entry)) {
 			pushIssue(issues, entryPath, "string test entries must be RegExp instances or substring rule objects.");
-			return;
+			continue;
 		}
 		validateAllowedOptions(entry, substringRuleOptionNames, entryPath, issues);
-		if (!isRegExp(entry.pattern)) pushIssue(issues, `${entryPath}.pattern`, "pattern must be a RegExp instance.");
-		else validateSubstringPattern(entry.pattern, `${entryPath}.pattern`, issues);
+		if (isRegExp(entry.pattern)) validateSubstringPattern(entry.pattern, `${entryPath}.pattern`, issues);
+		else pushIssue(issues, `${entryPath}.pattern`, "pattern must be a RegExp instance.");
 		if (typeof entry.replacer !== "function") pushIssue(issues, `${entryPath}.replacer`, "replacer must be a function.");
-	});
+	}
 };
 const validateTransformerEntries = (value, path, issues) => {
 	if (value === void 0) return;
@@ -1703,9 +1705,7 @@ const validateTransformerEntries = (value, path, issues) => {
 		pushIssue(issues, path, `${path.split(".").at(-1) ?? "transformers"} must be an array.`);
 		return;
 	}
-	value.forEach((entry, index) => {
-		if (typeof entry !== "function") pushIssue(issues, `${path}[${index}]`, "Transformer entries must be functions.");
-	});
+	for (const [index, entry] of value.entries()) if (typeof entry !== "function") pushIssue(issues, `${path}[${index}]`, "Transformer entries must be functions.");
 };
 const validateTransformerBuckets = (value, path, allowedOptions, issues) => {
 	if (value === void 0) return;
@@ -1757,11 +1757,11 @@ const validatePathRule = (value, path, defaults, issues, selectorCandidates) => 
 		return;
 	}
 	validateAllowedOptions(value, pathRuleOptionNames, path, issues);
-	if (!isPathSelector(value.path)) pushIssue(issues, `${path}.path`, "path must be a string or structured selector array.");
-	else selectorCandidates.push({
+	if (isPathSelector(value.path)) selectorCandidates.push({
 		configPath: `${path}.path`,
 		selector: value.path
 	});
+	else pushIssue(issues, `${path}.path`, "path must be a string or structured selector array.");
 	validateCensorOption(value.censor, path, issues);
 	validateBooleanOption(value.remove, path, "remove", issues);
 	validateBooleanOption(value.retainStructure, path, "retainStructure", issues);
@@ -1780,21 +1780,21 @@ const validatePaths = (value, path, defaults, issues, selectorCandidates) => {
 		pushIssue(issues, path, "paths must be an array.");
 		return;
 	}
-	value.forEach((entry, index) => {
+	for (const [index, entry] of value.entries()) {
 		const entryPath = `${path}[${index}]`;
 		if (isPathSelector(entry)) {
 			selectorCandidates.push({
 				configPath: entryPath,
 				selector: entry
 			});
-			return;
+			continue;
 		}
 		if (!isPlainObject(entry)) {
 			pushIssue(issues, entryPath, `${entryPath.split(".").at(-1) ?? "entry"} must be a string selector or path-rule object.`);
-			return;
+			continue;
 		}
 		validatePathRule(entry, entryPath, defaults, issues, selectorCandidates);
-	});
+	}
 };
 const validateConfig = (options) => {
 	const issues = [];

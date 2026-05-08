@@ -7,6 +7,6 @@ export default defineConfig({
     },
     include: ['test/bench/**/*.bench.ts'],
     reporters: ['default'],
-    testTimeout: 15000,
+    testTimeout: 15_000,
   },
 })

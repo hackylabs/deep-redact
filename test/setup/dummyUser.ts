@@ -34,8 +34,8 @@ const dummyUser = {
     stateCode: 'MS',
     postalCode: '29112',
     coordinates: {
-      lat: -77.16213,
-      lng: -92.084824,
+      lat: -77.162_13,
+      lng: -92.084_824,
     },
     country: 'United States',
   },
@@ -59,8 +59,8 @@ const dummyUser = {
       stateCode: 'WI',
       postalCode: '37657',
       coordinates: {
-        lat: 71.814525,
-        lng: -161.150263,
+        lat: 71.814_525,
+        lng: -161.150_263,
       },
       country: 'United States',
     },
@@ -87,8 +87,7 @@ const extendedDummyUser = {
     throw new Error('somePromise oops')
   },
   someClass: class {
-    constructor(readonly foo = 'bar') {
-    }
+    constructor(readonly foo = 'bar') {}
   },
   someError: new Error('someError oops'),
   someDate: new Date(),
@@ -103,7 +102,7 @@ const extendedDummyUser = {
   someFloat64Array: new Float64Array(8),
   someInt16Array: new Int16Array(8),
   someInt32Array: new Int32Array(8),
-  someBigInt: BigInt(9007199254740991),
+  someBigInt: BigInt(9_007_199_254_740_991),
   someFunctionArray: [() => {
     throw new Error('someFunctionArray oops')
   }],

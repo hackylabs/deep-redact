@@ -28,7 +28,7 @@ import {
 } from '@hackylabs/deep-redact'
 
 // One-argument function censor remains assignable to Censor
-const oneArgCensor: Censor = (value: unknown) => String(value)
+const oneArgCensor: Censor = String
 
 // Two-argument function censor using FunctionCensorContext
 const twoArgCensor: Censor = (value: unknown, ctx: FunctionCensorContext) => {

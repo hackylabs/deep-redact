@@ -1,8 +1,8 @@
 import type { DiagnosticsOptions, DiagnosticSink } from '../../types/diagnostics.js'
 
 export interface CompiledDiagnosticsPlan {
-  readonly eventName: 'redaction.failure'
-  readonly sink?: DiagnosticSink
+  readonly eventName: 'redaction.failure';
+  readonly sink?: DiagnosticSink;
 }
 
 export const compileDiagnostics = (

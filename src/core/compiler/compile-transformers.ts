@@ -17,23 +17,23 @@ import {
 const emptyTransformers = Object.freeze([]) as readonly Transformer[]
 
 export interface CompiledTransformersByType {
-  readonly bigint: readonly Transformer[]
-  readonly object: readonly Transformer[]
+  readonly bigint: readonly Transformer[];
+  readonly object: readonly Transformer[];
 }
 
 export interface CompiledTransformersByConstructor {
-  readonly Date: readonly Transformer[]
-  readonly Error: readonly Transformer[]
-  readonly Map: readonly Transformer[]
-  readonly RegExp: readonly Transformer[]
-  readonly Set: readonly Transformer[]
-  readonly URL: readonly Transformer[]
+  readonly Date: readonly Transformer[];
+  readonly Error: readonly Transformer[];
+  readonly Map: readonly Transformer[];
+  readonly RegExp: readonly Transformer[];
+  readonly Set: readonly Transformer[];
+  readonly URL: readonly Transformer[];
 }
 
 export interface CompiledTransformersPlan {
-  readonly byType: CompiledTransformersByType
-  readonly byConstructor: CompiledTransformersByConstructor
-  readonly fallback: readonly Transformer[]
+  readonly byType: CompiledTransformersByType;
+  readonly byConstructor: CompiledTransformersByConstructor;
+  readonly fallback: readonly Transformer[];
 }
 
 const mergeTransformers = (

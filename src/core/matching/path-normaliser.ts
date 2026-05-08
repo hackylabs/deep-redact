@@ -10,8 +10,8 @@ import {
 const canonicalBarePropertyPattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 
 export interface NormalisedPathSelector {
-  readonly canonicalPath: string
-  readonly segments: readonly ExactPathSegment[]
+  readonly canonicalPath: string;
+  readonly segments: readonly ExactPathSegment[];
 }
 
 const renderPropertySegment = (value: string, isRoot: boolean): string => {
@@ -84,7 +84,7 @@ export const renderSelectorSignature = (segments: readonly PathSegment[]): strin
 }
 
 export const normaliseParsedPath = (parsedPath: ParsedPathSelector): NormalisedPathSelector => {
-  if (!parsedPath.segments.every(isExactPathSegment)) {
+  if (!parsedPath.segments.every((segment) => isExactPathSegment(segment))) {
     throw new TypeError('Dynamic selectors cannot be canonicalised as exact paths.')
   }
 

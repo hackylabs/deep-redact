@@ -11,5 +11,7 @@ export const emitDiagnosticEvent = (
 
   try {
     plan.sink(event)
-  } catch {}
+  } catch {
+    return
+  }
 }

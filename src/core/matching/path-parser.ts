@@ -6,41 +6,41 @@ const indexSegmentPattern = /^(0|[1-9]\d*)$/
 const regexLikeSegmentPattern = /^\/.+\/[A-Za-z]*$/
 
 export interface PropertyPathSegment {
-  readonly kind: 'property'
-  readonly value: string
+  readonly kind: 'property';
+  readonly value: string;
 }
 
 export interface IndexPathSegment {
-  readonly kind: 'index'
-  readonly value: number
+  readonly kind: 'index';
+  readonly value: number;
 }
 
 export interface WildcardPathSegment {
-  readonly kind: 'wildcard'
+  readonly kind: 'wildcard';
 }
 
 export interface RecursiveWildcardPathSegment {
-  readonly kind: 'recursive-wildcard'
+  readonly kind: 'recursive-wildcard';
 }
 
 export interface IgnorePropertyPathSegment {
-  readonly kind: 'ignore-property'
-  readonly value: string
+  readonly kind: 'ignore-property';
+  readonly value: string;
 }
 
 export interface IgnoreIndexPathSegment {
-  readonly kind: 'ignore-index'
-  readonly value: number
+  readonly kind: 'ignore-index';
+  readonly value: number;
 }
 
 export interface ParsedRegexSegment {
-  readonly kind: 'regex'
-  readonly matcher: RegExp
+  readonly kind: 'regex';
+  readonly matcher: RegExp;
 }
 
 export interface ParsedIgnoreRegexSegment {
-  readonly kind: 'ignore-regex'
-  readonly matcher: RegExp
+  readonly kind: 'ignore-regex';
+  readonly matcher: RegExp;
 }
 
 export type ExactPathSegment = PropertyPathSegment | IndexPathSegment
@@ -54,8 +54,8 @@ export type DynamicPathSegment =
 export type PathSegment = ExactPathSegment | DynamicPathSegment
 
 export interface ParsedPathSelector {
-  readonly raw: PathSelector
-  readonly segments: readonly PathSegment[]
+  readonly raw: PathSelector;
+  readonly segments: readonly PathSegment[];
 }
 
 export class PathSyntaxError extends SyntaxError {
@@ -245,8 +245,8 @@ const parseQuotedProperty = (
   rawSelector: string,
   startIndex: number,
 ): {
-  readonly nextIndex: number
-  readonly segment: PropertyPathSegment
+  readonly nextIndex: number;
+  readonly segment: PropertyPathSegment;
 } => {
   const quote = selector[startIndex]
   let index = startIndex + 1
@@ -290,10 +290,10 @@ const parseBracketSegment = (
   rawSelector: string,
   startIndex: number,
 ): {
-  readonly nextIndex: number
-  readonly segment: ExactPathSegment
+  readonly nextIndex: number;
+  readonly segment: ExactPathSegment;
 } => {
-  let index = startIndex + 1
+  const index = startIndex + 1
 
   if (index >= selector.length) {
     throw new PathSyntaxError(rawSelector, 'Bracket selector is not closed.')
@@ -350,8 +350,8 @@ const parseBareSegment = (
   rawSelector: string,
   startIndex: number,
 ): {
-  readonly nextIndex: number
-  readonly segment: PathSegment
+  readonly nextIndex: number;
+  readonly segment: PathSegment;
 } => {
   let index = startIndex
 

@@ -15,16 +15,16 @@ export type RuntimeFailureStage =
   | 'traversal-read'
 
 interface FailureDiagnosticInput {
-  readonly error: unknown
-  readonly path: string
-  readonly stage: RuntimeFailureStage
-  readonly value: unknown
-  readonly valueType?: string
+  readonly error: unknown;
+  readonly path: string;
+  readonly stage: RuntimeFailureStage;
+  readonly value: unknown;
+  readonly valueType?: string;
 }
 
 export interface FailureDiagnosticSnapshot {
-  readonly details: Record<string, unknown>
-  readonly valueType: string
+  readonly details: Record<string, unknown>;
+  readonly valueType: string;
 }
 
 const createFallbackDiagnosticDetails = (

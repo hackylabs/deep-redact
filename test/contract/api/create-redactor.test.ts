@@ -52,7 +52,7 @@ const buildRegex = (value: RegExp) => ({
 
 const buildSet = (value: Set<unknown>) => ({
   _transformer: 'set',
-  value: Array.from(value.values()),
+  value: [...value.values()],
 })
 
 const buildUrl = (value: URL) => ({
@@ -84,9 +84,9 @@ const runStructuredDeterminismFixture = (
   redact: (value: unknown) => unknown,
   fixture: StructuredDeterminismFixture,
 ): {
-  readonly redactionSnapshot: unknown
-  readonly result: unknown
-  readonly run: StructuredDeterminismRun
+  readonly redactionSnapshot: unknown;
+  readonly result: unknown;
+  readonly run: StructuredDeterminismRun;
 } => {
   const run = fixture.createRun()
   const result = redact(run.payload)
@@ -121,12 +121,9 @@ const structuredDeterminismCases = structuredDeterminismFixtureSets.flatMap((fix
   })
 })
 
-const structuredDeterminismWarmUpCases = structuredDeterminismCases.filter(([
-  ,
-  ,
-  ,
-  fixture,
-]) => fixture.createWarmUp !== undefined)
+const structuredDeterminismWarmUpCases = structuredDeterminismCases.filter((fixtureCase) => {
+  return fixtureCase[3].createWarmUp !== undefined
+})
 
 describe('Reusable redactor factory contract', () => {
   it('returns a callable redactor and defers serialisation work until invocation', () => {
@@ -454,7 +451,7 @@ describe('Reusable redactor factory contract', () => {
       expect(calls[0]?.[1].rootInput).toEqual({ user: { note: 'token=secret' } })
       expect(calls[0]?.[1].rulePath).toHaveLength(1)
       expect(calls[0]?.[1].rulePath[0]).toBeInstanceOf(RegExp)
-      expect((calls[0]?.[1].rulePath[0] as RegExp).source).toBe('token=[^&\\s]+')
+      expect((calls[0]?.[1].rulePath[0] as RegExp).source).toBe(String.raw`token=[^&\s]+`)
     })
 
     it('calls structured replacers once with the original string and an invocation-local pattern clone', () => {
@@ -482,7 +479,7 @@ describe('Reusable redactor factory contract', () => {
       expect(replacer).toHaveBeenCalledTimes(1)
       expect(replacer).toHaveBeenCalledWith('safe token=one middle token=two tail', expect.any(RegExp))
       expect(seenPatterns[0]).not.toBe(callerPattern)
-      expect(seenPatterns[0]?.source).toBe('token=[^&\\s]+')
+      expect(seenPatterns[0]?.source).toBe(String.raw`token=[^&\s]+`)
       expect(seenPatterns[0]?.flags).toBe('g')
       expect(callerPattern.lastIndex).toBe(0)
     })
@@ -740,7 +737,7 @@ describe('Reusable redactor factory contract', () => {
       expect(calls[0]!.ctx.rootInput).toBe(rootInput)
       expect(calls[0]!.ctx.rulePath).toHaveLength(1)
       expect(calls[0]!.ctx.rulePath[0]).toBeInstanceOf(RegExp)
-      expect((calls[0]!.ctx.rulePath[0] as RegExp).source).toBe('token=[^&\\s]+')
+      expect((calls[0]!.ctx.rulePath[0] as RegExp).source).toBe(String.raw`token=[^&\s]+`)
     })
 
     it('applies same-length replacement to a matching root string', () => {
@@ -784,7 +781,7 @@ describe('Reusable redactor factory contract', () => {
       expect(calls[0]!.ctx.rootInput).toBe(rootInput)
       expect(calls[0]!.ctx.rulePath).toHaveLength(1)
       expect(calls[0]!.ctx.rulePath[0]).toBeInstanceOf(RegExp)
-      expect((calls[0]!.ctx.rulePath[0] as RegExp).source).toBe('token=[^&\\s]+')
+      expect((calls[0]!.ctx.rulePath[0] as RegExp).source).toBe(String.raw`token=[^&\s]+`)
       expect(replacer).not.toHaveBeenCalled()
     })
 
@@ -2056,7 +2053,7 @@ describe('Reusable redactor factory contract', () => {
         },
       ],
     })({ users }) as {
-      users: Array<{ readonly token: string } | undefined>
+      users: Array<{ readonly token: string } | undefined>;
     }
 
     expect(result.users).toHaveLength(3)
@@ -2451,7 +2448,7 @@ describe('Reusable redactor factory contract', () => {
     const result = deepRedact({
       paths: ['users[0].token'],
     })({ users }) as {
-      users: Array<{ readonly safe?: boolean; readonly token?: string } | undefined>
+      users: Array<{ readonly safe?: boolean; readonly token?: string } | undefined>;
     }
 
     expect(result.users).toHaveLength(3)
@@ -3018,10 +3015,10 @@ describe('Nested runtime failures degrade locally to [UNSUPPORTED] with structur
   const expectFailureEvent = (
     event: DiagnosticEvent,
     options: {
-      readonly errorName: string
-      readonly path: string
-      readonly stage: string
-      readonly valueType: string
+      readonly errorName: string;
+      readonly path: string;
+      readonly stage: string;
+      readonly valueType: string;
     },
   ) => {
     expect(Object.keys(event).sort()).toEqual([

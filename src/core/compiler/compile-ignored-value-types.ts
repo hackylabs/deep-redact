@@ -1,13 +1,13 @@
 import type { IgnoredValueTypesOption } from '../../types/ignored-value-types.js'
 
 export interface CompiledIgnoredValueTypesPlan {
-  readonly bigint: boolean
-  readonly Date: boolean
-  readonly Error: boolean
-  readonly Map: boolean
-  readonly RegExp: boolean
-  readonly Set: boolean
-  readonly URL: boolean
+  readonly bigint: boolean;
+  readonly Date: boolean;
+  readonly Error: boolean;
+  readonly Map: boolean;
+  readonly RegExp: boolean;
+  readonly Set: boolean;
+  readonly URL: boolean;
 }
 
 export const compileIgnoredValueTypes = (

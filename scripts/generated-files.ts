@@ -3,10 +3,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 type PackageJson = Record<string, unknown> & {
-  exports?: Record<string, unknown>
-  main?: string
-  module?: string
-  types?: string
+  exports?: Record<string, unknown>;
+  main?: string;
+  module?: string;
+  types?: string;
 }
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))

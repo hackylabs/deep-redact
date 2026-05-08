@@ -5,8 +5,8 @@ import { getUnsupportedRegexMessage } from './regex-safety.js'
 import type { ValidationIssue } from './validation-report.js'
 
 export interface PathSelectorCandidate {
-  readonly configPath: string
-  readonly selector: PathSelector
+  readonly configPath: string;
+  readonly selector: PathSelector;
 }
 
 const pushIssue = (issues: ValidationIssue[], path: string, message: string): void => {
@@ -51,7 +51,7 @@ export const validatePathSelectors = (
         continue
       }
 
-      if (parsedPath.segments.some(isDynamicPathSegment)) {
+      if (parsedPath.segments.some((segment) => isDynamicPathSegment(segment))) {
         const signature = renderSelectorSignature(parsedPath.segments)
         const previousDefinitionPath = seenDynamicSelectors.get(signature)
 

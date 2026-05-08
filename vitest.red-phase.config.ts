@@ -4,6 +4,6 @@ export default defineConfig({
   test: {
     include: ['test/unit/**/*.test.ts', 'test/load/**/*.test.ts'],
     reporters: ['default', 'verbose'],
-    testTimeout: 15000,
+    testTimeout: 15_000,
   },
 })

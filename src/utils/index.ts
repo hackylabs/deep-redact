@@ -51,21 +51,21 @@ class RedactorUtils {
    */
   private setupTransformerRegistry(transformers: TransformerConfig): void {
     if (Array.isArray(transformers)) {
-      transformers.forEach(transformer => { this.transformerRegistry.addFallbackTransformer(transformer) })
+      for (const transformer of transformers) { this.transformerRegistry.addFallbackTransformer(transformer) }
     } else {
       const organised = transformers as OrganisedTransformers
       if (organised.byType) {
-        Object.entries(organised.byType).forEach(([type, typeTransformers]) => {
+        for (const [type, typeTransformers] of Object.entries(organised.byType)) {
           if (typeTransformers) {
-            typeTransformers.forEach(transformer => {
+            for (const transformer of typeTransformers) {
               this.transformerRegistry.addTypeTransformer(type, transformer)
-            })
+            }
           }
-        })
+        }
       }
 
       if (organised.byConstructor) {
-        Object.entries(organised.byConstructor).forEach(([constructorName, constructorTransformers]) => {
+        for (const [constructorName, constructorTransformers] of Object.entries(organised.byConstructor)) {
           if (constructorTransformers) {
             const constructorMap: Record<string, Function> = {
               Date,
@@ -78,12 +78,12 @@ class RedactorUtils {
 
             const constructor = constructorMap[constructorName]
             if (constructor) {
-              constructorTransformers.forEach(transformer => {
+              for (const transformer of constructorTransformers) {
                 this.transformerRegistry.addConstructorTransformer(constructor, transformer)
-              })
+              }
             }
           }
-        })
+        }
       }
     }
   }
@@ -145,8 +145,8 @@ class RedactorUtils {
     return this.blacklistedKeysTransformed.some(config => {
       const pattern = config.key
       if (pattern instanceof RegExp) return pattern.test(key)
-      if (!config.fuzzyKeyMatch && !config.caseSensitiveKeyMatch) return key.toLowerCase().trim().replace(/[_-]/g, '') === pattern.toLowerCase().trim().replace(/[_-]/g, '')
-      if (config.fuzzyKeyMatch && !config.caseSensitiveKeyMatch) return key.toLowerCase().trim().replace(/[_-]/g, '').includes(pattern.toLowerCase().trim().replace(/[_-]/g, ''))
+      if (!config.fuzzyKeyMatch && !config.caseSensitiveKeyMatch) return key.toLowerCase().trim().replaceAll(/[_-]/g, '') === pattern.toLowerCase().trim().replaceAll(/[_-]/g, '')
+      if (config.fuzzyKeyMatch && !config.caseSensitiveKeyMatch) return key.toLowerCase().trim().replaceAll(/[_-]/g, '').includes(pattern.toLowerCase().trim().replaceAll(/[_-]/g, ''))
       if (config.fuzzyKeyMatch && config.caseSensitiveKeyMatch) return key.includes(pattern)
       if (!config.fuzzyKeyMatch && config.caseSensitiveKeyMatch) return key === pattern
     })
@@ -172,7 +172,7 @@ class RedactorUtils {
    * @returns The redacted value
    * @private
    */
-  private redactValue = (value: unknown, redactingParent: boolean, keyConfig?: BlacklistKeyConfig): { transformed: unknown, redactingParent: boolean } => {
+  private redactValue = (value: unknown, redactingParent: boolean, keyConfig?: BlacklistKeyConfig): { transformed: unknown; redactingParent: boolean } => {
     if (!this.config.types.includes(typeof value)) return { transformed: value, redactingParent }
 
     const remove = keyConfig?.remove ?? this.config.remove
@@ -199,7 +199,7 @@ class RedactorUtils {
    * @returns The transformed value
    * @private
    */
-  private applyStringTransformations(value: string, amRedactingParent: boolean, keyConfig?: BlacklistKeyConfig): { transformed: string, redactingParent: boolean } {
+  private applyStringTransformations(value: string, amRedactingParent: boolean, keyConfig?: BlacklistKeyConfig): { transformed: string; redactingParent: boolean } {
     if ((this.config.stringTests ?? []).length === 0) return { transformed: value, redactingParent: amRedactingParent }
 
     for (const test of this.config.stringTests) {
@@ -233,8 +233,8 @@ class RedactorUtils {
     valueKey: string,
     redactingParent: boolean,
     keyConfig?: BlacklistKeyConfig
-  ): { transformed: unknown, redactingParent: boolean } {
-    let transformed = value
+  ): { transformed: unknown; redactingParent: boolean } {
+    const transformed = value
 
     if (redactingParent) {
       if (valueKey === '_transformer' || !this.config.types.includes(typeof value)) {
@@ -337,8 +337,8 @@ class RedactorUtils {
       const pattern = config.key
       if (pattern instanceof RegExp) return pattern.test(key)
 
-      const normalisedKey = key.toLowerCase().trim().replace(/[_-]/g, '')
-      const normalisedPattern = pattern.toLowerCase().trim().replace(/[_-]/g, '')
+      const normalisedKey = key.toLowerCase().trim().replaceAll(/[_-]/g, '')
+      const normalisedPattern = pattern.toLowerCase().trim().replaceAll(/[_-]/g, '')
 
       if (config.fuzzyKeyMatch) {
         const compareKey = config.caseSensitiveKeyMatch ? key : normalisedKey
@@ -492,7 +492,7 @@ class RedactorUtils {
         const primitiveResult = this.handlePrimitiveValue(transformed, key, amRedactingParent, keyConfig)
         redactingParent = primitiveResult.redactingParent
         transformed = primitiveResult.transformed
-        if (typeof transformed === 'undefined') continue
+        if (transformed === undefined) continue
       }
       else {
         const objectResult = this.handleObjectValue(transformed, key, path, redactingParent, referenceMap, keyConfig)

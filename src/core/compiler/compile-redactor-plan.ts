@@ -1,13 +1,11 @@
 import type {
   Censor,
   DeepRedactOptions,
-  FunctionCensorContext,
   KeyRule,
   KeySelector,
   PathEntry,
   PathRule,
   PathSegments,
-  PathSelector,
   SerialiseOption,
   StringTest,
   SubstringRule,
@@ -31,74 +29,74 @@ import { canonicaliseKey } from '../matching/key-normaliser.js'
 import { normaliseParsedPath, renderSelectorSignature } from '../matching/path-normaliser.js'
 import { cloneRegExp } from '../validation/regex-safety.js'
 
-export type { FunctionCensorContext }
+
 
 export interface CompiledRedactionPolicy {
-  readonly censor?: Censor
-  readonly remove: boolean
-  readonly retainStructure: boolean
-  readonly replaceStringByLength: boolean
+  readonly censor?: Censor;
+  readonly remove: boolean;
+  readonly retainStructure: boolean;
+  readonly replaceStringByLength: boolean;
 }
 
 export interface CompiledExactPathRule {
-  readonly canonicalPath: string
-  readonly policy: CompiledRedactionPolicy
-  readonly rulePath: PathSegments
-  readonly segments: readonly ExactPathSegment[]
+  readonly canonicalPath: string;
+  readonly policy: CompiledRedactionPolicy;
+  readonly rulePath: PathSegments;
+  readonly segments: readonly ExactPathSegment[];
 }
 
 export interface CompiledDynamicPathRule {
-  readonly signature: string
-  readonly policy: CompiledRedactionPolicy
-  readonly rulePath: PathSegments
-  readonly segments: readonly PathSegment[]
+  readonly signature: string;
+  readonly policy: CompiledRedactionPolicy;
+  readonly rulePath: PathSegments;
+  readonly segments: readonly PathSegment[];
 }
 
 export type CompiledLiteralKeyMatchMode = 'exact' | 'canonical-exact' | 'contains' | 'canonical-contains'
 
 export interface CompiledLiteralKeyRule {
-  readonly canonicalKey: string
-  readonly configuredKey: string
-  readonly matchMode: CompiledLiteralKeyMatchMode
-  readonly rulePath: PathSegments
+  readonly canonicalKey: string;
+  readonly configuredKey: string;
+  readonly matchMode: CompiledLiteralKeyMatchMode;
+  readonly rulePath: PathSegments;
 }
 
 export interface CompiledExactKeyRules {
-  readonly literalMatchers: readonly CompiledLiteralKeyRule[]
-  readonly policy: CompiledRedactionPolicy
-  readonly requiresCanonicalKey: boolean
+  readonly literalMatchers: readonly CompiledLiteralKeyRule[];
+  readonly policy: CompiledRedactionPolicy;
+  readonly requiresCanonicalKey: boolean;
 }
 
 export interface CompiledRegexKeyRules {
-  readonly matchers: readonly RegExp[]
-  readonly policy: CompiledRedactionPolicy
+  readonly matchers: readonly RegExp[];
+  readonly policy: CompiledRedactionPolicy;
 }
 
 export interface CompiledWholeValueSubstringRule {
-  readonly kind: 'whole-value'
-  readonly pattern: RegExp
-  readonly policy: CompiledRedactionPolicy
+  readonly kind: 'whole-value';
+  readonly pattern: RegExp;
+  readonly policy: CompiledRedactionPolicy;
 }
 
 export interface CompiledStructuredSubstringRule {
-  readonly kind: 'structured-replacer'
-  readonly pattern: RegExp
-  readonly replacer: SubstringRule['replacer']
+  readonly kind: 'structured-replacer';
+  readonly pattern: RegExp;
+  readonly replacer: SubstringRule['replacer'];
 }
 
 export type CompiledSubstringRule = CompiledWholeValueSubstringRule | CompiledStructuredSubstringRule
 
 export interface CompiledRedactorPlan {
-  readonly diagnostics: CompiledDiagnosticsPlan
-  readonly defaults: CompiledRedactionPolicy
-  readonly dynamicPathRules: readonly CompiledDynamicPathRule[]
-  readonly exactPathRules: Readonly<Record<string, CompiledExactPathRule>>
-  readonly exactKeyRules: CompiledExactKeyRules
-  readonly ignoredValueTypes: CompiledIgnoredValueTypesPlan
-  readonly regexKeyRules: CompiledRegexKeyRules
-  readonly serialise?: SerialiseOption
-  readonly substringRules: readonly CompiledSubstringRule[]
-  readonly transformers: CompiledTransformersPlan
+  readonly diagnostics: CompiledDiagnosticsPlan;
+  readonly defaults: CompiledRedactionPolicy;
+  readonly dynamicPathRules: readonly CompiledDynamicPathRule[];
+  readonly exactPathRules: Readonly<Record<string, CompiledExactPathRule>>;
+  readonly exactKeyRules: CompiledExactKeyRules;
+  readonly ignoredValueTypes: CompiledIgnoredValueTypesPlan;
+  readonly regexKeyRules: CompiledRegexKeyRules;
+  readonly serialise?: SerialiseOption;
+  readonly substringRules: readonly CompiledSubstringRule[];
+  readonly transformers: CompiledTransformersPlan;
 }
 
 const createLookupTable = <T>(): Record<string, T> => {
@@ -118,7 +116,7 @@ const toPublicPathSegment = (segment: PathSegment): PathSegments[number] => {
 }
 
 const compileRulePath = (segments: readonly PathSegment[]): PathSegments => {
-  return Object.freeze(segments.map(toPublicPathSegment))
+  return Object.freeze(segments.map((segment) => toPublicPathSegment(segment)))
 }
 
 const createDefaultPolicy = (options: DeepRedactOptions): CompiledRedactionPolicy => {
@@ -131,8 +129,8 @@ const createDefaultPolicy = (options: DeepRedactOptions): CompiledRedactionPolic
 }
 
 interface KeyMatchDefaults {
-  readonly caseSensitiveKeyMatch: boolean
-  readonly fuzzyKeyMatch: boolean
+  readonly caseSensitiveKeyMatch: boolean;
+  readonly fuzzyKeyMatch: boolean;
 }
 
 const createKeyMatchDefaults = (options: DeepRedactOptions): KeyMatchDefaults => {
@@ -159,9 +157,9 @@ const isPathRule = (pathEntry: PathEntry): pathEntry is PathRule => {
 }
 
 const toPathRule = (pathEntry: PathEntry): PathRule => {
-  return !isPathRule(pathEntry)
-    ? { path: pathEntry }
-    : pathEntry
+  return isPathRule(pathEntry)
+    ? pathEntry
+    : { path: pathEntry }
 }
 
 type CompiledPathRule = CompiledExactPathRule | CompiledDynamicPathRule
@@ -175,7 +173,7 @@ const compilePathRule = (
   const policy = mergePolicy(defaults, isPathRule(pathEntry) ? pathEntry : {})
   const rulePath = compileRulePath(parsedPath.segments)
 
-  if (parsedPath.segments.some(isDynamicPathSegment)) {
+  if (parsedPath.segments.some((segment) => isDynamicPathSegment(segment))) {
     return Object.freeze({
       signature: renderSelectorSignature(parsedPath.segments),
       policy,
@@ -198,8 +196,8 @@ const compilePathRules = (
   pathEntries: readonly PathEntry[],
   defaults: CompiledRedactionPolicy,
 ): {
-  readonly dynamicPathRules: readonly CompiledDynamicPathRule[]
-  readonly exactPathRules: Readonly<Record<string, CompiledExactPathRule>>
+  readonly dynamicPathRules: readonly CompiledDynamicPathRule[];
+  readonly exactPathRules: Readonly<Record<string, CompiledExactPathRule>>;
 } => {
   const exactPathRules = createLookupTable<CompiledExactPathRule>()
   const dynamicPathRules: CompiledDynamicPathRule[] = []
@@ -334,3 +332,5 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
     transformers: compileTransformers(options.transformers),
   })
 }
+
+export {type FunctionCensorContext} from '../../types/public.js'

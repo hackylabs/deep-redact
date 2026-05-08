@@ -1,11 +1,11 @@
 export interface ValidationIssue {
-  readonly path: string
-  readonly message: string
+  readonly path: string;
+  readonly message: string;
 }
 
 export interface ValidationReport {
-  readonly valid: boolean
-  readonly issues: readonly ValidationIssue[]
+  readonly valid: boolean;
+  readonly issues: readonly ValidationIssue[];
 }
 
 const formatValidationIssues = (issues: readonly ValidationIssue[]): string => {

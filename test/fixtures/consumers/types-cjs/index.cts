@@ -67,7 +67,7 @@ const exampleCtx: deepRedactPackage.FunctionCensorContext = {
 }
 
 // One-arg function censor remains assignable
-const oneArgCensor: deepRedactPackage.Censor = (value: unknown) => String(value)
+const oneArgCensor: deepRedactPackage.Censor = String
 
 // Two-arg function censor using context
 const twoArgCensor: deepRedactPackage.Censor = (value: unknown, ctx: deepRedactPackage.FunctionCensorContext) => {
