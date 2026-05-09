@@ -9,6 +9,7 @@ import {
   createCanonicalMixedPayload,
   createCanonicalMixedPayloadExpectedResult,
   createCanonicalMixedPayloadRedactor,
+  serialisedDeterminismFixtureSets,
   structuredDeterminismFixtureSets,
   type StructuredDeterminismFixture,
   type StructuredDeterminismFixtureSet,
@@ -105,6 +106,34 @@ const runStructuredDeterminismFixture = (
   }
 }
 
+const runSerialisedDeterminismFixture = (
+  redact: (value: unknown) => unknown,
+  fixture: StructuredDeterminismFixture,
+): {
+  readonly result: string;
+  readonly run: StructuredDeterminismRun;
+} => {
+  const run = fixture.createRun()
+  const result = redact(run.payload)
+
+  expect(typeof result).toBe('string')
+
+  if (run.serialisedExpected === undefined) {
+    throw new Error(`fixture '${fixture.name}' is missing serialisedExpected — add it to the fixture's createRun return`)
+  }
+
+  if (run.originalPayload !== undefined) {
+    expect(run.payload).toStrictEqual(run.originalPayload)
+  }
+
+  expect(result).toBe(run.serialisedExpected)
+
+  return {
+    result: result as string,
+    run,
+  }
+}
+
 const structuredDeterminismCases = structuredDeterminismFixtureSets.flatMap((fixtureSet) => {
   return fixtureSet.fixtures.map((fixture) => {
     return [
@@ -123,6 +152,22 @@ const structuredDeterminismCases = structuredDeterminismFixtureSets.flatMap((fix
 
 const structuredDeterminismWarmUpCases = structuredDeterminismCases.filter((fixtureCase) => {
   return fixtureCase[3].createWarmUp !== undefined
+})
+
+const serialisedDeterminismCases = serialisedDeterminismFixtureSets.flatMap((fixtureSet) => {
+  return fixtureSet.fixtures.map((fixture) => {
+    return [
+      fixtureSet.title,
+      fixture.title,
+      fixtureSet,
+      fixture,
+    ] as const satisfies readonly [
+      string,
+      string,
+      StructuredDeterminismFixtureSet,
+      StructuredDeterminismFixture,
+    ]
+  })
 })
 
 describe('Reusable redactor factory contract', () => {
@@ -1095,49 +1140,6 @@ describe('Reusable redactor factory contract', () => {
       expect(exactPathCensor).toHaveBeenCalledTimes(1)
       expect(keyCensor).not.toHaveBeenCalled()
       expect(substringReplacer).toHaveBeenCalledTimes(1)
-    })
-
-    it('returns byte-for-byte identical output across repeated runs with the same overlapping-rule payload', () => {
-      const exactPathCensor = vi.fn(() => '[EXACT-PATH]')
-      const structuredPathCensor = vi.fn(() => '[STRUCTURED-PATH]')
-      const keyCensor = createKeyCensor()
-      const substringReplacer = createSubstringReplacer()
-      const payload = createPrecedencePayload()
-      const redact = deepRedact({
-        serialise: true,
-        censor: keyCensor,
-        keys: ['token', /token$/i],
-        paths: [
-          {
-            path: 'records.exact.token',
-            censor: exactPathCensor,
-          },
-          {
-            path: ['records', /^structured$/, 'token'],
-            censor: structuredPathCensor,
-          },
-        ],
-        stringTests: [
-          {
-            pattern: /token=[^&\s]+/,
-            replacer: substringReplacer,
-          },
-        ],
-      })
-
-      const first = redact(payload)
-      const second = redact(payload)
-
-      expect(first).toBe(second)
-      expect(first).toBe(JSON.stringify({
-        records: {
-          exact: { token: '[EXACT-PATH]' },
-          structured: { token: '[STRUCTURED-PATH]' },
-          key: { token: '[EXACT-KEY]' },
-          regex: { sessionToken: '[REGEX-KEY]' },
-          substring: { note: 'token=[SUBSTRING]' },
-        },
-      }))
     })
 
   })
@@ -2566,12 +2568,6 @@ describe('Built-in and custom transformer resolution', () => {
     })
   })
 
-  it('applies runtime transformation before the serialise adapter for root bigint values', () => {
-    expect(deepRedact({
-      serialise: true,
-    })(42n)).toBe(JSON.stringify(buildBigInt(42n)))
-  })
-
   it('keeps whole-value rule precedence when a transformed branch is already claimed by an existing terminal rule', () => {
     const redact = deepRedact({
       keys: ['map'],
@@ -3617,6 +3613,63 @@ describe('Structured determinism fixture corpus', () => {
     const run = runStructuredDeterminismFixture(redact, fixture)
 
     warmUp.assertRun?.(run.run, warmUp.snapshot(), run.redactionSnapshot)
+  })
+})
+
+describe('Serialised determinism fixture corpus', () => {
+  it.each(serialisedDeterminismCases)('returns byte-for-byte identical output across repeated runs for %s / %s', (
+    _fixtureSetTitle,
+    _fixtureTitle,
+    fixtureSet,
+    fixture,
+  ) => {
+    const redact = fixtureSet.createRedactor(true)
+    const firstRun = runSerialisedDeterminismFixture(redact, fixture)
+    const secondRun = runSerialisedDeterminismFixture(redact, fixture)
+
+    expect(secondRun.result).toBe(firstRun.result)
+  })
+
+  it.each(serialisedDeterminismCases)('keeps %s / %s byte-stable after other named fixtures on the same compiled redactor', (
+    _fixtureSetTitle,
+    _fixtureTitle,
+    fixtureSet,
+    fixture,
+  ) => {
+    const redact = fixtureSet.createRedactor(true)
+    const firstRun = runSerialisedDeterminismFixture(redact, fixture)
+
+    for (const otherFixture of fixtureSet.fixtures) {
+      if (otherFixture.name === fixture.name) {
+        continue
+      }
+
+      runSerialisedDeterminismFixture(redact, otherFixture)
+    }
+
+    const secondRun = runSerialisedDeterminismFixture(redact, fixture)
+
+    expect(secondRun.result).toBe(firstRun.result)
+  })
+
+  it.each(serialisedDeterminismCases)('passes already-redacted values to a deterministic custom serialiser for %s / %s', (
+    _fixtureSetTitle,
+    _fixtureTitle,
+    fixtureSet,
+    fixture,
+  ) => {
+    const serialise = vi.fn((value: unknown) => JSON.stringify({ value }))
+    const redact = fixtureSet.createRedactor(serialise)
+    const firstRun = fixture.createRun()
+    const firstResult = redact(firstRun.payload)
+    const secondRun = fixture.createRun()
+    const secondResult = redact(secondRun.payload)
+    const expected = JSON.stringify({ value: firstRun.expected })
+
+    expect(firstResult).toBe(expected)
+    expect(secondResult).toBe(expected)
+    expect(serialise).toHaveBeenNthCalledWith(1, firstRun.expected)
+    expect(serialise).toHaveBeenNthCalledWith(2, secondRun.expected)
   })
 })
 

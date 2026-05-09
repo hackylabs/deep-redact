@@ -2,14 +2,16 @@ import { expect, vi } from 'vitest'
 import {
   deepRedact,
   type FunctionCensorContext,
+  type SerialiseOption,
 } from '../../../src/index.js'
 
 export interface StructuredDeterminismRun<Result = unknown> {
-  readonly assertExpected?: (result: Result) => void;
+  readonly assertExpected?: (result: unknown) => void;
   readonly payload: unknown;
   readonly expected: Result;
   readonly originalPayload?: unknown;
-  readonly assertResult?: (result: Result) => void;
+  readonly assertResult?: (result: unknown) => void;
+  readonly serialisedExpected?: string;
   readonly snapshot?: () => unknown;
 }
 
@@ -33,7 +35,7 @@ export interface StructuredDeterminismFixture<Result = unknown> {
 export interface StructuredDeterminismFixtureSet {
   readonly name: string;
   readonly title: string;
-  readonly createRedactor: () => (value: unknown) => unknown;
+  readonly createRedactor: (serialise?: SerialiseOption) => (value: unknown) => unknown;
   readonly fixtures: readonly StructuredDeterminismFixture[];
 }
 
@@ -51,6 +53,63 @@ const assertPayloadUnchanged = (
   originalPayload: unknown,
 ) => {
   expect(payload).toStrictEqual(originalPayload)
+}
+
+// Safe only for object literals with deterministic key-insertion order (i.e. authored as plain `{}`
+// literals, not via Object.assign / spread / reduce). Computing serialisedExpected programmatically
+// from an expected object is not circular because expected is verified independently by the
+// structured-determinism corpus — but a key-order bug that somehow passes there would also produce
+// matching wrong bytes here. The canary constants below commit one hardcoded golden string per fixture
+// shape; if JSON key order ever regresses, the canary fails before the corpus tests even run.
+const createSerialisedExpected = (value: unknown): string => JSON.stringify(value)
+
+const SERIALISED_ROOT_STRING_REDACTION_CANARY = '"[REDACTED]"' as const
+const SERIALISED_ROOT_BIGINT_CANARY = '{"_transformer":"bigint","value":{"radix":10,"number":"42"}}' as const
+const SERIALISED_EDGE_CASE_BASELINE_CANARY = '{"active":{"_transformer":"bigint","value":{"radix":10,"number":"42"}},"circular":{"safe":"visible","self":{"_transformer":"circular","path":"circular.self","value":"circular"}},"failing":"[UNSUPPORTED]","getterBranch":{"safe":"visible","secret":"[UNSUPPORTED]"},"ignored":{"_transformer":"map","value":{"password":"secret"}},"notes":{"text":"[UNSUPPORTED]"},"repeat":{"first":{"safe":"visible","token":"[REDACTED]"},"second":{"safe":"visible","token":"[REDACTED]"}},"stable":{"token":"[REDACTED]"}}' as const
+
+const buildBigIntResult = (value: bigint) => ({
+  _transformer: 'bigint',
+  value: {
+    radix: 10,
+    number: value.toString(10),
+  },
+})
+
+const buildMapResult = (value: Map<string, unknown>) => ({
+  _transformer: 'map',
+  value: Object.fromEntries(value.entries()),
+})
+
+class FixtureRuntimeError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'FixtureRuntimeError'
+  }
+}
+
+const createFixtureError = (message: string): FixtureRuntimeError => {
+  const error = new FixtureRuntimeError(message)
+  error.stack = `FixtureRuntimeError: ${message}\n    at structured determinism fixture`
+
+  return error
+}
+
+const failingMapMarker = Symbol('failingMapMarker')
+
+type MarkedFailingMap = Map<string, unknown> & {
+  [failingMapMarker]?: true;
+}
+
+const markFailingMap = (value: Map<string, unknown>): MarkedFailingMap => {
+  const markedValue = value as MarkedFailingMap
+
+  markedValue[failingMapMarker] = true
+
+  return markedValue
+}
+
+const isMarkedFailingMap = (value: unknown): value is MarkedFailingMap => {
+  return value instanceof Map && (value as MarkedFailingMap)[failingMapMarker] === true
 }
 
 const createPathSensitiveCensor = (
@@ -133,14 +192,14 @@ const createPrecedenceExpectedResult = (
   },
 })
 
-const createPrecedenceRedactor = () => {
+const createPrecedenceRedactor = (serialise: SerialiseOption = false) => {
   const exactPathCensor = vi.fn(() => '[EXACT-PATH]')
   const structuredPathCensor = vi.fn(() => '[STRUCTURED-PATH]')
   const keyCensor = createPrecedenceKeyCensor()
   const substringReplacer = createPrecedenceSubstringReplacer()
 
   return deepRedact({
-    serialise: false,
+    serialise,
     censor: keyCensor,
     keys: ['token', /token$/i],
     paths: [
@@ -170,17 +229,19 @@ const createPrecedenceFixture = (
   createRun: () => {
     const payload = createPrecedencePayload(options)
     const originalPayload = structuredClone(payload)
+    const expected = createPrecedenceExpectedResult({
+      substringNote: options.substringNote,
+    })
 
     return {
       assertResult: (result) => {
         expect(result).not.toBe(payload)
         assertPayloadUnchanged(payload, originalPayload)
       },
-      expected: createPrecedenceExpectedResult({
-        substringNote: options.substringNote,
-      }),
+      expected,
       originalPayload,
       payload,
+      serialisedExpected: createSerialisedExpected(expected),
     }
   },
   name,
@@ -339,12 +400,19 @@ export const createCanonicalMixedPayloadExpectedResult = (
 })
 
 export const createCanonicalMixedPayloadRedactor = (
-  keyCensor = createCanonicalMixedPayloadKeyCensor(),
-  substringReplacer = createCanonicalMixedPayloadSubstringReplacer(),
+  {
+    keyCensor = createCanonicalMixedPayloadKeyCensor(),
+    serialise = false,
+    substringReplacer = createCanonicalMixedPayloadSubstringReplacer(),
+  }: {
+    readonly keyCensor?: ReturnType<typeof createCanonicalMixedPayloadKeyCensor>;
+    readonly serialise?: SerialiseOption;
+    readonly substringReplacer?: ReturnType<typeof createCanonicalMixedPayloadSubstringReplacer>;
+  } = {},
 ) => ({
   keyCensor,
   redact: deepRedact({
-    serialise: false,
+    serialise,
     censor: keyCensor,
     keys: ['directSecret', /token$/i],
     paths: [
@@ -384,15 +452,17 @@ const createCanonicalMixedPayloadFixture = (
   createRun: () => {
     const payload = createCanonicalMixedPayload(options)
     const originalPayload = structuredClone(payload)
+    const expected = createCanonicalMixedPayloadExpectedResult(options)
 
     return {
       assertResult: (result) => {
         expect(result).not.toBe(payload)
         assertPayloadUnchanged(payload, originalPayload)
       },
-      expected: createCanonicalMixedPayloadExpectedResult(options),
+      expected,
       originalPayload,
       payload,
+      serialisedExpected: createSerialisedExpected(expected),
     }
   },
   name,
@@ -481,6 +551,7 @@ const createAliasReplayFixture = (
         },
         expected,
         payload: fixture.payload,
+        serialisedExpected: createSerialisedExpected(expected),
         snapshot: fixture.getTokenReads,
       }
     },
@@ -655,8 +726,8 @@ const matchedAfterUnmatchedAliasVariantFixture = createAliasReplayFixture(
 )
 
 const cyclicAliasReplayFixture: StructuredDeterminismFixture = {
-  createRun: () => ({
-    expected: {
+  createRun: () => {
+    const expected = {
       left: {
         safe: 'visible',
         self: createCircularMarker('left.self', 'left'),
@@ -665,9 +736,14 @@ const cyclicAliasReplayFixture: StructuredDeterminismFixture = {
         safe: 'visible',
         self: createCircularMarker('right.self', 'right'),
       },
-    },
-    payload: createCyclicAliasFixture(),
-  }),
+    }
+
+    return {
+      expected,
+      payload: createCyclicAliasFixture(),
+      serialisedExpected: createSerialisedExpected(expected),
+    }
+  },
   name: 'cyclic-alias-replay',
   title: 'cyclic alias replay with branch-local circular markers',
 }
@@ -676,6 +752,13 @@ const repeatedInvocationFixture: StructuredDeterminismFixture = {
   createRun: () => {
     const payload = createRepeatedInvocationFixture()
     const records = payload.records as Array<Record<string, unknown>>
+    const expected = {
+      records: [{
+        safe: 'visible',
+        token: '[REDACTED]',
+        parent: createCircularMarker('records.0.parent', 'records'),
+      }],
+    }
 
     return {
       assertResult: (result) => {
@@ -683,19 +766,185 @@ const repeatedInvocationFixture: StructuredDeterminismFixture = {
         expect(records[0]!.token).toBe('secret')
         expect(records[0]!.parent).toBe(records)
       },
-      expected: {
-        records: [{
-          parent: createCircularMarker('records.0.parent', 'records'),
-          safe: 'visible',
-          token: '[REDACTED]',
-        }],
-      },
+      expected,
       payload,
+      serialisedExpected: createSerialisedExpected(expected),
     }
   },
   name: 'repeated-invocations',
   title: 'repeated invocations with equivalent fresh cyclic fixtures',
 }
+
+const createSerialisedRootFixture = <TExpected>(
+  name: string,
+  title: string,
+  payload: unknown,
+  expected: TExpected,
+  goldenCanary?: string,
+): StructuredDeterminismFixture<TExpected> => ({
+  createRun: () => {
+    const serialisedExpected = createSerialisedExpected(expected)
+
+    if (goldenCanary !== undefined) {
+      expect(serialisedExpected).toBe(goldenCanary)
+    }
+
+    return {
+      expected,
+      payload,
+      serialisedExpected,
+    }
+  },
+  name,
+  title,
+})
+
+const createSerialisationEdgePayload = (
+  options: {
+    readonly active?: bigint;
+    readonly ignoredPassword?: string;
+    readonly noteText?: string;
+    readonly repeatedToken?: string;
+    readonly stableToken?: string;
+  } = {},
+) => {
+  const circularPayload: Record<string, unknown> = {
+    safe: 'visible',
+  }
+  const getterBranch: Record<string, unknown> = {
+    safe: 'visible',
+  }
+  const repeated = {
+    safe: 'visible',
+    token: options.repeatedToken ?? 'secret',
+  }
+  const failing = markFailingMap(new Map<string, unknown>([
+    ['password', 'secret'],
+  ]))
+  const ignored = new Map<string, unknown>([
+    ['password', options.ignoredPassword ?? 'secret'],
+  ])
+
+  circularPayload.self = circularPayload
+
+  Object.defineProperty(getterBranch, 'secret', {
+    enumerable: true,
+    get() {
+      throw createFixtureError('token=secret')
+    },
+  })
+
+  return {
+    active: options.active ?? 42n,
+    circular: circularPayload,
+    failing,
+    getterBranch,
+    ignored,
+    notes: {
+      text: options.noteText ?? 'prefix password=secret suffix',
+    },
+    repeat: {
+      first: repeated,
+      second: repeated,
+    },
+    stable: {
+      token: options.stableToken ?? 'secret',
+    },
+  }
+}
+
+const createSerialisationEdgeExpectedResult = (
+  options: {
+    readonly active?: bigint;
+    readonly ignoredPassword?: string;
+  } = {},
+) => ({
+  active: buildBigIntResult(options.active ?? 42n),
+  circular: {
+    safe: 'visible',
+    self: createCircularMarker('circular.self', 'circular'),
+  },
+  failing: '[UNSUPPORTED]',
+  getterBranch: {
+    safe: 'visible',
+    secret: '[UNSUPPORTED]',
+  },
+  ignored: buildMapResult(new Map<string, unknown>([
+    ['password', options.ignoredPassword ?? 'secret'],
+  ])),
+  notes: {
+    text: '[UNSUPPORTED]',
+  },
+  repeat: {
+    first: {
+      safe: 'visible',
+      token: '[REDACTED]',
+    },
+    second: {
+      safe: 'visible',
+      token: '[REDACTED]',
+    },
+  },
+  stable: {
+    token: '[REDACTED]',
+  },
+})
+
+const createSerialisationEdgeFixture = (
+  name: string,
+  title: string,
+  options: Parameters<typeof createSerialisationEdgePayload>[0] = {},
+  goldenCanary?: string,
+): StructuredDeterminismFixture => ({
+  createRun: () => {
+    const payload = createSerialisationEdgePayload(options)
+    const expected = createSerialisationEdgeExpectedResult(options)
+    const serialisedExpected = createSerialisedExpected(expected)
+
+    if (goldenCanary !== undefined) {
+      expect(serialisedExpected).toBe(goldenCanary)
+    }
+
+    return {
+      expected,
+      payload,
+      serialisedExpected,
+    }
+  },
+  name,
+  title,
+})
+
+const createSerialisationEdgeRedactor = (
+  serialise: SerialiseOption = false,
+) => deepRedact({
+  ignoredValueTypes: {
+    Map: true,
+  },
+  keys: ['token'],
+  serialise,
+  stringTests: [
+    {
+      pattern: /password=[^&\s]+/g,
+      replacer: () => {
+        throw createFixtureError('password=secret')
+      },
+    },
+  ],
+  transformers: {
+    byConstructor: {
+      Map: [
+        (value: unknown) => {
+          if (isMarkedFailingMap(value)) {
+            throw createFixtureError('token=secret')
+          }
+
+          return value
+        },
+      ],
+    },
+  },
+})
 
 export const structuredDeterminismFixtureSets: readonly StructuredDeterminismFixtureSet[] = [
   {
@@ -721,7 +970,7 @@ export const structuredDeterminismFixtureSets: readonly StructuredDeterminismFix
     title: 'overlapping rules',
   },
   {
-    createRedactor: () => createCanonicalMixedPayloadRedactor().redact,
+    createRedactor: (serialise = false) => createCanonicalMixedPayloadRedactor({ serialise }).redact,
     fixtures: [
       createCanonicalMixedPayloadFixture(
         'canonical-mixed-payload-baseline',
@@ -744,8 +993,8 @@ export const structuredDeterminismFixtureSets: readonly StructuredDeterminismFix
     title: 'canonical mixed payload',
   },
   {
-    createRedactor: () => deepRedact({
-      serialise: false,
+    createRedactor: (serialise = false) => deepRedact({
+      serialise,
       censor: createPathSensitiveCensor,
       keys: ['shared', /Shared$/],
       retainStructure: true,
@@ -758,8 +1007,8 @@ export const structuredDeterminismFixtureSets: readonly StructuredDeterminismFix
     title: 'alias replays',
   },
   {
-    createRedactor: () => deepRedact({
-      serialise: false,
+    createRedactor: (serialise = false) => deepRedact({
+      serialise,
       censor: createPathSensitiveCensor,
       keys: ['password'],
       retainStructure: true,
@@ -772,9 +1021,9 @@ export const structuredDeterminismFixtureSets: readonly StructuredDeterminismFix
     title: 'retained revisits',
   },
   {
-    createRedactor: () => deepRedact({
+    createRedactor: (serialise = false) => deepRedact({
       keys: ['token'],
-      serialise: false,
+      serialise,
     }),
     fixtures: [
       cyclicAliasReplayFixture,
@@ -782,5 +1031,69 @@ export const structuredDeterminismFixtureSets: readonly StructuredDeterminismFix
     ],
     name: 'cyclic-revisits',
     title: 'cyclic revisits',
+  },
+] as const
+
+export const serialisedDeterminismFixtureSets: readonly StructuredDeterminismFixtureSet[] = [
+  ...structuredDeterminismFixtureSets,
+  {
+    createRedactor: (serialise = false) => deepRedact({
+      serialise,
+      stringTests: [/token=[^&\s]+/],
+    }),
+    fixtures: [
+      createSerialisedRootFixture(
+        'root-string-redaction',
+        'root string substring redaction',
+        'token=secret',
+        '[REDACTED]',
+        SERIALISED_ROOT_STRING_REDACTION_CANARY,
+      ),
+      createSerialisedRootFixture(
+        'root-string-no-match',
+        'root string without a matching substring rule',
+        'visible root string',
+        'visible root string',
+      ),
+      createSerialisedRootFixture(
+        'root-bigint-transformation',
+        'root bigint transformation before serialisation',
+        42n,
+        buildBigIntResult(42n),
+        SERIALISED_ROOT_BIGINT_CANARY,
+      ),
+      createSerialisedRootFixture(
+        'root-bigint-transformation-variant',
+        'root bigint transformation variant before serialisation',
+        7n,
+        buildBigIntResult(7n),
+      ),
+    ],
+    name: 'serialisation-roots',
+    title: 'serialisation roots',
+  },
+  {
+    createRedactor: createSerialisationEdgeRedactor,
+    fixtures: [
+      createSerialisationEdgeFixture(
+        'transformed-circular-ignored-unsupported-baseline',
+        'transformed, circular, ignored, and unsupported baseline',
+        {},
+        SERIALISED_EDGE_CASE_BASELINE_CANARY,
+      ),
+      createSerialisationEdgeFixture(
+        'transformed-circular-ignored-unsupported-variant',
+        'transformed, circular, ignored, and unsupported variant',
+        {
+          active: 7n,
+          ignoredPassword: 'hunter2',
+          noteText: 'prefix password=hunter2 suffix',
+          repeatedToken: 'secret second call',
+          stableToken: 'secret second call',
+        },
+      ),
+    ],
+    name: 'serialisation-edge-cases',
+    title: 'serialisation edge cases',
   },
 ] as const
