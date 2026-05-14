@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createRedactor,
   deepRedact,
+  type DeepRedactOptions,
   type DiagnosticEvent,
   type FunctionCensorContext,
 } from '../../../src/index.js'
+import { compileRedactorPlan } from '../../../src/core/compiler/compile-redactor-plan.js'
 import {
   createCanonicalMixedPayload,
   createCanonicalMixedPayloadExpectedResult,
@@ -15,6 +17,11 @@ import {
   type StructuredDeterminismFixtureSet,
   type StructuredDeterminismRun,
 } from '../../fixtures/structured-determinism/index.js'
+import {
+  createLaneForcedRedactor,
+  createLaneForcedRedactorFromPlan,
+  exactPathEquivalenceCorpus,
+} from '../../fixtures/exact-path-equivalence/index.js'
 
 const buildBigInt = (value: bigint) => ({
   _transformer: 'bigint',
@@ -4188,5 +4195,110 @@ describe('Function censors and same-length string replacement', () => {
     const result = redact({ user: { name: 'alice' } }) as { user: { name: string } }
 
     expect(result.user.name).toBe('*')
+  })
+})
+
+describe('Exact-path fast-lane and generic traversal equivalence', () => {
+  it.each(exactPathEquivalenceCorpus)(
+    'proves fast-lane and generic-lane are behaviourally equivalent for: $title',
+    (entry) => {
+      // (a) Control — verify the compiled plan exclusively uses the exact-path fast lane
+      const plan = compileRedactorPlan(entry.options)
+      expect(Object.keys(plan.exactPathRules).length).toBe((entry.options.paths ?? []).length)
+      expect(plan.dynamicPathRules.length).toBe(0)
+
+      // (b) Fast-lane run — both lanes derived from the same compiled plan
+      const fastStructured = createLaneForcedRedactorFromPlan(plan, 'fast')(entry.createPayload())
+      const fastSerialised = JSON.stringify(fastStructured)
+
+      expect(fastStructured).toStrictEqual(entry.expectedStructured)
+      expect(fastSerialised).toBe(entry.expectedSerialised)
+
+      // (c) Generic-lane run — same golden assertions plus cross-lane equality
+      const genericStructured = createLaneForcedRedactorFromPlan(plan, 'generic')(entry.createPayload())
+      const genericSerialised = JSON.stringify(genericStructured)
+
+      expect(genericStructured).toStrictEqual(entry.expectedStructured)
+      expect(genericSerialised).toBe(entry.expectedSerialised)
+
+      expect(fastStructured).toStrictEqual(genericStructured)
+      expect(fastSerialised).toBe(genericSerialised)
+    },
+  )
+
+  it('delivers identical FunctionCensorContext to both lanes for exact-path-function-censor', () => {
+    const functionCensorEntry = exactPathEquivalenceCorpus.find(
+      (entry) => entry.name === 'exact-path-function-censor',
+    )
+    if (functionCensorEntry == null) throw new Error('exact-path-function-censor corpus entry not found')
+
+    let fastCapturedContext: FunctionCensorContext | undefined
+    let genericCapturedContext: FunctionCensorContext | undefined
+
+    const fastSpy = vi.fn((_value: unknown, ctx: FunctionCensorContext) => {
+      fastCapturedContext = ctx
+      return '[FN-SPY]'
+    })
+    const genericSpy = vi.fn((_value: unknown, ctx: FunctionCensorContext) => {
+      genericCapturedContext = ctx
+      return '[FN-SPY]'
+    })
+
+    const fastOptions = { paths: [{ path: 'account.secret', censor: fastSpy }] }
+    const genericOptions = { paths: [{ path: 'account.secret', censor: genericSpy }] }
+
+    const expectedPayload = { account: { secret: 'hidden', visible: 'show' } }
+
+    createLaneForcedRedactor(fastOptions, 'fast')(functionCensorEntry.createPayload())
+    createLaneForcedRedactor(genericOptions, 'generic')(functionCensorEntry.createPayload())
+
+    expect(fastSpy).toHaveBeenCalledOnce()
+    expect(genericSpy).toHaveBeenCalledOnce()
+
+    expect(fastCapturedContext).toBeDefined()
+    expect(genericCapturedContext).toBeDefined()
+
+    expect(fastCapturedContext!.matchedPath).toStrictEqual(['account', 'secret'])
+    expect(fastCapturedContext!.rulePath).toStrictEqual(['account', 'secret'])
+    expect(fastCapturedContext!.rootInput).toStrictEqual(expectedPayload)
+    expect(fastCapturedContext!.terminalKey).toBe('secret')
+
+    expect(fastCapturedContext).toStrictEqual(genericCapturedContext)
+  })
+
+  it('produces byte-for-byte identical custom-serialised output across lanes for single-exact-path', () => {
+    const entry = exactPathEquivalenceCorpus.find(
+      (e) => e.name === 'single-exact-path',
+    )
+    if (entry == null) throw new Error('single-exact-path corpus entry not found')
+
+    const customSerialise = vi.fn((value: unknown) => JSON.stringify({ v: value }))
+
+    const fastStructured = createLaneForcedRedactor(entry.options, 'fast')(entry.createPayload())
+    const genericStructured = createLaneForcedRedactor(entry.options, 'generic')(entry.createPayload())
+
+    const fastCustomSerialised = customSerialise(fastStructured)
+    const genericCustomSerialised = customSerialise(genericStructured)
+
+    expect(fastCustomSerialised).toBe(entry.expectedCustomSerialised)
+    expect(genericCustomSerialised).toBe(entry.expectedCustomSerialised)
+    expect(fastCustomSerialised).toBe(genericCustomSerialised)
+  })
+
+  it('returns byte-for-byte identical serialised string across lanes when serialise: true (AC 7)', () => {
+    const options: DeepRedactOptions = { paths: ['user.password'], serialise: true }
+    const sharedPlan = compileRedactorPlan(options)
+
+    expect(Object.keys(sharedPlan.exactPathRules).length).toBe(1)
+    expect(sharedPlan.dynamicPathRules.length).toBe(0)
+
+    const payload = { user: { password: 'secret', safe: 'keep' } }
+    const fastResult = createLaneForcedRedactorFromPlan(sharedPlan, 'fast')(payload)
+    const genericResult = createLaneForcedRedactorFromPlan(sharedPlan, 'generic')(payload)
+
+    expect(typeof fastResult).toBe('string')
+    expect(fastResult).toBe('{"user":{"password":"[REDACTED]","safe":"keep"}}')
+    expect(genericResult).toBe('{"user":{"password":"[REDACTED]","safe":"keep"}}')
+    expect(fastResult).toBe(genericResult)
   })
 })
