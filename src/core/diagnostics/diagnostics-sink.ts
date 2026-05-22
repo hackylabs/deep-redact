@@ -1,16 +1,19 @@
 import type { DiagnosticEvent } from '../../types/diagnostics.js'
 import type { CompiledDiagnosticsPlan } from '../compiler/compile-diagnostics.js'
+import { getNodeConsoleDiagnosticSink } from './node-console-sink.js'
 
 export const emitDiagnosticEvent = (
   plan: CompiledDiagnosticsPlan,
   event: DiagnosticEvent,
 ): void => {
-  if (plan.sink === undefined) {
+  const sink = plan.sink ?? getNodeConsoleDiagnosticSink()
+
+  if (sink === undefined) {
     return
   }
 
   try {
-    plan.sink(event)
+    sink(event)
   } catch {
     return
   }

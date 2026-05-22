@@ -5,10 +5,14 @@ Deep Redact is a one-way redaction library. It returns redacted artefacts only a
 
 ## Public Surface
 
-The public value exports are:
+The public root value exports are:
 
 - `createRedactor`
 - `deepRedact`
+
+The public console adapter value exports are:
+
+- `createRedactedConsole`
 
 The public surface must not expose names for these reverse-operation intents:
 

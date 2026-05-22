@@ -26,7 +26,7 @@ sameFactory({ secret: 'value' }) // throws until the v4 runtime lands
 
 - `deepRedact(options)` is the primary public factory.
 - `createRedactor(options)` is the named alias.
-- The published root package surface is limited to the root entrypoint and `package.json`.
+- The published package surface includes the root entrypoint, the optional console adapter subpath, and `package.json`.
 - The runtime implementation is intentionally placeholder-only in the current foundation scaffold.
 - The retained legacy tests remain in the repository as explicit red-phase pressure outside the default contract gate.
 

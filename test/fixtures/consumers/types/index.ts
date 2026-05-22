@@ -26,6 +26,14 @@ import {
   type StructuredPathSegment,
   type StructuredPathSelector,
 } from '@hackylabs/deep-redact'
+import * as rootPackageSurface from '@hackylabs/deep-redact'
+import {
+  createRedactedConsole,
+  type ConsoleLike,
+  type ConsoleMethodName,
+  type ConsoleRedactionOptions,
+  type RedactedConsole,
+} from '@hackylabs/deep-redact/adapters/console'
 
 // One-argument function censor remains assignable to Censor
 const oneArgCensor: Censor = String
@@ -174,9 +182,25 @@ const alias: Redactor = createRedactor({
   keys: ['token'],
   paths,
 })
+const consoleTarget: ConsoleLike = {
+  debug: (..._args: unknown[]) => undefined,
+  error: (..._args: unknown[]) => undefined,
+  info: (..._args: unknown[]) => undefined,
+  log: (..._args: unknown[]) => undefined,
+  trace: (..._args: unknown[]) => undefined,
+  warn: (..._args: unknown[]) => undefined,
+}
+const consoleMethodName: ConsoleMethodName = 'log'
+const consoleOptions: ConsoleRedactionOptions = {
+  diagnostics: {
+    sink: diagnosticSink,
+  },
+}
+const adaptedConsole: RedactedConsole = createRedactedConsole(redact, consoleTarget, consoleOptions)
 
 const structuredResult = redact({ ok: true })
 const aliasResult = alias({ ok: true })
+const consoleResult = adaptedConsole[consoleMethodName]({ token: 'secret' })
 
 // @ts-expect-error v4 exposes only the British-English serialise option
 const invalidLegacyOption: DeepRedactOptions = { serialize: true }
@@ -192,11 +216,14 @@ const invalidRevealOption: DeepRedactOptions = { reveal: true }
 const invalidDecodeOption: DeepRedactOptions = { decode: true }
 // @ts-expect-error the reusable redactor accepts payload input only after initialisation
 redact({ ok: true }, options)
+// @ts-expect-error the console adapter is available only from the adapter subpath
+void rootPackageSurface.createRedactedConsole
 
 void oneArgCensor
 void twoArgCensor
 void structuredResult
 void aliasResult
+void consoleResult
 void selector
 void substringRule
 void bareStringTest
@@ -217,6 +244,11 @@ void transformersByConstructor
 void transformers
 void exampleSegments
 void exampleCtx
+void consoleTarget
+void consoleMethodName
+void consoleOptions
+void adaptedConsole
+void rootPackageSurface
 void invalidLegacyOption
 void invalidLegacyKeys
 void invalidRestoreOption

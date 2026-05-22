@@ -23,6 +23,15 @@ export const publicPackageOwnKeys = Object.freeze([
   ...publicValueExportNames,
 ].sort())
 
+export const publicConsoleAdapterValueExportNames = Object.freeze([
+  'createRedactedConsole',
+] as const)
+
+export const publicConsoleAdapterOwnKeys = Object.freeze([
+  'Symbol(Symbol.toStringTag)',
+  ...publicConsoleAdapterValueExportNames,
+].sort())
+
 const sensitiveValue = 'story-4-5-secret-value/token'
 const unsupportedDateIso = '1999-01-01T00:00:00.000Z'
 const supportedDateIso = '2024-01-02T03:04:05.006Z'
@@ -531,9 +540,13 @@ Deep Redact is a one-way redaction library. It returns redacted artefacts only a
 
 ## Public Surface
 
-The public value exports are:
+The public root value exports are:
 
 ${renderBulletList(publicValueExportNames)}
+
+The public console adapter value exports are:
+
+${renderBulletList(publicConsoleAdapterValueExportNames)}
 
 The public surface must not expose names for these reverse-operation intents:
 

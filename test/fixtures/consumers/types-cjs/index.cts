@@ -1,4 +1,5 @@
 import deepRedactPackage = require('@hackylabs/deep-redact')
+import deepRedactConsole = require('@hackylabs/deep-redact/adapters/console')
 
 const structuredKeyRule: deepRedactPackage.KeyRule = {
   key: 'pass_code',
@@ -103,9 +104,29 @@ const redact = deepRedactPackage.deepRedact({
 const alias = deepRedactPackage.createRedactor({
   serialise: (value: unknown) => JSON.stringify(value) ?? 'null',
 })
+const consoleTarget: deepRedactConsole.ConsoleLike = {
+  debug: (..._args: unknown[]) => undefined,
+  error: (..._args: unknown[]) => undefined,
+  info: (..._args: unknown[]) => undefined,
+  log: (..._args: unknown[]) => undefined,
+  trace: (..._args: unknown[]) => undefined,
+  warn: (..._args: unknown[]) => undefined,
+}
+const consoleMethodName: deepRedactConsole.ConsoleMethodName = 'warn'
+const consoleOptions: deepRedactConsole.ConsoleRedactionOptions = {
+  diagnostics: {
+    sink: diagnosticSink,
+  },
+}
+const adaptedConsole: deepRedactConsole.RedactedConsole = deepRedactConsole.createRedactedConsole(
+  redact,
+  consoleTarget,
+  consoleOptions,
+)
 
 const structuredResult = redact({ ok: true })
 const serialisedResult = alias({ ok: true })
+const consoleResult = adaptedConsole[consoleMethodName]({ token: 'secret' })
 
 // @ts-expect-error v4 does not expose the American-English serialisation alias
 deepRedactPackage.deepRedact({ serialize: true })
@@ -119,9 +140,12 @@ deepRedactPackage.deepRedact({ unredact: true })
 deepRedactPackage.deepRedact({ reveal: true })
 // @ts-expect-error Deep Redact does not expose decode capability
 deepRedactPackage.deepRedact({ decode: true })
+// @ts-expect-error the console adapter is available only from the adapter subpath
+void deepRedactPackage.createRedactedConsole
 
 void structuredResult
 void serialisedResult
+void consoleResult
 void keySelector
 void regexKeySelector
 void structuredKeyRule
@@ -142,3 +166,7 @@ void exampleSegments
 void exampleCtx
 void oneArgCensor
 void wildcardSegment
+void consoleTarget
+void consoleMethodName
+void consoleOptions
+void adaptedConsole

@@ -28,9 +28,24 @@ describe('Type declaration contract', () => {
   it.each([
     'dist/index.d.ts',
     'dist/index.d.cts',
+    'dist/adapters/console/index.d.ts',
+    'dist/adapters/console/index.d.cts',
   ])('exposes no restore-like declaration surface in %s', (declarationPath) => {
     const declarationText = readFileSync(resolve(declarationPath), 'utf8')
 
     assertNoDeniedDeclarationSurface(declarationText, declarationPath)
+  })
+
+  it.each([
+    'dist/adapters/console/index.d.ts',
+    'dist/adapters/console/index.d.cts',
+  ])('exposes the expected console adapter declaration surface in %s', (declarationPath) => {
+    const declarationText = readFileSync(resolve(declarationPath), 'utf8')
+
+    expect(declarationText).toContain('createRedactedConsole')
+    expect(declarationText).toContain('ConsoleLike')
+    expect(declarationText).toContain('ConsoleMethodName')
+    expect(declarationText).toContain('ConsoleRedactionOptions')
+    expect(declarationText).toContain('RedactedConsole')
   })
 })

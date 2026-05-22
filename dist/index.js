@@ -1,3 +1,4 @@
+import { t as getNodeConsoleDiagnosticSink } from "./node-console-sink-DaQleNZ8.js";
 //#region src/core/compiler/compile-diagnostics.ts
 const compileDiagnostics = (diagnostics) => {
 	return Object.freeze({
@@ -766,9 +767,10 @@ const createDiagnosticEvent = (plan, path, snapshot) => {
 //#endregion
 //#region src/core/diagnostics/diagnostics-sink.ts
 const emitDiagnosticEvent = (plan, event) => {
-	if (plan.sink === void 0) return;
+	const sink = plan.sink ?? getNodeConsoleDiagnosticSink();
+	if (sink === void 0) return;
 	try {
-		plan.sink(event);
+		sink(event);
 	} catch {
 		return;
 	}

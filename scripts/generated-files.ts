@@ -17,10 +17,16 @@ const packageJsonPath = path.join(repositoryRoot, 'package.json')
 const readmeTemplatePath = path.join(scriptDirectory, 'templates', 'README.md.template')
 const nodeVersionPath = path.join(repositoryRoot, '.nvmrc')
 
-const generatedEntrypoint = {
+const generatedRootEntrypoint = {
   import: './dist/index.js',
   require: './dist/index.cjs',
   types: './dist/index.d.ts',
+}
+
+const generatedConsoleAdapterEntrypoint = {
+  import: './dist/adapters/console/index.js',
+  require: './dist/adapters/console/index.cjs',
+  types: './dist/adapters/console/index.d.ts',
 }
 
 export const readPackageJson = (): PackageJson => {
@@ -30,11 +36,12 @@ export const readPackageJson = (): PackageJson => {
 export const buildGeneratedPackageJson = (packageJson: PackageJson): PackageJson => {
   return {
     ...packageJson,
-    main: generatedEntrypoint.require,
-    module: generatedEntrypoint.import,
-    types: generatedEntrypoint.types,
+    main: generatedRootEntrypoint.require,
+    module: generatedRootEntrypoint.import,
+    types: generatedRootEntrypoint.types,
     exports: {
-      '.': generatedEntrypoint,
+      '.': generatedRootEntrypoint,
+      './adapters/console': generatedConsoleAdapterEntrypoint,
       './package.json': './package.json',
     },
   }

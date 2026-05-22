@@ -18,6 +18,7 @@
   },
   "include": [
     "src/index.ts",
+    "src/adapters/**/*.ts",
     "scripts/**/*.ts",
     "test/build.test.ts",
     "test/contract/**/*.ts",

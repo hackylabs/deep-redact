@@ -1,5 +1,5 @@
 # generated: 2026-04-13T09:43:13+0100
-# last_updated: 2026-05-22T12:01:53+0100
+# last_updated: 2026-05-22T13:04:34+0100
 # project: deep-redact
 # project_key: NOKEY
 # tracking_system: file-system
@@ -34,7 +34,7 @@
 # - Scrum Master typically creates the next story after the previous one is 'done'
 
 generated: 2026-04-13T09:43:13+0100
-last_updated: 2026-05-22T12:01:53+0100
+last_updated: 2026-05-22T13:04:34+0100
 project: deep-redact
 project_key: NOKEY
 tracking_system: file-system
@@ -73,7 +73,7 @@ development_status:
   4-3-prove-exact-path-fast-lane-and-generic-traversal-are-behaviourally-equivalent: done
   4-4-publish-and-prove-a-normative-precedence-matrix-for-overlapping-targeting-rules: done
   4-5-enforce-a-one-way-redaction-deny-list-across-public-surface-and-outputs: done
-  4-6-provide-optional-console-redaction-through-an-explicit-guarded-adapter: backlog
+  4-6-provide-optional-console-redaction-through-an-explicit-guarded-adapter: done
   epic-4-retrospective: optional
 
   epic-5: backlog
