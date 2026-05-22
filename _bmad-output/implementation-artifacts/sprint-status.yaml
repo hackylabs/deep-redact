@@ -1,5 +1,5 @@
 # generated: 2026-04-13T09:43:13+0100
-# last_updated: 2026-05-22T15:11:30+0100
+# last_updated: 2026-05-22T16:15:34+0100
 # project: deep-redact
 # project_key: NOKEY
 # tracking_system: file-system
@@ -34,7 +34,7 @@
 # - Scrum Master typically creates the next story after the previous one is 'done'
 
 generated: 2026-04-13T09:43:13+0100
-last_updated: 2026-05-22T15:11:30+0100
+last_updated: 2026-05-22T16:15:34+0100
 project: deep-redact
 project_key: NOKEY
 tracking_system: file-system
@@ -79,7 +79,7 @@ development_status:
   epic-5: in-progress
   5-1-define-the-canonical-installation-verification-matrix-and-baseline-fixtures: done
   5-2-execute-node-package-manager-installation-verification-across-supported-node-runtimes: done
-  5-3-verify-the-deno-baseline-path-and-installation-documentation-lockstep: backlog
+  5-3-verify-the-deno-baseline-path-and-installation-documentation-lockstep: done
   5-4-publish-a-verified-fast-redact-migration-matrix-for-documented-scenarios: backlog
   5-5-publish-a-dedicated-deep-redact-v3-to-v4-migration-path: backlog
   5-6-establish-the-worked-example-manifest-and-validation-harness: backlog

@@ -4,11 +4,10 @@
     "commandTokens": {
       "{packageTarball}": "Verifier-provided path to the packed .tgz artefact produced from the current repository build.",
       "{packageTarballUrl}": "Verifier-provided URL for the same packed .tgz artefact when a package manager requires URL-style package input.",
-      "{denoPackageSpecifier}": "Verifier-provided Deno-compatible public package specifier, expected to resolve to npm:@hackylabs/deep-redact@{packageVersion} once Deno installation documentation is finalised."
+      "{denoPackageSpecifier}": "Verifier-provided Deno-compatible public package specifier resolved from package metadata as npm:@hackylabs/deep-redact@{packageVersion}."
     },
     "deferredPhases": {
       "nodePackageManagerExecution": "later-node-package-manager-verification",
-      "denoVerificationAndDocumentationLockstep": "later-deno-verification",
       "migrationExamplesBenchmarksAndPlatformGuidance": "later-release-guidance"
     }
   },

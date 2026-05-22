@@ -137,7 +137,6 @@ describe('installation verification matrix contract', () => {
     expect(matrix.metadata.commandTokens['{denoPackageSpecifier}']).toContain('npm:@hackylabs/deep-redact@{packageVersion}')
     expect(matrix.metadata.deferredPhases).toEqual({
       nodePackageManagerExecution: 'later-node-package-manager-verification',
-      denoVerificationAndDocumentationLockstep: 'later-deno-verification',
       migrationExamplesBenchmarksAndPlatformGuidance: 'later-release-guidance',
     })
   })

@@ -3,12 +3,15 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { renderPrecedenceDocument } from '../test/fixtures/precedence-matrix/index.ts'
 import { renderOneWayRedactionDocument } from '../test/fixtures/one-way-deny-list/index.ts'
+import { buildInstallDocumentation } from './install-documentation.ts'
 
 type PackageJson = Record<string, unknown> & {
   exports?: Record<string, unknown>;
   main?: string;
   module?: string;
+  name?: unknown;
   types?: string;
+  version?: unknown;
 }
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
@@ -56,11 +59,13 @@ export const buildGeneratedReadme = (): string => {
   const template = readFileSync(readmeTemplatePath, 'utf8')
   const contributorNodeVersion = readFileSync(nodeVersionPath, 'utf8').trim()
   const packageManager = String(packageJson.packageManager ?? 'pnpm')
+  const installationDocumentation = buildInstallDocumentation(repositoryRoot, packageJson)
 
   return template
     .replaceAll('{{PACKAGE_NAME}}', String(packageJson.name))
     .replaceAll('{{CONTRIBUTOR_NODE_VERSION}}', contributorNodeVersion)
     .replaceAll('{{PACKAGE_MANAGER}}', packageManager)
+    .replaceAll('{{INSTALLATION_DOCUMENTATION}}', installationDocumentation.trimEnd())
 }
 
 export const buildGeneratedPrecedenceDocument = (): string => {

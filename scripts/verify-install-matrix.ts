@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { cp, mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import path, { posix } from 'node:path'
@@ -31,28 +32,35 @@ export interface InstallMatrix {
 export interface PackageSourceTokens {
   packageTarball: string;
   packageTarballUrl: string;
+  denoPackageSpecifier?: string;
 }
 
 export interface PlannedInstallMatrixRow {
   id: string;
   packageManager: string;
+  runtime: string;
   fixtureSourceDirectory: string;
   fixtureTemporaryDirectory: string;
   installCommand: string[];
   runCommand: string[];
   expectedStdoutFile: string;
   expectedExitStatus: number;
+  denoPackageSpecifier?: string;
+  npmRegistryUrl?: string;
 }
 
 export interface ExecutableInstallMatrixRow {
   id: string;
   packageManager: string;
+  runtime?: string;
   fixtureSourceDirectory: string;
   fixtureTemporaryDirectory: string;
   installCommand: string[];
   runCommand: string[];
   expectedStdout: string;
   expectedExitStatus: number;
+  denoPackageSpecifier?: string;
+  npmRegistryUrl?: string;
 }
 
 export interface CommandExecution {
@@ -74,6 +82,8 @@ export interface CommandResult {
 interface PlanInstallMatrixVerificationOptions {
   matrix: InstallMatrix;
   activeNodeVersion: string;
+  activeDenoVersionOutput?: string;
+  packageJson?: PackageJsonMetadata;
   packageTarball: string;
   packageTarballUrl: string;
   repositoryRoot: string;
@@ -91,6 +101,8 @@ interface RunInstallMatrixRowsOptions {
     row: ExecutableInstallMatrixRow,
   ) => Promise<void>;
   removeFixture?: (targetDirectory: string, row: ExecutableInstallMatrixRow) => Promise<void>;
+  prepareFixture?: (row: ExecutableInstallMatrixRow) => Promise<void>;
+  afterInstall?: (row: ExecutableInstallMatrixRow) => Promise<void>;
   execute?: (execution: CommandExecution) => Promise<CommandResult>;
   keepFixtures?: boolean;
   env?: NodeJS.ProcessEnv;
@@ -102,9 +114,12 @@ interface RunInstallMatrixVerificationOptions extends RunInstallMatrixRowsOption
   packageTarball: string;
   repositoryRoot: string;
   temporaryRoot: string;
+  packageJson?: PackageJsonMetadata;
   preparePackageManagers?: (rows: PlannedInstallMatrixRow[], repositoryRoot: string) => Promise<void>;
   readExpectedStdout?: (expectedStdoutFile: string, row: PlannedInstallMatrixRow) => Promise<string>;
   createTarballServer?: (tarballPath: string) => Promise<TarballServer>;
+  createNpmRegistryServer?: (options: CreateNpmRegistryServerOptions) => Promise<NpmRegistryServer>;
+  readDenoVersionOutput?: () => Promise<string>;
 }
 
 interface PackCurrentPackageOptions {
@@ -115,6 +130,25 @@ interface PackCurrentPackageOptions {
 interface TarballServer {
   url: string;
   close: () => Promise<void>;
+}
+
+export interface NpmRegistryServer {
+  registryUrl: string;
+  tarballUrl: string;
+  close: () => Promise<void>;
+  packageMetadataRequestCount: () => number;
+  packageTarballRequestCount: () => number;
+  assertCurrentPackageRequested: () => void;
+}
+
+export interface PackageJsonMetadata {
+  name?: unknown;
+  version?: unknown;
+}
+
+export interface CreateNpmRegistryServerOptions {
+  packageJson: PackageJsonMetadata;
+  packageTarball: string;
 }
 
 type CommandFailureReason = 'spawn' | 'exit-status' | 'stderr' | 'stdout'
@@ -148,11 +182,13 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 const defaultRepositoryRoot = path.resolve(scriptDirectory, '..')
 const expectedNodePackageManagers = ['npm', 'pnpm', 'yarn', 'bun']
 const nodePackageManagers = new Set(expectedNodePackageManagers)
-const supportedCommandTokens = new Set(['{packageTarball}', '{packageTarballUrl}'])
+const nodeCommandTokens = new Set(['{packageTarball}', '{packageTarballUrl}'])
+const denoCommandTokens = new Set(['{denoPackageSpecifier}'])
 const shellInterpreters = new Set(['sh', 'bash', 'zsh', 'ksh', 'fish', 'csh', 'tcsh', 'cmd', 'powershell', 'pwsh'])
 const commandTokenPattern = /\{[^}]+\}/g
 const shellControlPattern = /(?:^|\s)(?:&&|\|\||[;|<>])(?:\s|$)/
 const outputLimitBytes = 1024 * 1024
+const denoPackageSpecifierToken = '{denoPackageSpecifier}'
 
 export const loadInstallMatrix = async (
   repositoryRoot = defaultRepositoryRoot,
@@ -183,6 +219,28 @@ const parseNodeRuntimeVersion = (row: InstallMatrixRow): string => {
   }
 
   return match[1]
+}
+
+const parseDenoRuntimeVersion = (row: InstallMatrixRow): number => {
+  const match = /^deno@(\d+)$/.exec(row.runtimeVersion)
+
+  if (!match) {
+    throw new Error(
+      `Install-matrix row ${row.id} has malformed runtimeVersion ${row.runtimeVersion}; expected deno@2`,
+    )
+  }
+
+  return Number.parseInt(match[1], 10)
+}
+
+const parseDenoVersionOutput = (denoVersionOutput: string): number => {
+  const match = /^deno\s+(\d+)(?:\.\d+){0,2}\b/m.exec(denoVersionOutput.trim())
+
+  if (!match) {
+    throw new Error(`Unable to determine Deno version from deno --version output: ${denoVersionOutput.trim()}`)
+  }
+
+  return Number.parseInt(match[1], 10)
 }
 
 export const selectNodeRows = (
@@ -218,6 +276,53 @@ export const selectNodeRows = (
   }
 
   return selectedRows
+}
+
+export const selectDenoRows = (
+  matrix: InstallMatrix,
+  denoVersionOutput: string,
+): InstallMatrixRow[] => {
+  const denoRows = matrix.rows.filter((row) => row.runtime === 'deno')
+
+  if (denoRows.length === 0) {
+    throw new Error('Install matrix must include the deno-2 row before Deno support can be release-proven')
+  }
+
+  for (const row of denoRows) {
+    if (row.packageManager !== 'deno') {
+      throw new Error(`Install-matrix row ${row.id} uses unsupported Deno package manager ${row.packageManager}`)
+    }
+
+    parseDenoRuntimeVersion(row)
+  }
+
+  const activeDenoMajor = parseDenoVersionOutput(denoVersionOutput)
+
+  if (activeDenoMajor !== 2) {
+    throw new Error(`Install-matrix row deno-2 requires Deno 2, received Deno ${activeDenoMajor}`)
+  }
+
+  const selectedRows = denoRows.filter((row) => row.id === 'deno-2' && parseDenoRuntimeVersion(row) === activeDenoMajor)
+
+  if (selectedRows.length !== 1) {
+    throw new Error('Deno 2 verification must select exactly the deno-2 install-matrix row')
+  }
+
+  return selectedRows
+}
+
+export const resolveDenoPackageSpecifier = (packageJson: PackageJsonMetadata): string => {
+  const { name, version } = packageJson
+
+  if (typeof name !== 'string' || name.length === 0) {
+    throw new Error('Cannot resolve Deno package specifier without a package name')
+  }
+
+  if (typeof version !== 'string' || !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) {
+    throw new Error('Cannot resolve Deno package specifier without a pinned package version')
+  }
+
+  return `npm:${name}@${version}`
 }
 
 export const validateRepositoryPath = ({
@@ -283,8 +388,10 @@ export const expandCommandTokens = (
   command: string[],
   tokenValues: PackageSourceTokens,
   rowId: string,
+  runtime = 'node',
 ): string[] => {
   validateCommandArray(command, rowId)
+  const supportedCommandTokens = runtime === 'deno' ? denoCommandTokens : nodeCommandTokens
 
   return command.map((commandPart) => {
     const tokens = commandPart.match(commandTokenPattern) ?? []
@@ -293,23 +400,38 @@ export const expandCommandTokens = (
       if (!supportedCommandTokens.has(token)) {
         throw new Error(`Install-matrix unsupported command token ${token} in row ${rowId}`)
       }
+
+      if (token === denoPackageSpecifierToken && !tokenValues.denoPackageSpecifier) {
+        throw new Error(`Install-matrix row ${rowId} cannot expand ${denoPackageSpecifierToken} without a Deno package specifier`)
+      }
     }
 
     return commandPart
       .replaceAll('{packageTarball}', tokenValues.packageTarball)
       .replaceAll('{packageTarballUrl}', tokenValues.packageTarballUrl)
+      .replaceAll('{denoPackageSpecifier}', tokenValues.denoPackageSpecifier ?? '')
   })
 }
 
 export const planInstallMatrixVerification = ({
   matrix,
   activeNodeVersion,
+  activeDenoVersionOutput,
+  packageJson,
   packageTarball,
   packageTarballUrl,
   repositoryRoot,
   temporaryRoot,
 }: PlanInstallMatrixVerificationOptions): PlannedInstallMatrixRow[] => {
-  const selectedRows = selectNodeRows(matrix, activeNodeVersion)
+  const selectedNodeRows = selectNodeRows(matrix, activeNodeVersion)
+  const hasDenoRows = matrix.rows.some((row) => row.runtime === 'deno')
+  const selectedDenoRows = hasDenoRows
+    ? selectDenoRows(matrix, activeDenoVersionOutput ?? '')
+    : []
+  const denoPackageSpecifier = selectedDenoRows.length > 0
+    ? resolveDenoPackageSpecifier(packageJson ?? {})
+    : undefined
+  const selectedRows = [...selectedNodeRows, ...selectedDenoRows]
 
   return selectedRows.map((row) => {
     const fixtureSourceDirectory = validateRepositoryPath({
@@ -334,12 +456,24 @@ export const planInstallMatrixVerification = ({
     return {
       id: row.id,
       packageManager: row.packageManager,
+      runtime: row.runtime,
       fixtureSourceDirectory,
       fixtureTemporaryDirectory,
-      installCommand: expandCommandTokens(row.installCommand, { packageTarball, packageTarballUrl }, row.id),
-      runCommand: expandCommandTokens(row.runCommand, { packageTarball, packageTarballUrl }, row.id),
+      installCommand: expandCommandTokens(
+        row.installCommand,
+        { packageTarball, packageTarballUrl, denoPackageSpecifier },
+        row.id,
+        row.runtime,
+      ),
+      runCommand: expandCommandTokens(
+        row.runCommand,
+        { packageTarball, packageTarballUrl, denoPackageSpecifier },
+        row.id,
+        row.runtime,
+      ),
       expectedStdoutFile,
       expectedExitStatus: row.expectedExitStatus,
+      denoPackageSpecifier: row.runtime === 'deno' ? denoPackageSpecifier : undefined,
     }
   })
 }
@@ -464,6 +598,42 @@ export const executeCommand = async (execution: CommandExecution): Promise<Comma
   })
 }
 
+export const writeTemporaryDenoFixtureConfig = async (
+  row: Pick<ExecutableInstallMatrixRow, 'id' | 'fixtureTemporaryDirectory' | 'denoPackageSpecifier' | 'npmRegistryUrl'>,
+): Promise<void> => {
+  const { denoPackageSpecifier, npmRegistryUrl } = row
+
+  if (!denoPackageSpecifier) {
+    throw new Error(`Install-matrix row ${row.id} cannot prepare a Deno fixture without a Deno package specifier`)
+  }
+
+  if (!npmRegistryUrl) {
+    throw new Error(`Install-matrix row ${row.id} cannot prepare a Deno fixture without a loopback npm registry URL`)
+  }
+
+  const denoJsonPath = path.join(row.fixtureTemporaryDirectory, 'deno.json')
+  const denoJson = await readFile(denoJsonPath, 'utf8')
+
+  if (!denoJson.includes(denoPackageSpecifierToken)) {
+    throw new Error(`Install-matrix row ${row.id} Deno fixture does not contain ${denoPackageSpecifierToken}`)
+  }
+
+  const resolvedDenoJson = denoJson.replaceAll(denoPackageSpecifierToken, denoPackageSpecifier)
+
+  if (resolvedDenoJson.includes(denoPackageSpecifierToken)) {
+    throw new Error(`Install-matrix row ${row.id} Deno fixture contains unresolved command tokens`)
+  }
+
+  await writeFile(denoJsonPath, resolvedDenoJson)
+  await writeFile(path.join(row.fixtureTemporaryDirectory, '.npmrc'), `registry=${npmRegistryUrl}\n`)
+}
+
+const prepareTemporaryFixture = async (row: ExecutableInstallMatrixRow): Promise<void> => {
+  if (row.packageManager === 'deno') {
+    await writeTemporaryDenoFixtureConfig(row)
+  }
+}
+
 export const runInstallMatrixRows = async (
   rows: ExecutableInstallMatrixRow[],
   options: RunInstallMatrixRowsOptions = {},
@@ -476,6 +646,8 @@ export const runInstallMatrixRows = async (
   const removeFixture = options.removeFixture ?? (async (targetDirectory) => {
     await rm(targetDirectory, { force: true, recursive: true })
   })
+  const prepareFixture = options.prepareFixture ?? prepareTemporaryFixture
+  const afterInstall = options.afterInstall ?? (async () => undefined)
   const execute = options.execute ?? executeCommand
   const keepFixtures = options.keepFixtures ?? false
   const env = options.env ?? process.env
@@ -490,6 +662,7 @@ export const runInstallMatrixRows = async (
 
     try {
       await copyFixture(executableRow.fixtureSourceDirectory, executableRow.fixtureTemporaryDirectory, executableRow)
+      await prepareFixture(executableRow)
 
       const installResult = await execute({
         rowId: executableRow.id,
@@ -505,6 +678,7 @@ export const runInstallMatrixRows = async (
         result: installResult,
         expectedExitStatus: executableRow.expectedExitStatus,
       })
+      await afterInstall(executableRow)
 
       const runResult = await execute({
         rowId: executableRow.id,
@@ -535,16 +709,33 @@ export const runInstallMatrixRows = async (
 
 export const createRowEnvironment = (
   baseEnv: NodeJS.ProcessEnv,
-  row: Pick<ExecutableInstallMatrixRow, 'packageManager'>,
+  row: Pick<ExecutableInstallMatrixRow, 'packageManager' | 'fixtureTemporaryDirectory' | 'npmRegistryUrl'>,
 ): NodeJS.ProcessEnv => {
-  if (row.packageManager !== 'yarn') {
-    return baseEnv
+  let rowEnv = baseEnv
+
+  if (row.packageManager === 'yarn') {
+    rowEnv = {
+      ...rowEnv,
+      YARN_NODE_LINKER: 'node-modules',
+    }
   }
 
-  return {
-    ...baseEnv,
-    YARN_NODE_LINKER: 'node-modules',
+  if (row.packageManager === 'deno') {
+    if (!row.npmRegistryUrl) {
+      throw new Error('Deno install-matrix rows require a loopback npm registry URL')
+    }
+
+    rowEnv = {
+      ...rowEnv,
+      DENO_DIR: path.join(row.fixtureTemporaryDirectory, '.deno-cache'),
+      NPM_CONFIG_REGISTRY: row.npmRegistryUrl,
+      NPM_CONFIG_USERCONFIG: path.join(row.fixtureTemporaryDirectory, '.npmrc'),
+      npm_config_registry: row.npmRegistryUrl,
+      npm_config_userconfig: path.join(row.fixtureTemporaryDirectory, '.npmrc'),
+    }
   }
+
+  return rowEnv
 }
 
 export const packCurrentPackage = async ({
@@ -570,6 +761,34 @@ export const packCurrentPackage = async ({
   }
 
   return path.join(artefactDirectory, tarballs[0])
+}
+
+const readPackageJsonMetadata = async (repositoryRoot: string): Promise<PackageJsonMetadata> => {
+  return JSON.parse(await readFile(path.join(repositoryRoot, 'package.json'), 'utf8')) as PackageJsonMetadata
+}
+
+const readAvailableDenoVersionOutput = async (repositoryRoot: string): Promise<string> => {
+  const result = await executeCommand({
+    rowId: 'deno-2',
+    phase: 'install',
+    command: 'deno',
+    arguments_: ['--version'],
+    cwd: repositoryRoot,
+    env: process.env,
+  })
+
+  if (result.error) {
+    throw new Error(`Deno 2.x is required for the deno-2 install-matrix row: ${result.error.message}`)
+  }
+
+  if (result.exitStatus !== 0) {
+    const stderr = trimForError(result.stderr)
+    const stderrMessage = stderr.length > 0 ? `: ${stderr}` : ''
+
+    throw new Error(`Deno 2.x is required for the deno-2 install-matrix row; deno --version exited ${result.exitStatus}${stderrMessage}`)
+  }
+
+  return `${result.stdout}${result.stderr}`
 }
 
 const createTarballServer = async (tarballPath: string): Promise<TarballServer> => {
@@ -605,6 +824,111 @@ const createTarballServer = async (tarballPath: string): Promise<TarballServer> 
   return {
     url: `http://127.0.0.1:${address.port}/deep-redact.tgz`,
     close: () => closeServer(server),
+  }
+}
+
+export const createNpmRegistryServer = async ({
+  packageJson,
+  packageTarball,
+}: CreateNpmRegistryServerOptions): Promise<NpmRegistryServer> => {
+  const packageName = typeof packageJson.name === 'string' ? packageJson.name : ''
+  const packageVersion = typeof packageJson.version === 'string' ? packageJson.version : ''
+
+  resolveDenoPackageSpecifier(packageJson)
+
+  const encodedPackageName = encodeURIComponent(packageName)
+  const tarballRoute = `/${encodedPackageName}/-/${path.basename(packageTarball)}`
+  const tarballBytes = await readFile(packageTarball)
+  const tarballShasum = createHash('sha1').update(tarballBytes).digest('hex')
+  const tarballIntegrity = `sha512-${createHash('sha512').update(tarballBytes).digest('base64')}`
+  let registryUrl = ''
+  let tarballUrl = ''
+  let metadataRequests = 0
+  let tarballRequests = 0
+
+  const server = createServer(async (request, response) => {
+    if (!request.url) {
+      response.writeHead(400)
+      response.end()
+
+      return
+    }
+
+    const requestUrl = new URL(request.url, 'http://127.0.0.1')
+    const decodedPath = decodeURIComponent(requestUrl.pathname)
+
+    if (decodedPath === `/${packageName}`) {
+      metadataRequests += 1
+      response.writeHead(200, {
+        'content-type': 'application/json',
+      })
+      response.end(JSON.stringify({
+        _id: packageName,
+        name: packageName,
+        'dist-tags': {
+          latest: packageVersion,
+        },
+        versions: {
+          [packageVersion]: {
+            name: packageName,
+            version: packageVersion,
+            dist: {
+              tarball: tarballUrl,
+              shasum: tarballShasum,
+              integrity: tarballIntegrity,
+            },
+          },
+        },
+      }))
+
+      return
+    }
+
+    if (requestUrl.pathname === tarballRoute) {
+      tarballRequests += 1
+      const tarballStats = await stat(packageTarball)
+
+      response.writeHead(200, {
+        'content-length': String(tarballStats.size),
+        'content-type': 'application/octet-stream',
+      })
+      createReadStream(packageTarball).pipe(response)
+
+      return
+    }
+
+    response.writeHead(404)
+    response.end()
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    server.on('error', reject)
+    server.listen(0, '127.0.0.1', resolve)
+  })
+
+  const address = server.address()
+
+  if (address === null || typeof address === 'string') {
+    await closeServer(server)
+    throw new Error('Failed to start loopback npm registry for Deno install row')
+  }
+
+  registryUrl = `http://127.0.0.1:${address.port}/`
+  tarballUrl = `${registryUrl}${encodedPackageName}/-/${path.basename(packageTarball)}`
+
+  return {
+    registryUrl,
+    tarballUrl,
+    close: () => closeServer(server),
+    packageMetadataRequestCount: () => metadataRequests,
+    packageTarballRequestCount: () => tarballRequests,
+    assertCurrentPackageRequested: () => {
+      if (metadataRequests === 0 || tarballRequests === 0) {
+        throw new Error(
+          `Deno install did not request current package metadata or tarball for ${packageName}@${packageVersion}`,
+        )
+      }
+    },
   }
 }
 
@@ -688,12 +1012,15 @@ const readExecutableRows = async (
   return Promise.all(plannedRows.map(async (row) => ({
     id: row.id,
     packageManager: row.packageManager,
+    runtime: row.runtime,
     fixtureSourceDirectory: row.fixtureSourceDirectory,
     fixtureTemporaryDirectory: row.fixtureTemporaryDirectory,
     installCommand: row.installCommand,
     runCommand: row.runCommand,
     expectedStdout: await readExpectedStdout(row.expectedStdoutFile, row),
     expectedExitStatus: row.expectedExitStatus,
+    denoPackageSpecifier: row.denoPackageSpecifier,
+    npmRegistryUrl: row.npmRegistryUrl,
   })))
 }
 
@@ -706,18 +1033,28 @@ const isBunFileUrlFallbackCandidate = (error: unknown): boolean => {
 export const runInstallMatrixVerification = async ({
   matrix,
   activeNodeVersion,
+  packageJson,
   packageTarball,
   repositoryRoot,
   temporaryRoot,
   preparePackageManagers: prepareRows = preparePackageManagers,
   readExpectedStdout,
   createTarballServer: createHttpTarballServer = createTarballServer,
+  createNpmRegistryServer: createLoopbackNpmRegistry = createNpmRegistryServer,
+  readDenoVersionOutput,
   ...runRowsOptions
 }: RunInstallMatrixVerificationOptions): Promise<ExecutableInstallMatrixRow[]> => {
+  const hasDenoRows = matrix.rows.some((row) => row.runtime === 'deno')
+  const packageMetadata = packageJson ?? (hasDenoRows ? await readPackageJsonMetadata(repositoryRoot) : undefined)
+  const activeDenoVersionOutput = hasDenoRows
+    ? await (readDenoVersionOutput ?? (() => readAvailableDenoVersionOutput(repositoryRoot)))()
+    : undefined
   const packageTarballFileUrl = pathToFileURL(packageTarball).href
   const plannedRows = planInstallMatrixVerification({
     matrix,
     activeNodeVersion,
+    activeDenoVersionOutput,
+    packageJson: packageMetadata,
     packageTarball,
     packageTarballUrl: packageTarballFileUrl,
     repositoryRoot,
@@ -725,50 +1062,78 @@ export const runInstallMatrixVerification = async ({
   })
   await prepareRows(plannedRows, repositoryRoot)
 
-  const nonBunPlannedRows = plannedRows.filter((row) => row.packageManager !== 'bun')
+  const nonBunPlannedRows = plannedRows.filter((row) => row.packageManager !== 'bun' && row.packageManager !== 'deno')
   const bunPlannedRows = plannedRows.filter((row) => row.packageManager === 'bun')
+  const denoPlannedRows = plannedRows.filter((row) => row.packageManager === 'deno')
   const verifiedRows: ExecutableInstallMatrixRow[] = []
   const nonBunRows = await readExecutableRows(nonBunPlannedRows, readExpectedStdout)
 
   await runInstallMatrixRows(nonBunRows, runRowsOptions)
   verifiedRows.push(...nonBunRows)
 
-  if (bunPlannedRows.length === 0) {
-    return verifiedRows
-  }
+  if (bunPlannedRows.length > 0) {
+    const bunFileUrlRows = await readExecutableRows(bunPlannedRows, readExpectedStdout)
 
-  const bunFileUrlRows = await readExecutableRows(bunPlannedRows, readExpectedStdout)
+    try {
+      await runInstallMatrixRows(bunFileUrlRows, runRowsOptions)
+      verifiedRows.push(...bunFileUrlRows)
+    } catch (error: unknown) {
+      if (!isBunFileUrlFallbackCandidate(error)) {
+        throw error
+      }
 
-  try {
-    await runInstallMatrixRows(bunFileUrlRows, runRowsOptions)
-    verifiedRows.push(...bunFileUrlRows)
+      const tarballServer = await createHttpTarballServer(packageTarball)
 
-    return verifiedRows
-  } catch (error: unknown) {
-    if (!isBunFileUrlFallbackCandidate(error)) {
-      throw error
+      try {
+        const httpPlannedRows = planInstallMatrixVerification({
+          matrix,
+          activeNodeVersion,
+          activeDenoVersionOutput,
+          packageJson: packageMetadata,
+          packageTarball,
+          packageTarballUrl: tarballServer.url,
+          repositoryRoot,
+          temporaryRoot,
+        }).filter((row) => row.packageManager === 'bun')
+        const bunHttpRows = await readExecutableRows(httpPlannedRows, readExpectedStdout)
+
+        await runInstallMatrixRows(bunHttpRows, runRowsOptions)
+        verifiedRows.push(...bunHttpRows)
+      } finally {
+        await tarballServer.close()
+      }
     }
   }
 
-  const tarballServer = await createHttpTarballServer(packageTarball)
+  if (denoPlannedRows.length === 0) {
+    return verifiedRows
+  }
+
+  const npmRegistry = await createLoopbackNpmRegistry({
+    packageJson: packageMetadata ?? {},
+    packageTarball,
+  })
 
   try {
-    const httpPlannedRows = planInstallMatrixVerification({
-      matrix,
-      activeNodeVersion,
-      packageTarball,
-      packageTarballUrl: tarballServer.url,
-      repositoryRoot,
-      temporaryRoot,
-    }).filter((row) => row.packageManager === 'bun')
-    const bunHttpRows = await readExecutableRows(httpPlannedRows, readExpectedStdout)
+    const executableDenoRows = await readExecutableRows(denoPlannedRows, readExpectedStdout)
+    const denoRows = executableDenoRows.map((row) => ({
+      ...row,
+      npmRegistryUrl: npmRegistry.registryUrl,
+    }))
+    const afterInstall = async (row: ExecutableInstallMatrixRow): Promise<void> => {
+      await runRowsOptions.afterInstall?.(row)
+      npmRegistry.assertCurrentPackageRequested()
+    }
 
-    await runInstallMatrixRows(bunHttpRows, runRowsOptions)
-    verifiedRows.push(...bunHttpRows)
+    await runInstallMatrixRows(denoRows, {
+      ...runRowsOptions,
+      afterInstall,
+    })
+    verifiedRows.push(...denoRows)
 
     return verifiedRows
   } finally {
-    await tarballServer.close()
+    await npmRegistry.close()
   }
 }
 

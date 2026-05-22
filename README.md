@@ -10,6 +10,40 @@ Deep Redact v4 is currently in its foundation phase. The initial v4 foundation w
 - `Vitest`
 - `xo`
 
+## Installation
+
+```sh
+npm install @hackylabs/deep-redact
+pnpm add @hackylabs/deep-redact
+yarn add @hackylabs/deep-redact
+bun add @hackylabs/deep-redact
+```
+
+### Deno Baseline
+
+```json
+{
+  "imports": {
+    "@hackylabs/deep-redact": "npm:@hackylabs/deep-redact@4.0.0"
+  }
+}
+```
+
+```sh
+deno install --entrypoint smoke.ts
+deno run smoke.ts
+```
+
+```ts
+import { deepRedact } from '@hackylabs/deep-redact'
+
+const redact = deepRedact({ paths: ['user.password', 'token'] })
+const payload = { user: { password: 'secret' }, token: 'abc123', ok: true }
+const redactedPayload = redact(payload)
+
+console.log(JSON.stringify(redactedPayload))
+```
+
 ## Public API
 
 ```ts

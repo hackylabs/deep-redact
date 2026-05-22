@@ -1,12 +1,17 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   compareStdout,
+  createNpmRegistryServer,
   expandCommandTokens,
   planInstallMatrixVerification,
+  resolveDenoPackageSpecifier,
   runInstallMatrixVerification,
   runInstallMatrixRows,
+  selectDenoRows,
   selectNodeRows,
   validateRepositoryPath,
   type CommandExecution,
@@ -28,6 +33,17 @@ const row = (overrides: Partial<InstallMatrixRow> = {}): InstallMatrixRow => ({
   runCommand: ['node', 'smoke.mjs'],
   expectedStdoutFile: 'test/artefacts/install-matrix/expected/baseline-structured.stdout',
   expectedExitStatus: 0,
+  ...overrides,
+})
+
+const denoRow = (overrides: Partial<InstallMatrixRow> = {}): InstallMatrixRow => row({
+  id: 'deno-2',
+  packageManager: 'deno',
+  runtime: 'deno',
+  fixtureDir: 'test/fixtures/compatibility/install/deno-baseline',
+  runtimeVersion: 'deno@2',
+  installCommand: ['deno', 'install', '--entrypoint', 'smoke.ts'],
+  runCommand: ['deno', 'run', 'smoke.ts'],
   ...overrides,
 })
 
@@ -53,6 +69,10 @@ const packageTokens = {
   packageTarball: '/tmp/deep-redact.tgz',
   packageTarballUrl: 'http://127.0.0.1/deep-redact.tgz',
 }
+const packageMetadata = {
+  name: '@hackylabs/deep-redact',
+  version: '4.0.0',
+}
 
 describe('install matrix verifier planning', () => {
   it('selects only Node package-manager rows for the active exact Node version', () => {
@@ -69,6 +89,29 @@ describe('install matrix verifier planning', () => {
 
     expect(selectNodeRows(installMatrix, 'v22.18.0').map(({ id }) => id)).toStrictEqual(node22Rows)
     expect(selectNodeRows(installMatrix, 'v24.14.1').map(({ id }) => id)).toStrictEqual(node24Rows)
+  })
+
+  it('selects the Deno row only for an available Deno 2 runtime', () => {
+    const installMatrix = matrix([
+      row({ id: 'npm-node24' }),
+      denoRow(),
+    ])
+
+    expect(selectDenoRows(installMatrix, 'deno 2.5.6 (stable, release, aarch64-apple-darwin)\n'))
+      .toStrictEqual([denoRow()])
+
+    expect(() => selectDenoRows(installMatrix, 'deno 1.46.3 (stable, release)\n'))
+      .toThrow(/deno-2.*requires Deno 2/)
+    expect(() => selectDenoRows(matrix([denoRow({ runtimeVersion: 'deno@2.1.0' })]), 'deno 2.5.6\n'))
+      .toThrow(/deno-2.*runtimeVersion.*deno@2/)
+    expect(() => selectDenoRows(matrix([]), 'deno 2.5.6\n'))
+      .toThrow(/deno-2/)
+  })
+
+  it('resolves the documented Deno npm package specifier from current package metadata', () => {
+    expect(resolveDenoPackageSpecifier(packageMetadata)).toBe('npm:@hackylabs/deep-redact@4.0.0')
+    expect(() => resolveDenoPackageSpecifier({ name: '@hackylabs/deep-redact', version: 'latest' }))
+      .toThrow(/pinned package version/)
   })
 
   it('fails malformed Node runtime versions and active runtimes with no matching rows', () => {
@@ -109,6 +152,19 @@ describe('install matrix verifier planning', () => {
 
     expect(() => expandCommandTokens(['npm', 'install', '{packageVersion}'], packageTokens, 'npm-node24'))
       .toThrow(/unsupported command token.*npm-node24/)
+
+    expect(() => expandCommandTokens(
+      ['npm', 'install', '{denoPackageSpecifier}'],
+      { ...packageTokens, denoPackageSpecifier: 'npm:@hackylabs/deep-redact@4.0.0' },
+      'npm-node24',
+    )).toThrow(/unsupported command token.*npm-node24/)
+
+    expect(expandCommandTokens(
+      ['deno', 'cache', '{denoPackageSpecifier}'],
+      { ...packageTokens, denoPackageSpecifier: 'npm:@hackylabs/deep-redact@4.0.0' },
+      'deno-2',
+      'deno',
+    )).toStrictEqual(['deno', 'cache', 'npm:@hackylabs/deep-redact@4.0.0'])
   })
 
   it('rejects repository paths outside the allowed verification roots', () => {
@@ -152,22 +208,52 @@ describe('install matrix verifier planning', () => {
           packageManager: 'bun',
           installCommand: ['bun', 'add', '@hackylabs/deep-redact@{packageTarballUrl}'],
         }),
-        row({ id: 'deno-2', packageManager: 'deno', runtime: 'deno', runtimeVersion: 'deno@2' }),
+        denoRow(),
       ]),
       activeNodeVersion: 'v24.14.1',
+      activeDenoVersionOutput: 'deno 2.5.6 (stable, release)\n',
+      packageJson: packageMetadata,
       packageTarball: '/tmp/deep-redact.tgz',
       packageTarballUrl: 'http://127.0.0.1/deep-redact.tgz',
       repositoryRoot: '/repo',
       temporaryRoot: '/tmp',
     })
 
-    expect(planned).toHaveLength(4)
-    expect(planned.map(({ id }) => id)).not.toContain('deno-2')
+    expect(selectNodeRows(matrix([
+      row({ id: 'npm-node24' }),
+      row({ id: 'pnpm-node24', packageManager: 'pnpm', installCommand: ['pnpm', 'add', '{packageTarball}'] }),
+      row({
+        id: 'yarn-node24',
+        packageManager: 'yarn',
+        installCommand: ['yarn', 'add', '@hackylabs/deep-redact@file:{packageTarball}'],
+      }),
+      row({
+        id: 'bun-node24',
+        packageManager: 'bun',
+        installCommand: ['bun', 'add', '@hackylabs/deep-redact@{packageTarballUrl}'],
+      }),
+      denoRow(),
+    ]), 'v24.14.1')).toHaveLength(4)
+    expect(planned).toHaveLength(5)
+    expect(planned.map(({ id }) => id)).toStrictEqual([
+      'npm-node24',
+      'pnpm-node24',
+      'yarn-node24',
+      'bun-node24',
+      'deno-2',
+    ])
     expect(planned[0]).toMatchObject({
       id: 'npm-node24',
       fixtureSourceDirectory: path.resolve('/repo/test/fixtures/compatibility/install/node-baseline'),
       installCommand: ['npm', 'install', '/tmp/deep-redact.tgz'],
       runCommand: ['node', 'smoke.mjs'],
+    })
+    expect(planned[4]).toMatchObject({
+      id: 'deno-2',
+      fixtureSourceDirectory: path.resolve('/repo/test/fixtures/compatibility/install/deno-baseline'),
+      installCommand: ['deno', 'install', '--entrypoint', 'smoke.ts'],
+      runCommand: ['deno', 'run', 'smoke.ts'],
+      denoPackageSpecifier: 'npm:@hackylabs/deep-redact@4.0.0',
     })
     expect(planned[0].fixtureTemporaryDirectory).toContain(path.resolve('/tmp'))
   })
@@ -391,6 +477,201 @@ describe('install matrix verifier execution', () => {
     expect(environmentByPhase.get('install')?.YARN_NODE_LINKER).toBe('node-modules')
     expect(environmentByPhase.get('run')?.YARN_NODE_LINKER).toBe('node-modules')
   })
+
+  it('prepares Deno rows with fixture-local import maps, registry configuration, and isolated cache cleanup', async () => {
+    const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'deep-redact-deno-row-test-'))
+    const fixtureTemporaryDirectory = path.join(temporaryRoot, 'deno-fixture')
+    const executions: CommandExecution[] = []
+    const committedDenoJsonPath = 'test/fixtures/compatibility/install/deno-baseline/deno.json'
+
+    try {
+      await runInstallMatrixRows([
+        {
+          id: 'deno-2',
+          packageManager: 'deno',
+          fixtureSourceDirectory: path.resolve('test/fixtures/compatibility/install/deno-baseline'),
+          fixtureTemporaryDirectory,
+          installCommand: ['deno', 'install', '--entrypoint', 'smoke.ts'],
+          runCommand: ['deno', 'run', 'smoke.ts'],
+          expectedStdout: 'ok\n',
+          expectedExitStatus: 0,
+          denoPackageSpecifier: 'npm:@hackylabs/deep-redact@4.0.0',
+          npmRegistryUrl: 'http://127.0.0.1:4873/',
+        },
+      ], {
+        createTemporaryFixtureDirectory: usePlannedTemporaryDirectory,
+        execute: async (execution) => {
+          executions.push(execution)
+
+          const temporaryDenoJson = JSON.parse(
+            await readFile(path.join(execution.cwd, 'deno.json'), 'utf8'),
+          ) as { imports: Record<string, string> }
+          const temporaryNpmrc = await readFile(path.join(execution.cwd, '.npmrc'), 'utf8')
+
+          expect(temporaryDenoJson.imports['@hackylabs/deep-redact'])
+            .toBe('npm:@hackylabs/deep-redact@4.0.0')
+          expect(temporaryNpmrc).toContain('registry=http://127.0.0.1:4873/')
+          expect(temporaryNpmrc).not.toContain('@hackylabs:registry')
+          expect(execution.env.DENO_DIR).toBe(path.join(execution.cwd, '.deno-cache'))
+          expect(execution.env.NPM_CONFIG_REGISTRY).toBe('http://127.0.0.1:4873/')
+          expect(execution.env.NPM_CONFIG_USERCONFIG).toBe(path.join(execution.cwd, '.npmrc'))
+
+          return {
+            exitStatus: 0,
+            stdout: execution.phase === 'run' ? 'ok\n' : '',
+            stderr: '',
+          }
+        },
+        keepFixtures: false,
+        env: { PATH: '/bin', DENO_DIR: '/global/cache' },
+      })
+
+      expect(executions.map(({ command, arguments_, phase }) => ({ arguments_, command, phase }))).toStrictEqual([
+        { command: 'deno', arguments_: ['install', '--entrypoint', 'smoke.ts'], phase: 'install' },
+        { command: 'deno', arguments_: ['run', 'smoke.ts'], phase: 'run' },
+      ])
+      expect(existsSync(fixtureTemporaryDirectory)).toBe(false)
+      expect(readFileSync(committedDenoJsonPath, 'utf8')).toContain('{denoPackageSpecifier}')
+    } finally {
+      await rm(temporaryRoot, { force: true, recursive: true })
+    }
+  })
+})
+
+describe('install matrix verifier Deno package source handling', () => {
+  it('serves only the current package metadata and packed tarball from the loopback npm registry', async () => {
+    const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'deep-redact-registry-test-'))
+    const tarballPath = path.join(temporaryRoot, 'hackylabs-deep-redact-4.0.0.tgz')
+
+    await writeFile(tarballPath, 'packed-package')
+
+    const registry = await createNpmRegistryServer({
+      packageJson: packageMetadata,
+      packageTarball: tarballPath,
+    })
+
+    try {
+      const metadataResponse = await fetch(`${registry.registryUrl}@hackylabs%2Fdeep-redact`)
+      const metadata = await metadataResponse.json() as {
+        versions: Record<string, { dist: { tarball: string } }>;
+      }
+      const tarballResponse = await fetch(metadata.versions['4.0.0'].dist.tarball)
+      const missingResponse = await fetch(`${registry.registryUrl}left-pad`)
+
+      expect(metadataResponse.status).toBe(200)
+      expect(metadata.versions['4.0.0'].dist.tarball).toBe(registry.tarballUrl)
+      expect(await tarballResponse.text()).toBe('packed-package')
+      expect(missingResponse.status).toBe(404)
+      expect(registry.packageMetadataRequestCount()).toBe(1)
+      expect(registry.packageTarballRequestCount()).toBe(1)
+      expect(() => registry.assertCurrentPackageRequested()).not.toThrow()
+    } finally {
+      await registry.close()
+      await rm(temporaryRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('fails Deno verification when the install does not request current package metadata and tarball', async () => {
+    await expect(runInstallMatrixVerification({
+      matrix: matrix([
+        row({ id: 'npm-node24', packageManager: 'npm' }),
+        row({ id: 'pnpm-node24', packageManager: 'pnpm', installCommand: ['pnpm', 'add', '{packageTarball}'] }),
+        row({
+          id: 'yarn-node24',
+          packageManager: 'yarn',
+          installCommand: ['yarn', 'add', '@hackylabs/deep-redact@file:{packageTarball}'],
+        }),
+        row({
+          id: 'bun-node24',
+          packageManager: 'bun',
+          installCommand: ['bun', 'add', '@hackylabs/deep-redact@{packageTarballUrl}'],
+        }),
+        denoRow(),
+      ]),
+      activeNodeVersion: 'v24.14.1',
+      packageJson: packageMetadata,
+      packageTarball: '/tmp/deep-redact.tgz',
+      repositoryRoot: '/repo',
+      temporaryRoot: '/tmp',
+      copyFixture: noopAsync,
+      removeFixture: noopAsync,
+      prepareFixture: noopAsync,
+      createTemporaryFixtureDirectory: async (prefix) => `${prefix}-created`,
+      readExpectedStdout: async () => 'ok\n',
+      preparePackageManagers: noopAsync,
+      readDenoVersionOutput: async () => 'deno 2.5.6 (stable, release)\n',
+      createNpmRegistryServer: async () => ({
+        registryUrl: 'http://127.0.0.1:4873/',
+        tarballUrl: 'http://127.0.0.1:4873/@hackylabs%2Fdeep-redact/-/deep-redact.tgz',
+        close: async () => undefined,
+        packageMetadataRequestCount: () => 0,
+        packageTarballRequestCount: () => 0,
+        assertCurrentPackageRequested: () => {
+          throw new Error('Deno install did not request current package metadata or tarball')
+        },
+      }),
+      execute: async (execution) => ({
+        exitStatus: 0,
+        stdout: execution.phase === 'run' ? 'ok\n' : '',
+        stderr: '',
+      }),
+      keepFixtures: false,
+    })).rejects.toThrow(/Deno install did not request current package metadata or tarball/)
+  })
+
+  it('asserts the verifier-controlled package source before the Deno run phase can fetch dependencies', async () => {
+    let lastCompletedPhase: CommandExecution['phase'] | undefined
+
+    await runInstallMatrixVerification({
+      matrix: matrix([
+        row({ id: 'npm-node24', packageManager: 'npm' }),
+        row({ id: 'pnpm-node24', packageManager: 'pnpm', installCommand: ['pnpm', 'add', '{packageTarball}'] }),
+        row({
+          id: 'yarn-node24',
+          packageManager: 'yarn',
+          installCommand: ['yarn', 'add', '@hackylabs/deep-redact@file:{packageTarball}'],
+        }),
+        row({
+          id: 'bun-node24',
+          packageManager: 'bun',
+          installCommand: ['bun', 'add', '@hackylabs/deep-redact@{packageTarballUrl}'],
+        }),
+        denoRow(),
+      ]),
+      activeNodeVersion: 'v24.14.1',
+      packageJson: packageMetadata,
+      packageTarball: '/tmp/deep-redact.tgz',
+      repositoryRoot: '/repo',
+      temporaryRoot: '/tmp',
+      copyFixture: noopAsync,
+      removeFixture: noopAsync,
+      prepareFixture: noopAsync,
+      createTemporaryFixtureDirectory: async (prefix) => `${prefix}-created`,
+      readExpectedStdout: async () => 'ok\n',
+      preparePackageManagers: noopAsync,
+      readDenoVersionOutput: async () => 'deno 2.5.6 (stable, release)\n',
+      createNpmRegistryServer: async () => ({
+        registryUrl: 'http://127.0.0.1:4873/',
+        tarballUrl: 'http://127.0.0.1:4873/@hackylabs%2Fdeep-redact/-/deep-redact.tgz',
+        close: async () => undefined,
+        packageMetadataRequestCount: () => 1,
+        packageTarballRequestCount: () => 1,
+        assertCurrentPackageRequested: () => {
+          expect(lastCompletedPhase).toBe('install')
+        },
+      }),
+      execute: async (execution) => {
+        lastCompletedPhase = execution.phase
+
+        return {
+          exitStatus: 0,
+          stdout: execution.phase === 'run' ? 'ok\n' : '',
+          stderr: '',
+        }
+      },
+      keepFixtures: false,
+    })
+  })
 })
 
 describe('install matrix verifier Bun package source handling', () => {
@@ -479,13 +760,15 @@ describe('install matrix release gate wiring', () => {
     expect(packageJson.scripts['verify:install-matrix']).not.toContain('.agents/initialise-env.sh')
   })
 
-  it('gates npm publish behind exact Node 22 and Node 24 install-matrix verification jobs', () => {
+  it('gates npm publish behind exact Node 22, Node 24, and Deno 2 install-matrix verification jobs', () => {
     const workflow = readFileSync('.github/workflows/npmPublish.yml', 'utf8')
 
     expect(workflow).toContain('verify-install-matrix:')
     expect(workflow).toContain("- '22.18.0'")
     expect(workflow).toContain("- '24.14.1'")
     expect(workflow).toContain('node-version: ${{ matrix.node-version }}')
+    expect(workflow).toContain('denoland/setup-deno@v2')
+    expect(workflow).toContain('deno-version: v2.x')
     expect(workflow).toContain('oven-sh/setup-bun@v2')
     expect(workflow).toContain('corepack prepare pnpm@10.33.0 --activate')
     expect(workflow).toContain('corepack prepare yarn@stable --activate')

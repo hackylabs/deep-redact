@@ -10,6 +10,8 @@ Deep Redact v4 is currently in its foundation phase. The initial v4 foundation w
 - `Vitest`
 - `xo`
 
+{{INSTALLATION_DOCUMENTATION}}
+
 ## Public API
 
 ```ts
