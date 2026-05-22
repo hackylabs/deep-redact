@@ -72,6 +72,7 @@
     "test": "pnpm run build && pnpm run test:contract",
     "test:contract": "pnpm exec vitest run test/build.test.ts test/contract/**/*.test.ts --reporter=verbose",
     "test:red-phase": "pnpm exec vitest run --config vitest.red-phase.config.ts",
+    "verify:install-matrix": "pnpm run build && node --experimental-strip-types ./scripts/verify-install-matrix.ts",
     "verify-generated-files": "node --experimental-strip-types ./scripts/verify-generated-files.ts"
   },
   "//": [
