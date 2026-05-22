@@ -1,0 +1,1 @@
+{ "user": { "password": "safe-password", "name": "Alice" }, "config": { "apiKey": "will-fail" } }

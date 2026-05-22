@@ -5,5 +5,141 @@
     "fixtureRoot": "docs/examples/fixtures",
     "assertionModes": ["structured-output", "serialised-output"]
   },
-  "rows": []
+  "rows": [
+    {
+      "id": "singleton-setup",
+      "category": "setup",
+      "docTarget": "docs/examples/singleton-setup.md",
+      "sourceFile": "docs/examples/examples/singleton-setup.ts",
+      "fixtureDir": "docs/examples/fixtures/singleton-setup",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "key-targeting",
+      "category": "targeting",
+      "docTarget": "docs/examples/key-targeting.md",
+      "sourceFile": "docs/examples/examples/key-targeting.ts",
+      "fixtureDir": "docs/examples/fixtures/key-targeting",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "regex-property-matching",
+      "category": "targeting",
+      "docTarget": "docs/examples/regex-property-matching.md",
+      "sourceFile": "docs/examples/examples/regex-property-matching.ts",
+      "fixtureDir": "docs/examples/fixtures/regex-property-matching",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "path-targeting",
+      "category": "targeting",
+      "docTarget": "docs/examples/path-targeting.md",
+      "sourceFile": "docs/examples/examples/path-targeting.ts",
+      "fixtureDir": "docs/examples/fixtures/path-targeting",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "regex-path-segment-matching",
+      "category": "targeting",
+      "docTarget": "docs/examples/regex-path-segment-matching.md",
+      "sourceFile": "docs/examples/examples/regex-path-segment-matching.ts",
+      "fixtureDir": "docs/examples/fixtures/regex-path-segment-matching",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "substring-targeting",
+      "category": "targeting",
+      "docTarget": "docs/examples/substring-targeting.md",
+      "sourceFile": "docs/examples/examples/substring-targeting.ts",
+      "fixtureDir": "docs/examples/fixtures/substring-targeting",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "root-primitive-redaction",
+      "category": "targeting",
+      "docTarget": "docs/examples/root-primitive-redaction.md",
+      "sourceFile": "docs/examples/examples/root-primitive-redaction.ts",
+      "fixtureDir": "docs/examples/fixtures/root-primitive-redaction",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "replacement-and-removal",
+      "category": "replacement",
+      "docTarget": "docs/examples/replacement-and-removal.md",
+      "sourceFile": "docs/examples/examples/replacement-and-removal.ts",
+      "fixtureDir": "docs/examples/fixtures/replacement-and-removal",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "retain-structure",
+      "category": "replacement",
+      "docTarget": "docs/examples/retain-structure.md",
+      "sourceFile": "docs/examples/examples/retain-structure.ts",
+      "fixtureDir": "docs/examples/fixtures/retain-structure",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "same-length-replacement",
+      "category": "replacement",
+      "docTarget": "docs/examples/same-length-replacement.md",
+      "sourceFile": "docs/examples/examples/same-length-replacement.ts",
+      "fixtureDir": "docs/examples/fixtures/same-length-replacement",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "serialised-output",
+      "category": "output",
+      "docTarget": "docs/examples/serialised-output.md",
+      "sourceFile": "docs/examples/examples/serialised-output.ts",
+      "fixtureDir": "docs/examples/fixtures/serialised-output",
+      "assertionMode": "serialised-output",
+      "expectedResultFile": "expected.txt"
+    },
+    {
+      "id": "ignored-value-types",
+      "category": "runtime",
+      "docTarget": "docs/examples/ignored-value-types.md",
+      "sourceFile": "docs/examples/examples/ignored-value-types.ts",
+      "fixtureDir": "docs/examples/fixtures/ignored-value-types",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "custom-transformer",
+      "category": "runtime",
+      "docTarget": "docs/examples/custom-transformer.md",
+      "sourceFile": "docs/examples/examples/custom-transformer.ts",
+      "fixtureDir": "docs/examples/fixtures/custom-transformer",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "graceful-error-replacement",
+      "category": "runtime",
+      "docTarget": "docs/examples/graceful-error-replacement.md",
+      "sourceFile": "docs/examples/examples/graceful-error-replacement.ts",
+      "fixtureDir": "docs/examples/fixtures/graceful-error-replacement",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "console-redaction",
+      "category": "console",
+      "docTarget": "docs/examples/console-redaction.md",
+      "sourceFile": "docs/examples/examples/console-redaction.ts",
+      "fixtureDir": "docs/examples/fixtures/console-redaction",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    }
+  ]
 }

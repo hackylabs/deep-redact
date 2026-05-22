@@ -156,10 +156,34 @@ describe('example manifest contract', () => {
     expect(() => validateExampleManifest(invalidManifest)).toThrow(/fixtureDir/)
   })
 
-  it('runs verifyExampleManifest against the real manifest and returns an empty array without error', async () => {
+  it('runs verifyExampleManifest against the real manifest and returns verified rows without error', async () => {
     const result = await verifyExampleManifest({ repositoryRoot: repoRoot })
 
-    expect(result).toStrictEqual([])
+    expect(result).toHaveLength(15)
+    expect(result.map(r => r.id)).toStrictEqual([
+      'singleton-setup',
+      'key-targeting',
+      'regex-property-matching',
+      'path-targeting',
+      'regex-path-segment-matching',
+      'substring-targeting',
+      'root-primitive-redaction',
+      'replacement-and-removal',
+      'retain-structure',
+      'same-length-replacement',
+      'serialised-output',
+      'ignored-value-types',
+      'custom-transformer',
+      'graceful-error-replacement',
+      'console-redaction',
+    ])
+  })
+
+  it('contains exactly 15 non-migration example rows', () => {
+    const manifest = loadExampleManifest(repoRoot)
+
+    expect(manifest.rows).toHaveLength(15)
+    expect(manifest.rows.every(r => !r.category.startsWith('migration-'))).toBe(true)
   })
 
   it('exposes the example verifier through package scripts without widening the runtime API', () => {

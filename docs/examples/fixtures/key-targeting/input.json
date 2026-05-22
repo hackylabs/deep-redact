@@ -1,0 +1,1 @@
+{ "user": { "password": "pass1", "name": "Alice" }, "config": { "secret": "sec1", "timeout": 30 } }

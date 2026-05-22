@@ -1,0 +1,1 @@
+{ "user": { "profile": { "ssn": "123-45-6789", "name": "Alice" }, "credentials": { "token": "tok1", "type": "bearer" } } }
