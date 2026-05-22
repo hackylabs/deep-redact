@@ -77,6 +77,7 @@
     "verify:install-matrix": "pnpm run build && node --experimental-strip-types ./scripts/verify-install-matrix.ts",
     "verify:migration:fast-redact": "pnpm run build && node --experimental-strip-types ./scripts/verify-fast-redact-migration.ts",
     "verify:migration:v3": "pnpm run build && node --experimental-strip-types ./scripts/verify-v3-migration.ts",
+    "verify:examples": "pnpm run build && node --experimental-strip-types ./scripts/verify-examples.ts",
     "verify-generated-files": "node --experimental-strip-types ./scripts/verify-generated-files.ts"
   },
   "//": [

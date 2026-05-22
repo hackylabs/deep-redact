@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "title": "Deep Redact Worked-Example Manifest",
+    "fixtureRoot": "docs/examples/fixtures",
+    "assertionModes": ["structured-output", "serialised-output"]
+  },
+  "rows": []
+}

@@ -1,3 +1,10 @@
+## Deferred from: code review of 5-6-establish-the-worked-example-manifest-and-validation-harness (2026-05-22)
+
+- **Test hardcodes `[]` expectation for `verifyExampleManifest`** — correct for Story 5.6 scope (empty manifest) but will break when Story 5.7 adds rows; update this test as part of Story 5.7. `test/contract/examples/example-manifest.test.ts`.
+- **`loadExampleManifest` surfaces a raw `SyntaxError` on invalid JSON** — no filename context in the error message. Consistent with existing `loadV3MigrationMatrix` pattern; CI runs committed files. `scripts/example-validation.ts:88–90`.
+- **Contract tests do not assert `ExampleVerificationError` property fields** — `rowId`, `fixtureDir`, `assertionMode`, `phase` not exercised. Add when row-execution tests are introduced in Stories 5.7/5.8. `test/contract/examples/example-manifest.test.ts`.
+- **`verify:examples` triggers a full rebuild on every CI run** — consistent with all other `verify:*` scripts; not worth changing in isolation. `package.json`, `.github/workflows/npmPublish.yml`.
+
 ## Deferred from: code review of 5-5-publish-a-dedicated-deep-redact-v3-to-v4-migration-path (2026-05-22)
 
 - **No `v4-initialisation-error` manifest rows** — declared mode never exercised via `verify:migration:v3`; rejection proofs exist only as direct contract-test calls. Deferred: contract-test coverage accepted as sufficient. `scripts/v3-migration.ts`, `test/migration/v3/matrix.json`.
