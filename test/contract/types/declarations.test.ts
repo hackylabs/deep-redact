@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createConsumerFixture, runTypesFixture } from '../support/package-fixture.js'
+import { assertNoDeniedDeclarationSurface } from '../../fixtures/one-way-deny-list/index.js'
 
 const cleanups: Array<() => void> = []
 
@@ -20,5 +23,14 @@ describe('Type declaration contract', () => {
     const result = await runTypesFixture(fixture.temporaryDirectory)
 
     expect(result.stderr).toBe('')
+  })
+
+  it.each([
+    'dist/index.d.ts',
+    'dist/index.d.cts',
+  ])('exposes no restore-like declaration surface in %s', (declarationPath) => {
+    const declarationText = readFileSync(resolve(declarationPath), 'utf8')
+
+    assertNoDeniedDeclarationSurface(declarationText, declarationPath)
   })
 })

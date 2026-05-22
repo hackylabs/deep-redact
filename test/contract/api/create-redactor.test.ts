@@ -34,6 +34,15 @@ import {
   buildGeneratedPrecedenceDocument,
   generatedFilePaths,
 } from '../../../scripts/generated-files.ts'
+import {
+  assertNoDeniedDeclarationSurface,
+  assertNoDeniedPublicNames,
+  assertOneWaySerialisedOutput,
+  assertOneWayStructuredOutput,
+  createOneWayDenyListFixture,
+  deniedPublicIntentTerms,
+  oneWayDeniedOptionNames,
+} from '../../fixtures/one-way-deny-list/index.js'
 
 const buildBigInt = (value: bigint) => ({
   _transformer: 'bigint',
@@ -436,6 +445,124 @@ describe('Reusable redactor factory contract', () => {
     ],
   ])('rejects conflicting options for %s', (_label, options, expectedMessage) => {
     expect(() => deepRedact(options)).toThrow(expectedMessage)
+  })
+
+  describe('One-way redaction contract', () => {
+    it.each(oneWayDeniedOptionNames)('rejects restore-like root option "%s"', (optionName) => {
+      expect(() => deepRedact({
+        paths: ['account.secret'],
+        [optionName]: true,
+      } as never)).toThrow(new RegExp(`Unsupported option "${optionName}"`, 'i'))
+    })
+
+    it.each(oneWayDeniedOptionNames)('rejects restore-like path-rule option "%s"', (optionName) => {
+      expect(() => deepRedact({
+        paths: [
+          {
+            path: 'account.secret',
+            [optionName]: true,
+          },
+        ],
+      } as never)).toThrow(new RegExp(`Unsupported option "${optionName}"`, 'i'))
+    })
+
+    it('exposes no restore-like methods or properties on returned redactors', () => {
+      const redact = deepRedact({
+        paths: ['account.secret'],
+      })
+
+      assertNoDeniedPublicNames(Reflect.ownKeys(redact), 'redactor own keys')
+      assertNoDeniedPublicNames(
+        Reflect.ownKeys((redact as { readonly prototype: object }).prototype),
+        'redactor prototype own keys',
+      )
+      expect(Reflect.ownKeys(redact).sort()).toStrictEqual(['length', 'name', 'prototype'])
+      expect(Reflect.ownKeys((redact as { readonly prototype: object }).prototype)).toStrictEqual(['constructor'])
+    })
+
+    it('defines a canonical deny-list fixture with sentinel variants and denied public intent terms', () => {
+      const fixture = createOneWayDenyListFixture()
+      const expectedBase64 = Buffer.from(fixture.sensitiveValue, 'utf8').toString('base64')
+      const expectedHex = Buffer.from(fixture.sensitiveValue, 'utf8').toString('hex')
+      const expectedUri = encodeURIComponent(fixture.sensitiveValue)
+
+      expect(deniedPublicIntentTerms).toStrictEqual(['restore', 'unredact', 'reveal', 'decode'])
+      expect(fixture.sensitiveValue).toBe('story-4-5-secret-value/token')
+      expect(fixture.sensitiveValueVariants).toStrictEqual({
+        base64: expectedBase64,
+        base64Unpadded: expectedBase64.replaceAll(/=+$/g, ''),
+        base64Url: expectedBase64.replaceAll('+', '-').replaceAll('/', '_').replaceAll(/=+$/g, ''),
+        hex: expectedHex,
+        hexUpper: expectedHex.toUpperCase(),
+        raw: fixture.sensitiveValue,
+        uri: expectedUri,
+        uriLower: expectedUri.replaceAll(/%[0-9A-F]{2}/g, (match) => match.toLowerCase()),
+        unicodeEscaped: [...fixture.sensitiveValue]
+          .map((character) => `\\u${character.codePointAt(0)!.toString(16).padStart(4, '0')}`)
+          .join(''),
+      })
+      expect(() => assertOneWaySerialisedOutput(
+        `{"leak":"${fixture.sensitiveValueVariants.base64}"}`,
+        fixture,
+      )).toThrow(/base64 sensitive value/i)
+      expect(() => assertOneWaySerialisedOutput(
+        `{"leak":"${fixture.sensitiveValueVariants.unicodeEscaped}"}`,
+        fixture,
+      )).toThrow(/sensitive value/i)
+      expect(() => assertOneWayStructuredOutput(
+        new Map([['leak', fixture.sensitiveValue]]),
+        fixture,
+      )).toThrow(/raw sensitive value/i)
+
+      const outputWithAccessor = {}
+      Object.defineProperty(outputWithAccessor, 'safe', {
+        enumerable: true,
+        get: () => fixture.sensitiveValue,
+      })
+      expect(() => assertOneWayStructuredOutput(outputWithAccessor, fixture)).toThrow(/accessor descriptor/i)
+      expect(() => assertNoDeniedDeclarationSurface(`
+        interface Leak {
+          restore(): void;
+          reveal?: boolean;
+          "decode"?: boolean;
+        }
+        declare function unredact(): void;
+      `, 'synthetic declarations')).toThrow(/restore|unredact|reveal|decode/i)
+    })
+
+    it('returns structured output without reversible values, metadata, or source handles', () => {
+      const fixture = createOneWayDenyListFixture()
+      const redact = deepRedact(fixture.createOptions({ serialise: false }))
+      const result = redact(fixture.payload)
+
+      expect(result).toStrictEqual(fixture.expectedStructuredOutput)
+      assertOneWayStructuredOutput(result, fixture)
+    })
+
+    it('returns serialised output without reversible values, metadata, or source handles', () => {
+      const fixture = createOneWayDenyListFixture()
+      const redact = deepRedact(fixture.createOptions({ serialise: true }))
+      const result = redact(fixture.payload)
+
+      expect(result).toBe(fixture.expectedSerialisedOutput)
+      assertOneWaySerialisedOutput(result as string, fixture)
+    })
+
+    it('passes only the already-redacted structure to custom serialisers', () => {
+      const fixture = createOneWayDenyListFixture()
+      const serialise = vi.fn((value: unknown) => {
+        expect(value).toStrictEqual(fixture.expectedStructuredOutput)
+        assertOneWayStructuredOutput(value, fixture)
+
+        return JSON.stringify({ wrapped: value })
+      })
+      const redact = deepRedact(fixture.createOptions({ serialise }))
+      const result = redact(fixture.payload)
+
+      expect(result).toBe(`{"wrapped":${fixture.expectedSerialisedOutput}}`)
+      expect(serialise).toHaveBeenCalledTimes(1)
+      expect(serialise).toHaveBeenCalledWith(fixture.expectedStructuredOutput)
+    })
   })
 
   it('accepts non-stateful RegExp key selectors during initialisation', () => {

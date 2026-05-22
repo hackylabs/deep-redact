@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { renderPrecedenceDocument } from '../test/fixtures/precedence-matrix/index.ts'
+import { renderOneWayRedactionDocument } from '../test/fixtures/one-way-deny-list/index.ts'
 
 type PackageJson = Record<string, unknown> & {
   exports?: Record<string, unknown>;
@@ -59,7 +60,12 @@ export const buildGeneratedPrecedenceDocument = (): string => {
   return renderPrecedenceDocument()
 }
 
+export const buildGeneratedOneWayRedactionDocument = (): string => {
+  return renderOneWayRedactionDocument()
+}
+
 export const generatedFilePaths = {
+  oneWayRedactionDocPath: path.join(repositoryRoot, 'docs', 'architecture', 'one-way-redaction.md'),
   packageJsonPath,
   precedenceDocPath: path.join(repositoryRoot, 'docs', 'architecture', 'precedence.md'),
   readmePath: path.join(repositoryRoot, 'README.md'),

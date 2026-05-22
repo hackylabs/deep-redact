@@ -58,8 +58,9 @@
   "scripts": {
     "bench": "pnpm exec vitest bench --config vitest.bench.config.ts --run",
     "build": "pnpm run verify-generated-files && pnpm exec tsdown",
-    "generate": "pnpm run generate-exports && pnpm run generate-readme && pnpm run generate-precedence-doc",
+    "generate": "pnpm run generate-exports && pnpm run generate-readme && pnpm run generate-precedence-doc && pnpm run generate-one-way-redaction-doc",
     "generate-exports": "node --experimental-strip-types ./scripts/generate-exports.ts",
+    "generate-one-way-redaction-doc": "node --experimental-strip-types ./scripts/generate-one-way-redaction-doc.ts",
     "generate-precedence-doc": "node --experimental-strip-types ./scripts/generate-precedence-doc.ts",
     "generate-readme": "node --experimental-strip-types ./scripts/generate-readme.ts",
     "lint": "pnpm exec eslint . && pnpm exec tsc --noEmit",

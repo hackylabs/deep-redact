@@ -182,6 +182,14 @@ const aliasResult = alias({ ok: true })
 const invalidLegacyOption: DeepRedactOptions = { serialize: true }
 // @ts-expect-error v4 does not expose the legacy v3 key option
 const invalidLegacyKeys: DeepRedactOptions = { blacklistedKeys: ['password'] }
+// @ts-expect-error Deep Redact does not expose restore capability
+const invalidRestoreOption: DeepRedactOptions = { restore: true }
+// @ts-expect-error Deep Redact does not expose unredact capability
+const invalidUnredactOption: DeepRedactOptions = { unredact: true }
+// @ts-expect-error Deep Redact does not expose reveal capability
+const invalidRevealOption: DeepRedactOptions = { reveal: true }
+// @ts-expect-error Deep Redact does not expose decode capability
+const invalidDecodeOption: DeepRedactOptions = { decode: true }
 // @ts-expect-error the reusable redactor accepts payload input only after initialisation
 redact({ ok: true }, options)
 
@@ -211,3 +219,7 @@ void exampleSegments
 void exampleCtx
 void invalidLegacyOption
 void invalidLegacyKeys
+void invalidRestoreOption
+void invalidUnredactOption
+void invalidRevealOption
+void invalidDecodeOption

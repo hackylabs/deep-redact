@@ -111,6 +111,14 @@ const serialisedResult = alias({ ok: true })
 deepRedactPackage.deepRedact({ serialize: true })
 // @ts-expect-error v4 does not expose the legacy v3 key option
 deepRedactPackage.deepRedact({ blacklistedKeys: ['password'] })
+// @ts-expect-error Deep Redact does not expose restore capability
+deepRedactPackage.deepRedact({ restore: true })
+// @ts-expect-error Deep Redact does not expose unredact capability
+deepRedactPackage.deepRedact({ unredact: true })
+// @ts-expect-error Deep Redact does not expose reveal capability
+deepRedactPackage.deepRedact({ reveal: true })
+// @ts-expect-error Deep Redact does not expose decode capability
+deepRedactPackage.deepRedact({ decode: true })
 
 void structuredResult
 void serialisedResult

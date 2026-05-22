@@ -18,5 +18,8 @@ console.log(JSON.stringify({
   deepRedactType: typeof packageSurface.deepRedact,
   exposesLegacyClass: Object.prototype.hasOwnProperty.call(packageSurface, 'DeepRedact'),
   exportNames: Object.keys(packageSurface).sort(),
+  exportOwnKeys: Reflect.ownKeys(packageSurface).map(String).sort(),
+  redactorOwnKeys: Reflect.ownKeys(redact).map(String).sort(),
+  redactorPrototypeOwnKeys: Reflect.ownKeys(redact.prototype).map(String).sort(),
   sharesFactory: packageSurface.createRedactor === packageSurface.deepRedact,
 }))

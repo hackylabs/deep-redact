@@ -2,6 +2,11 @@ import { createRequire } from 'node:module'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import {
+  assertNoDeniedPublicNames,
+  publicPackageOwnKeys,
+  publicValueExportNames,
+} from './fixtures/one-way-deny-list/index.js'
 
 const require = createRequire(import.meta.url)
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
@@ -18,6 +23,7 @@ describe('Package build surface', () => {
       },
       './package.json': './package.json',
     })
+    assertNoDeniedPublicNames(Object.keys(packageJson.exports), 'package export map')
   })
 
   it('emits dual-format artefacts and declaration files', () => {
@@ -30,10 +36,16 @@ describe('Package build surface', () => {
   it('does not advertise the legacy class on the built root surface', async () => {
     const esmModule = await import(resolve('dist/index.js'))
     const cjsModule = require(resolve('dist/index.cjs'))
+    const esmOwnKeys = Reflect.ownKeys(esmModule)
+    const cjsOwnKeys = Reflect.ownKeys(cjsModule)
 
     expect(esmModule).not.toHaveProperty('DeepRedact')
     expect(cjsModule).not.toHaveProperty('DeepRedact')
-    expect(esmModule).toHaveProperty('deepRedact')
-    expect(cjsModule).toHaveProperty('createRedactor')
+    expect(Object.keys(esmModule).sort()).toStrictEqual(publicValueExportNames)
+    expect(Object.keys(cjsModule).sort()).toStrictEqual(publicValueExportNames)
+    expect(esmOwnKeys.map(String).sort()).toStrictEqual(publicPackageOwnKeys)
+    expect(cjsOwnKeys.map(String).sort()).toStrictEqual(publicPackageOwnKeys)
+    assertNoDeniedPublicNames(esmOwnKeys, 'built ESM root exports')
+    assertNoDeniedPublicNames(cjsOwnKeys, 'built CommonJS root exports')
   })
 })

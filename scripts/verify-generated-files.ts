@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import {
+  buildGeneratedOneWayRedactionDocument,
   buildGeneratedPrecedenceDocument,
   buildGeneratedReadme,
   generatedFilePaths,
@@ -28,6 +29,13 @@ const expectedPrecedenceDocument = buildGeneratedPrecedenceDocument()
 
 if (currentPrecedenceDocument !== expectedPrecedenceDocument) {
   mismatches.push('docs/architecture/precedence.md is out of date')
+}
+
+const currentOneWayRedactionDocument = readFileSync(generatedFilePaths.oneWayRedactionDocPath, 'utf8')
+const expectedOneWayRedactionDocument = buildGeneratedOneWayRedactionDocument()
+
+if (currentOneWayRedactionDocument !== expectedOneWayRedactionDocument) {
+  mismatches.push('docs/architecture/one-way-redaction.md is out of date')
 }
 
 if (mismatches.length > 0) {
