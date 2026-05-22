@@ -1,0 +1,7 @@
+{
+  "user": {
+    "password": "secret123"
+  },
+  "token": "abc",
+  "email": "user@example.com"
+}

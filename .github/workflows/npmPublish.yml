@@ -45,6 +45,7 @@ jobs:
       - run: pnpm run lint
       - run: pnpm run test
       - run: pnpm run verify:migration:fast-redact
+      - run: pnpm run verify:migration:v3
       - run: pnpm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

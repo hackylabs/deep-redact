@@ -1,0 +1,1 @@
+A real migration typically involves renaming multiple options at once. This row proves `blacklistedKeys` → `keys`, `replacement` → `censor`, and `retainStructure` carrying over, all in one configuration.

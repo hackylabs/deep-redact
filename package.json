@@ -63,9 +63,10 @@
   "scripts": {
     "bench": "pnpm exec vitest bench --config vitest.bench.config.ts --run",
     "build": "pnpm run verify-generated-files && pnpm exec tsdown",
-    "generate": "pnpm run generate-exports && pnpm run generate-readme && pnpm run generate-precedence-doc && pnpm run generate-one-way-redaction-doc && pnpm run generate-fast-redact-migration-doc",
+    "generate": "pnpm run generate-exports && pnpm run generate-readme && pnpm run generate-precedence-doc && pnpm run generate-one-way-redaction-doc && pnpm run generate-fast-redact-migration-doc && pnpm run generate-v3-migration-doc",
     "generate-exports": "node --experimental-strip-types ./scripts/generate-exports.ts",
     "generate-fast-redact-migration-doc": "node --experimental-strip-types ./scripts/generate-fast-redact-migration-doc.ts",
+    "generate-v3-migration-doc": "node --experimental-strip-types ./scripts/generate-v3-migration-doc.ts",
     "generate-one-way-redaction-doc": "node --experimental-strip-types ./scripts/generate-one-way-redaction-doc.ts",
     "generate-precedence-doc": "node --experimental-strip-types ./scripts/generate-precedence-doc.ts",
     "generate-readme": "node --experimental-strip-types ./scripts/generate-readme.ts",
@@ -75,6 +76,7 @@
     "test:red-phase": "pnpm exec vitest run --config vitest.red-phase.config.ts",
     "verify:install-matrix": "pnpm run build && node --experimental-strip-types ./scripts/verify-install-matrix.ts",
     "verify:migration:fast-redact": "pnpm run build && node --experimental-strip-types ./scripts/verify-fast-redact-migration.ts",
+    "verify:migration:v3": "pnpm run build && node --experimental-strip-types ./scripts/verify-v3-migration.ts",
     "verify-generated-files": "node --experimental-strip-types ./scripts/verify-generated-files.ts"
   },
   "//": [

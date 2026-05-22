@@ -8,6 +8,10 @@ import {
   loadFastRedactMigrationMatrix,
   renderFastRedactMigrationGuide,
 } from './fast-redact-migration.ts'
+import {
+  loadV3MigrationMatrix,
+  renderV3MigrationGuide,
+} from './v3-migration.ts'
 
 type PackageJson = Record<string, unknown> & {
   exports?: Record<string, unknown>;
@@ -84,8 +88,13 @@ export const buildGeneratedFastRedactMigrationGuide = (): string => {
   return renderFastRedactMigrationGuide(loadFastRedactMigrationMatrix(repositoryRoot), repositoryRoot)
 }
 
+export const buildGeneratedV3MigrationGuide = (): string => {
+  return renderV3MigrationGuide(loadV3MigrationMatrix(repositoryRoot), repositoryRoot)
+}
+
 export const generatedFilePaths = {
   fastRedactMigrationGuidePath: path.join(repositoryRoot, 'docs', 'migration', 'from-fast-redact.md'),
+  v3MigrationGuidePath: path.join(repositoryRoot, 'docs', 'migration', 'from-v3.md'),
   oneWayRedactionDocPath: path.join(repositoryRoot, 'docs', 'architecture', 'one-way-redaction.md'),
   packageJsonPath,
   precedenceDocPath: path.join(repositoryRoot, 'docs', 'architecture', 'precedence.md'),

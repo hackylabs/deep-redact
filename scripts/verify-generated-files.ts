@@ -4,6 +4,7 @@ import {
   buildGeneratedOneWayRedactionDocument,
   buildGeneratedPrecedenceDocument,
   buildGeneratedReadme,
+  buildGeneratedV3MigrationGuide,
   generatedFilePaths,
   readPackageJson,
   serialisePackageJson,
@@ -44,6 +45,13 @@ const expectedFastRedactMigrationGuide = buildGeneratedFastRedactMigrationGuide(
 
 if (currentFastRedactMigrationGuide !== expectedFastRedactMigrationGuide) {
   mismatches.push('docs/migration/from-fast-redact.md is out of date')
+}
+
+const currentV3MigrationGuide = readFileSync(generatedFilePaths.v3MigrationGuidePath, 'utf8')
+const expectedV3MigrationGuide = buildGeneratedV3MigrationGuide()
+
+if (currentV3MigrationGuide !== expectedV3MigrationGuide) {
+  mismatches.push('docs/migration/from-v3.md is out of date')
 }
 
 if (mismatches.length > 0) {

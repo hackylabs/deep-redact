@@ -1,0 +1,7 @@
+{
+  "homeAddress": {
+    "street": "123 Main St",
+    "city": "Springfield"
+  },
+  "email": "user@example.com"
+}

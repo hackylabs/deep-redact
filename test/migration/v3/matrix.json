@@ -1,0 +1,275 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "title": "Deep Redact v3-to-v4 Migration Matrix",
+    "sourcePackage": "@hackylabs/deep-redact",
+    "generatedGuide": "docs/migration/from-v3.md",
+    "fixtureRoot": "test/migration/v3/fixtures",
+    "helperIds": {
+      "maskValueType": "Returns '[masked-{typeof value}]', matching the pattern of a simple v3 replacement function."
+    }
+  },
+  "rows": [
+    {
+      "id": "class-instantiation-to-factory",
+      "fixtureDir": "test/migration/v3/fixtures/class-instantiation-to-factory",
+      "v3Usage": {
+        "import": "DeepRedact",
+        "instantiation": "new DeepRedact({ blacklistedKeys: ['password', 'token'], replacement: '[REDACTED]' })",
+        "invocation": "redactor.redact(payload)"
+      },
+      "v4Usage": {
+        "import": "deepRedact",
+        "factory": "deepRedact({ keys: ['password', 'token'], censor: '[REDACTED]' })",
+        "invocation": "redactor(payload)",
+        "config": {
+          "keys": ["password", "token"],
+          "censor": "[REDACTED]"
+        }
+      },
+      "migrationSteps": [
+        "Replace `new DeepRedact(options)` with `deepRedact(options)`.",
+        "Replace `redactor.redact(payload)` with `redactor(payload)`.",
+        "Rename `blacklistedKeys` to `keys`.",
+        "Rename `replacement` to `censor`."
+      ],
+      "assertionMode": "v4-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "invocation-pattern-change",
+      "fixtureDir": "test/migration/v3/fixtures/invocation-pattern-change",
+      "v3Usage": {
+        "import": "DeepRedact",
+        "instantiation": "new DeepRedact({ blacklistedKeys: ['apiKey'] })",
+        "invocation": "redactor.redact(payload)"
+      },
+      "v4Usage": {
+        "import": "deepRedact",
+        "factory": "deepRedact({ keys: ['apiKey'] })",
+        "invocation": "redactor(payload)",
+        "config": {
+          "keys": ["apiKey"]
+        }
+      },
+      "migrationSteps": [
+        "Replace `new DeepRedact(options)` with `deepRedact(options)`.",
+        "Replace `redactor.redact(payload)` with `redactor(payload)`. The value returned by `deepRedact(...)` is directly callable."
+      ],
+      "assertionMode": "v4-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "blacklisted-keys-rename",
+      "fixtureDir": "test/migration/v3/fixtures/blacklisted-keys-rename",
+      "v3Usage": {
+        "import": "DeepRedact",
+        "instantiation": "new DeepRedact({ blacklistedKeys: ['password'] })",
+        "invocation": "redactor.redact(payload)"
+      },
+      "v4Usage": {
+        "import": "deepRedact",
+        "factory": "deepRedact({ keys: ['password'] })",
+        "invocation": "redactor(payload)",
+        "config": {
+          "keys": ["password"]
+        }
+      },
+      "migrationSteps": [
+        "Rename `blacklistedKeys` to `keys`.",
+        "Replace `new DeepRedact(options)` with `deepRedact(options)`.",
+        "Replace `redactor.redact(payload)` with `redactor(payload)`."
+      ],
+      "assertionMode": "v4-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "replacement-string-rename",
+      "fixtureDir": "test/migration/v3/fixtures/replacement-string-rename",
+      "v3Usage": {
+        "import": "DeepRedact",
+        "instantiation": "new DeepRedact({ blacklistedKeys: ['ssn'], replacement: '[PRIVATE]' })",
+        "invocation": "redactor.redact(payload)"
+      },
+      "v4Usage": {
+        "import": "deepRedact",
+        "factory": "deepRedact({ keys: ['ssn'], censor: '[PRIVATE]' })",
+        "invocation": "redactor(payload)",
+        "config": {
+          "keys": ["ssn"],
+          "censor": "[PRIVATE]"
+        }
+      },
+      "migrationSteps": [
+        "Rename `replacement` to `censor`. A literal string value migrates directly with no semantic change.",
+        "Rename `blacklistedKeys` to `keys`.",
+        "Replace `new DeepRedact(options)` with `deepRedact(options)`.",
+        "Replace `redactor.redact(payload)` with `redactor(payload)`."
+      ],
+      "assertionMode": "v4-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "replacement-function-rename",
+      "fixtureDir": "test/migration/v3/fixtures/replacement-function-rename",
+      "v3Usage": {
+        "import": "DeepRedact",
+        "instantiation": "new DeepRedact({ blacklistedKeys: ['token'], replacement: (value) => `[masked-${typeof value}]` })",
+        "invocation": "redactor.redact(payload)"
+      },
+      "v4Usage": {
+        "import": "deepRedact",
+        "factory": "deepRedact({ keys: ['token'], censor: (value) => `[masked-${typeof value}]` })",
+        "invocation": "redactor(payload)",
+        "config": {
+          "keys": ["token"],
+          "censor": { "helperId": "maskValueType" }
+        }
+      },
+      "migrationSteps": [
+        "Rename `replacement` to `censor`. A function value migrates directly: the v4 censor receives an optional second context argument, so existing single-argument functions continue to work unchanged.",
+        "Rename `blacklistedKeys` to `keys`.",
+        "Replace `new DeepRedact(options)` with `deepRedact(options)`.",
+        "Replace `redactor.redact(payload)` with `redactor(payload)`."
+      ],
+      "assertionMode": "v4-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "unchanged-options",
+      "fixtureDir": "test/migration/v3/fixtures/unchanged-options",
+      "v3Usage": {
+        "import": "DeepRedact",
+        "instantiation": "new DeepRedact({ blacklistedKeys: ['address'], retainStructure: true, fuzzyKeyMatch: true, caseSensitiveKeyMatch: false })",
+        "invocation": "redactor.redact(payload)"
+      },
+      "v4Usage": {
+        "import": "deepRedact",
+        "factory": "deepRedact({ keys: ['address'], retainStructure: true, fuzzyKeyMatch: true, caseSensitiveKeyMatch: false })",
+        "invocation": "redactor(payload)",
+        "config": {
+          "keys": ["address"],
+          "retainStructure": true,
+          "fuzzyKeyMatch": true,
+          "caseSensitiveKeyMatch": false
+        }
+      },
+      "migrationSteps": [
+        "Rename `blacklistedKeys` to `keys`.",
+        "Replace `new DeepRedact(options)` with `deepRedact(options)`.",
+        "Replace `redactor.redact(payload)` with `redactor(payload)`.",
+        "Options `retainStructure`, `fuzzyKeyMatch`, and `caseSensitiveKeyMatch` carry over unchanged; `replaceStringByLength` also carries over unchanged with the same name and semantics."
+      ],
+      "assertionMode": "v4-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "serialise-option-carryover",
+      "fixtureDir": "test/migration/v3/fixtures/serialise-option-carryover",
+      "v3Usage": {
+        "import": "DeepRedact",
+        "instantiation": "new DeepRedact({ blacklistedKeys: ['password'], serialise: true })",
+        "invocation": "redactor.redact(payload)"
+      },
+      "v4Usage": {
+        "import": "deepRedact",
+        "factory": "deepRedact({ keys: ['password'], serialise: true })",
+        "invocation": "redactor(payload)",
+        "config": {
+          "keys": ["password"],
+          "serialise": true
+        }
+      },
+      "migrationSteps": [
+        "Rename `blacklistedKeys` to `keys`.",
+        "Replace `new DeepRedact(options)` with `deepRedact(options)`.",
+        "Replace `redactor.redact(payload)` with `redactor(payload)`.",
+        "The British-English spelling `serialise` carries over unchanged. If you were using the American-English alias `serialize`, rename it to `serialise`."
+      ],
+      "assertionMode": "v4-serialised-output",
+      "expectedResult": {
+        "kind": "serialised",
+        "file": "expected-v4.txt"
+      }
+    },
+    {
+      "id": "remove-option-carryover",
+      "fixtureDir": "test/migration/v3/fixtures/remove-option-carryover",
+      "v3Usage": {
+        "import": "DeepRedact",
+        "instantiation": "new DeepRedact({ blacklistedKeys: ['password'], remove: true })",
+        "invocation": "redactor.redact(payload)"
+      },
+      "v4Usage": {
+        "import": "deepRedact",
+        "factory": "deepRedact({ keys: ['password'], remove: true })",
+        "invocation": "redactor(payload)",
+        "config": {
+          "keys": ["password"],
+          "remove": true
+        }
+      },
+      "migrationSteps": [
+        "Rename `blacklistedKeys` to `keys`.",
+        "Replace `new DeepRedact(options)` with `deepRedact(options)`.",
+        "Replace `redactor.redact(payload)` with `redactor(payload)`.",
+        "The `remove` option carries over unchanged."
+      ],
+      "assertionMode": "v4-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "combined-migration",
+      "fixtureDir": "test/migration/v3/fixtures/combined-migration",
+      "v3Usage": {
+        "import": "DeepRedact",
+        "instantiation": "new DeepRedact({ blacklistedKeys: ['credentials', 'token'], replacement: '[REDACTED]', retainStructure: true, caseSensitiveKeyMatch: false })",
+        "invocation": "redactor.redact(payload)"
+      },
+      "v4Usage": {
+        "import": "deepRedact",
+        "factory": "deepRedact({ keys: ['credentials', 'token'], censor: '[REDACTED]', retainStructure: true, caseSensitiveKeyMatch: false })",
+        "invocation": "redactor(payload)",
+        "config": {
+          "keys": ["credentials", "token"],
+          "censor": "[REDACTED]",
+          "retainStructure": true,
+          "caseSensitiveKeyMatch": false
+        }
+      },
+      "migrationSteps": [
+        "Rename `blacklistedKeys` to `keys`.",
+        "Rename `replacement` to `censor`.",
+        "Replace `new DeepRedact(options)` with `deepRedact(options)`.",
+        "Replace `redactor.redact(payload)` with `redactor(payload)`.",
+        "Options that carry over unchanged (`retainStructure`, `caseSensitiveKeyMatch`) need no further changes."
+      ],
+      "assertionMode": "v4-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    }
+  ]
+}
