@@ -1,0 +1,13 @@
+{
+  "accounts": [
+    {
+      "name": "primary",
+      "secret": "[REDACTED]"
+    },
+    {
+      "name": "backup",
+      "secret": "[REDACTED]"
+    }
+  ],
+  "requestId": "req-8"
+}

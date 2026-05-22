@@ -1,0 +1,7 @@
+{
+  "session": {
+    "token": "session-secret",
+    "scope": "admin"
+  },
+  "requestId": "req-6"
+}

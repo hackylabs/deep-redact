@@ -4,6 +4,10 @@ import { fileURLToPath } from 'node:url'
 import { renderPrecedenceDocument } from '../test/fixtures/precedence-matrix/index.ts'
 import { renderOneWayRedactionDocument } from '../test/fixtures/one-way-deny-list/index.ts'
 import { buildInstallDocumentation } from './install-documentation.ts'
+import {
+  loadFastRedactMigrationMatrix,
+  renderFastRedactMigrationGuide,
+} from './fast-redact-migration.ts'
 
 type PackageJson = Record<string, unknown> & {
   exports?: Record<string, unknown>;
@@ -76,7 +80,12 @@ export const buildGeneratedOneWayRedactionDocument = (): string => {
   return renderOneWayRedactionDocument()
 }
 
+export const buildGeneratedFastRedactMigrationGuide = (): string => {
+  return renderFastRedactMigrationGuide(loadFastRedactMigrationMatrix(repositoryRoot), repositoryRoot)
+}
+
 export const generatedFilePaths = {
+  fastRedactMigrationGuidePath: path.join(repositoryRoot, 'docs', 'migration', 'from-fast-redact.md'),
   oneWayRedactionDocPath: path.join(repositoryRoot, 'docs', 'architecture', 'one-way-redaction.md'),
   packageJsonPath,
   precedenceDocPath: path.join(repositoryRoot, 'docs', 'architecture', 'precedence.md'),

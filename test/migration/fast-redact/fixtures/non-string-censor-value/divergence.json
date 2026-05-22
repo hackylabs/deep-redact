@@ -1,0 +1,6 @@
+{
+  "fastRedactBehaviour": "fast-redact accepts documented non-string censor values such as number literals.",
+  "v4Behaviour": "Deep Redact v4 rejects root censor values that are neither strings nor functions.",
+  "migrationAction": "Replace non-string literal censors with a string censor or a function censor before migrating. Use a function censor if the migrated code needs to return a non-string value deliberately.",
+  "reason": "The v4 public Censor contract is intentionally narrower."
+}

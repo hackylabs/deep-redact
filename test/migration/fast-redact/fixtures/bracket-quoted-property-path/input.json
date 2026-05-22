@@ -1,0 +1,7 @@
+{
+  "headers": {
+    "X-Forwarded-For": "203.0.113.10",
+    "User-Agent": "fixture-client"
+  },
+  "requestId": "req-2"
+}

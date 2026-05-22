@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import {
+  buildGeneratedFastRedactMigrationGuide,
   buildGeneratedOneWayRedactionDocument,
   buildGeneratedPrecedenceDocument,
   buildGeneratedReadme,
@@ -36,6 +37,13 @@ const expectedOneWayRedactionDocument = buildGeneratedOneWayRedactionDocument()
 
 if (currentOneWayRedactionDocument !== expectedOneWayRedactionDocument) {
   mismatches.push('docs/architecture/one-way-redaction.md is out of date')
+}
+
+const currentFastRedactMigrationGuide = readFileSync(generatedFilePaths.fastRedactMigrationGuidePath, 'utf8')
+const expectedFastRedactMigrationGuide = buildGeneratedFastRedactMigrationGuide()
+
+if (currentFastRedactMigrationGuide !== expectedFastRedactMigrationGuide) {
+  mismatches.push('docs/migration/from-fast-redact.md is out of date')
 }
 
 if (mismatches.length > 0) {

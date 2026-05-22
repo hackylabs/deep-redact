@@ -1,0 +1,12 @@
+{
+  "accounts": [
+    {
+      "name": "primary",
+      "token": "[REDACTED]"
+    },
+    {
+      "name": "backup",
+      "token": "tok_backup"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "users": {
+    "alice": {
+      "name": "Alice",
+      "password": "[REDACTED]"
+    },
+    "bob": {
+      "name": "Bob",
+      "password": "[REDACTED]"
+    }
+  },
+  "requestId": "req-5"
+}
