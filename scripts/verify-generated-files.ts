@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import {
+  buildGeneratedPrecedenceDocument,
   buildGeneratedReadme,
   generatedFilePaths,
   readPackageJson,
@@ -20,6 +21,13 @@ const expectedReadme = buildGeneratedReadme()
 
 if (currentReadme !== expectedReadme) {
   mismatches.push('README.md is out of date')
+}
+
+const currentPrecedenceDocument = readFileSync(generatedFilePaths.precedenceDocPath, 'utf8')
+const expectedPrecedenceDocument = buildGeneratedPrecedenceDocument()
+
+if (currentPrecedenceDocument !== expectedPrecedenceDocument) {
+  mismatches.push('docs/architecture/precedence.md is out of date')
 }
 
 if (mismatches.length > 0) {

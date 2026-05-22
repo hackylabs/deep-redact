@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createRedactor,
@@ -22,6 +23,17 @@ import {
   createLaneForcedRedactorFromPlan,
   exactPathEquivalenceCorpus,
 } from '../../fixtures/exact-path-equivalence/index.js'
+import {
+  precedenceMatrixFixtures,
+  precedenceOrder,
+  requiredPrecedenceEdges,
+  type PrecedenceEdge,
+  type PrecedenceMatrixFixture,
+} from '../../fixtures/precedence-matrix/index.js'
+import {
+  buildGeneratedPrecedenceDocument,
+  generatedFilePaths,
+} from '../../../scripts/generated-files.ts'
 
 const buildBigInt = (value: bigint) => ({
   _transformer: 'bigint',
@@ -174,6 +186,85 @@ const serialisedDeterminismCases = serialisedDeterminismFixtureSets.flatMap((fix
       StructuredDeterminismFixtureSet,
       StructuredDeterminismFixture,
     ]
+  })
+})
+
+const precedenceOutputCases = precedenceMatrixFixtures
+  .filter((fixture) => fixture.outcome === 'output')
+  .map((fixture) => [fixture.name, fixture] as const)
+
+const getPrecedenceFixture = (name: string): PrecedenceMatrixFixture => {
+  const fixture = precedenceMatrixFixtures.find((candidate) => candidate.name === name)
+
+  if (fixture === undefined) {
+    throw new Error(`Missing precedence matrix fixture '${name}'.`)
+  }
+
+  return fixture
+}
+
+const createTrackedPrecedenceRuntimeCase = (fixture: PrecedenceMatrixFixture) => {
+  const trackedSpies = new Map<string, ReturnType<typeof vi.fn>>()
+  const runtimeCase = fixture.createRuntimeCase({
+    track: (label, implementation) => {
+      const spy = vi.fn(implementation)
+      trackedSpies.set(label, spy)
+
+      return spy as typeof implementation
+    },
+  })
+
+  return { runtimeCase, trackedSpies }
+}
+
+const expectTrackedPrecedenceCallCounts = (
+  runtimeCase: ReturnType<PrecedenceMatrixFixture['createRuntimeCase']>,
+  trackedSpies: ReadonlyMap<string, ReturnType<typeof vi.fn>>,
+): void => {
+  for (const expectedCallCount of runtimeCase.expectedCallCounts) {
+    const spy = trackedSpies.get(expectedCallCount.label)
+
+    expect(spy).toBeDefined()
+    expect(spy!).toHaveBeenCalledTimes(expectedCallCount.count)
+  }
+}
+
+const normalisePrecedenceDocumentationValue = (value: unknown): unknown => {
+  if (typeof value === 'function') {
+    return '[function]'
+  }
+
+  if (
+    typeof value === 'object'
+    && value !== null
+    && (value as { kind?: unknown }).kind === 'function-placeholder'
+  ) {
+    return '[function]'
+  }
+
+  if (value instanceof RegExp) {
+    return new RegExp(value.source, value.flags)
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalisePrecedenceDocumentationValue(entry))
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => {
+      return [key, normalisePrecedenceDocumentationValue(entry)]
+    }))
+  }
+
+  return value
+}
+
+const publishedPrecedenceMatrixRows = precedenceOrder.flatMap((higherPrecedenceTerm, index) => {
+  return precedenceOrder.slice(index + 1).map((lowerPrecedenceTerm) => {
+    return {
+      higher: higherPrecedenceTerm,
+      lower: lowerPrecedenceTerm,
+    }
   })
 })
 
@@ -1149,6 +1240,119 @@ describe('Reusable redactor factory contract', () => {
       expect(substringReplacer).toHaveBeenCalledTimes(1)
     })
 
+  })
+
+  describe('Normative precedence matrix', () => {
+    it('publishes the exact public total order metadata', () => {
+      expect(precedenceOrder).toStrictEqual([
+        'exact string-path',
+        'structured path',
+        'exact key',
+        'regex property',
+        'substring',
+      ])
+    })
+
+    it('backs every published overlap matrix row with exercised fixture metadata', () => {
+      const fixtureEdges: PrecedenceEdge[] = precedenceMatrixFixtures.flatMap((fixture) => [...fixture.edges])
+
+      expect(fixtureEdges).toEqual(expect.arrayContaining(publishedPrecedenceMatrixRows))
+    })
+
+    it('keeps documentation fixture fields aligned with each runtime case', () => {
+      for (const fixture of precedenceMatrixFixtures) {
+        const { runtimeCase } = createTrackedPrecedenceRuntimeCase(fixture)
+
+        expect(fixture.documentation.input).toBeDefined()
+        expect(normalisePrecedenceDocumentationValue(fixture.documentation.options))
+          .toStrictEqual(normalisePrecedenceDocumentationValue(runtimeCase.options))
+
+        if (fixture.outcome === 'output') {
+          if (runtimeCase.outcome !== 'output') {
+            throw new Error(`Fixture '${fixture.name}' did not create an output runtime case.`)
+          }
+
+          expect(fixture.documentation.input).toStrictEqual(runtimeCase.input)
+          expect(fixture.documentation.expectedOutput).toStrictEqual(runtimeCase.expectedOutput)
+        } else {
+          if (runtimeCase.outcome !== 'initialisation-error') {
+            throw new Error(`Fixture '${fixture.name}' did not create an initialisation-error runtime case.`)
+          }
+
+          expect(fixture.documentation.input).toStrictEqual(runtimeCase.input)
+          expect(fixture.documentation.expectedInitialisationError).toMatch(runtimeCase.expectedError)
+        }
+      }
+    })
+
+    it.each(precedenceOutputCases)('proves the published fixture %s', (_name, fixture) => {
+      const { runtimeCase, trackedSpies } = createTrackedPrecedenceRuntimeCase(fixture)
+
+      if (runtimeCase.outcome !== 'output') {
+        throw new Error(`Fixture '${fixture.name}' is not an output fixture.`)
+      }
+
+      const redact = deepRedact(runtimeCase.options)
+
+      expect(redact(runtimeCase.input)).toStrictEqual(runtimeCase.expectedOutput)
+      expectTrackedPrecedenceCallCounts(runtimeCase, trackedSpies)
+    })
+
+    it('fails initialisation when duplicate selectors collapse to the same canonical exact path', () => {
+      const fixture = getPrecedenceFixture('duplicate-canonical-path-init-failure')
+      const { runtimeCase } = createTrackedPrecedenceRuntimeCase(fixture)
+
+      if (runtimeCase.outcome !== 'initialisation-error') {
+        throw new Error(`Fixture '${fixture.name}' is not an initialisation-error fixture.`)
+      }
+
+      expect(() => deepRedact(runtimeCase.options)).toThrow(runtimeCase.expectedError)
+    })
+
+    it.each(requiredPrecedenceEdges)(
+      'proves %s outranks %s',
+      (higherPrecedenceTerm, lowerPrecedenceTerm, fixtureName) => {
+        const fixture = getPrecedenceFixture(fixtureName)
+        const { runtimeCase, trackedSpies } = createTrackedPrecedenceRuntimeCase(fixture)
+
+        expect(fixture.edges).toContainEqual({
+          higher: higherPrecedenceTerm,
+          lower: lowerPrecedenceTerm,
+        })
+
+        if (runtimeCase.outcome !== 'output') {
+          throw new Error(`Fixture '${fixture.name}' is not an output fixture.`)
+        }
+
+        const redact = deepRedact(runtimeCase.options)
+
+        expect(redact(runtimeCase.input)).toStrictEqual(runtimeCase.expectedOutput)
+        expectTrackedPrecedenceCallCounts(runtimeCase, trackedSpies)
+      },
+    )
+
+    it('proves same-layer exact string-path specificity with a retained parent path', () => {
+      const fixture = getPrecedenceFixture('exact-string-path-specificity')
+      const { runtimeCase, trackedSpies } = createTrackedPrecedenceRuntimeCase(fixture)
+
+      expect(fixture.edges).toContainEqual({
+        higher: 'exact string-path',
+        lower: 'less specific exact string-path',
+      })
+
+      if (runtimeCase.outcome !== 'output') {
+        throw new Error(`Fixture '${fixture.name}' is not an output fixture.`)
+      }
+
+      const redact = deepRedact(runtimeCase.options)
+
+      expect(redact(runtimeCase.input)).toStrictEqual(runtimeCase.expectedOutput)
+      expectTrackedPrecedenceCallCounts(runtimeCase, trackedSpies)
+    })
+
+    it('keeps the published precedence document in lockstep with the canonical fixture renderer', () => {
+      expect(readFileSync(generatedFilePaths.precedenceDocPath, 'utf8')).toBe(buildGeneratedPrecedenceDocument())
+    })
   })
 
   describe('Canonical nested mixed payload traversal', () => {

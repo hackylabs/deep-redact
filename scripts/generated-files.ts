@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { renderPrecedenceDocument } from '../test/fixtures/precedence-matrix/index.ts'
 
 type PackageJson = Record<string, unknown> & {
   exports?: Record<string, unknown>;
@@ -54,7 +55,12 @@ export const buildGeneratedReadme = (): string => {
     .replaceAll('{{PACKAGE_MANAGER}}', packageManager)
 }
 
+export const buildGeneratedPrecedenceDocument = (): string => {
+  return renderPrecedenceDocument()
+}
+
 export const generatedFilePaths = {
   packageJsonPath,
+  precedenceDocPath: path.join(repositoryRoot, 'docs', 'architecture', 'precedence.md'),
   readmePath: path.join(repositoryRoot, 'README.md'),
 }
