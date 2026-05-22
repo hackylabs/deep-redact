@@ -67,7 +67,7 @@ development_status:
   3-5-degrade-nested-runtime-failures-to-unsupported-with-deterministic-diagnostics: done
   epic-3-retrospective: optional
 
-  epic-4: in-progress
+  epic-4: done
   4-1-return-deterministic-structured-output-across-repeated-runs: done
   4-2-return-deterministic-serialised-output-across-repeated-runs: done
   4-3-prove-exact-path-fast-lane-and-generic-traversal-are-behaviourally-equivalent: done
