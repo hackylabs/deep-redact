@@ -1816,3 +1816,63 @@ So that I can decide whether to standardise the library at service root before r
   **When** they are maintained over time
   **Then** the guide is generated from or validated directly against those same artefacts
   **And** guidance drift causes documentation verification to fail
+
+## Epic 6: Pre-Release Hardening
+
+Address all items deferred from code reviews of Stories 2.2, 4.2, 4.3, 5.5, 5.6, 5.8, 5.9, 5.10, and 5.11, resolving runtime correctness gaps, test corpus coverage gaps, and script robustness issues before the v4.0.0 release.
+
+### Story 6.1: Fix Inherited Key-Rule Policy Override Under retainStructure
+
+As a backend engineer,
+I want a `retainStructure: true` key rule to preserve its inherited policy for all descendants,
+so that a descendant whose key independently matches a different key rule does not silently displace the parent's intended policy.
+
+**Deferred from:** Story 2.2 code review.
+
+### Story 6.2: Extend Exact-Path Equivalence Corpus to Cover Deferred Selector Scenarios
+
+As a backend engineer,
+I want the exact-path equivalence corpus to cover all deferred selector scenarios,
+so that the behavioural equivalence proof between the fast lane and generic traversal lane is complete.
+
+**Deferred from:** Story 4.3 code review (7 items).
+
+### Story 6.3: Harden Structured-Determinism Fixture Set and Symbol Serialisation Guard
+
+As a backend engineer,
+I want the structured-determinism fixture set to be robust against trivial cross-contamination test reduction and worker-boundary serialisation loss,
+so that the determinism tests remain meaningful under fixture pruning and do not fail silently under fork-based test runners.
+
+**Deferred from:** Story 4.2 code review (2 items).
+
+### Story 6.4: Harden v3 Migration Validation Scripts
+
+As a backend engineer,
+I want the v3 migration validation scripts to handle edge cases, CRLF line endings, malformed JSON, config typos, and reporting gaps robustly,
+so that contributors receive clear error messages and validation failures are never silently swallowed.
+
+**Deferred from:** Story 5.5 code review (7 items).
+
+### Story 6.5: Harden Example Validation and Documentation Generation Scripts
+
+As a backend engineer,
+I want example validation and documentation generation scripts to handle malformed manifests, untested error fields, and unsafe Markdown output robustly,
+so that failures surface with clear context and generated documentation remains structurally sound regardless of source content.
+
+**Deferred from:** Story 5.6 and 5.8 code reviews (6 items).
+
+### Story 6.6: Harden Benchmark Runner and Release Gate Scripts
+
+As a platform evaluator,
+I want the benchmark runner and release gate scripts to handle edge cases, unknown competitors, missing flags, and platform-provenance information robustly,
+so that CI failures are diagnosable and benchmark artefacts accurately reflect their generating environment.
+
+**Deferred from:** Story 5.9 and 5.10 code reviews (8 items).
+
+### Story 6.7: Harden Standardisation Guide Generation Scripts
+
+As a platform or security evaluator,
+I want the standardisation guide generation scripts to validate their inputs, handle errors gracefully, and produce structurally correct output under all manifest states,
+so that guide generation fails visibly rather than silently and the rendered Markdown is always well-formed.
+
+**Deferred from:** Story 5.11 code review (7 items).
