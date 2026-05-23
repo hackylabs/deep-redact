@@ -6,6 +6,12 @@
 - **`overheadPct` always uses `.median` regardless of `thresholdPolicy.comparatorMetric`** — Works correctly for the current manifest (all rows use `"median"`). Revisit when adding a row with a non-median comparatorMetric. `scripts/benchmark-runner.ts:132`.
 - **Contract test: `row.thresholdPolicy` accessed directly before existence check** — Produces a confusing `TypeError` on malformed rows rather than a clear assertion message. Low severity. `test/contract/benchmarks/benchmark-manifest.test.ts:53-57`.
 
+## Deferred from: code review of 5-10-enforce-the-release-benchmark-gate-and-benchmark-documentation-lockstep (2026-05-23)
+
+- **`benchmarkResultsDocPath` anchored to module-level `repositoryRoot` rather than `repoRoot` parameter** — latent inconsistency; works correctly in all current call sites; would be a correctness trap if `buildBenchmarkResultsDoc` were ever called with a different `repoRoot` (e.g. a temp dir in tests). Revisit if the function is ever tested with an isolated repo root. `scripts/benchmark-runner.ts:180`.
+- **Artefact generated on darwin/arm64 but CI runs ubuntu-latest/x86-64** — the gate reads `thresholdDecision.passed` from the committed artefact rather than re-running the benchmark, so CI never reflects actual CI-machine performance. A passing arm64 artefact could mask a threshold failure on x86-64. Architectural decision out of scope for story 5-10; revisit if cross-platform benchmark accuracy becomes a requirement.
+- **`build` → `verify-generated-files` coupling** — `verify:benchmarks` calls `pnpm run build`, which runs `verify-generated-files` first; a stale generated file causes a confusing build failure before any benchmark logic runs. Pre-existing coupling not introduced by this story.
+
 ## Deferred from: code review of 4-2-return-deterministic-serialised-output-across-repeated-runs (2026-05-09)
 
 - **`createSerialisedRootFixture` shares `expected`/`payload` references across all `createRun()` calls** — Latent fragility: if the factory were ever used with a mutable object payload, a prior run could affect subsequent runs without `originalPayload` protection. No current bug (all payloads are primitives). **Revisit in Story 4.3 or when any fixture adds a non-primitive payload** to `createSerialisedRootFixture`; add `originalPayload` protection and per-run cloning at that point. `test/fixtures/structured-determinism/index.ts:774`.

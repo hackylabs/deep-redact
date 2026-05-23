@@ -34,7 +34,7 @@
 # - Scrum Master typically creates the next story after the previous one is 'done'
 
 generated: 2026-04-13T09:43:13+0100
-last_updated: 2026-05-23T13:00:00+0100
+last_updated: 2026-05-23T15:00:00+0100
 project: deep-redact
 project_key: NOKEY
 tracking_system: file-system
@@ -86,6 +86,6 @@ development_status:
   5-7-publish-verified-worked-examples-for-setup-targeting-replacement-output-runtime-and-console-behaviour: done
   5-8-publish-verified-migration-worked-examples-and-enforce-example-documentation-lockstep: done
   5-9-produce-canonical-benchmark-runs-and-publish-benchmark-artefacts: done
-  5-10-enforce-the-release-benchmark-gate-and-benchmark-documentation-lockstep: backlog
+  5-10-enforce-the-release-benchmark-gate-and-benchmark-documentation-lockstep: done
   5-11-publish-platform-adoption-guidance-through-a-canonical-standardisation-guide: backlog
   epic-5-retrospective: optional

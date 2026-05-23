@@ -47,6 +47,9 @@ jobs:
       - run: pnpm run verify:migration:fast-redact
       - run: pnpm run verify:migration:v3
       - run: pnpm run verify:examples
+      - run: pnpm run verify:benchmarks
+        env:
+          DEEP_REDACT_BENCH_RUN_SCOPE: release-candidate
       - run: pnpm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -175,4 +175,68 @@ export function writeArtefact(artefact: BenchmarkArtefact, repoRoot: string, out
   const outputPath = path.join(outputDir, outputArtefact)
   writeFileSync(outputPath, JSON.stringify(artefact, null, 2) + '\n')
   return outputPath
+}
+
+export const benchmarkResultsDocPath = path.join(repositoryRoot, 'docs', 'benchmarks', 'results.md')
+
+export function buildBenchmarkResultsDoc(repoRoot: string): string {
+  const manifest = loadBenchmarkManifest(repoRoot)
+  const sections: string[] = [
+    '# Benchmark Results',
+    '',
+    'Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/`.',
+  ]
+
+  for (const row of manifest.rows) {
+    const artefactPath = path.join(repoRoot, 'test/artefacts/benchmarks', row.outputArtefact)
+    if (!existsSync(artefactPath)) {
+      throw new Error(`Benchmark artefact missing: ${row.outputArtefact}`)
+    }
+    const artefact = JSON.parse(readFileSync(artefactPath, 'utf8')) as BenchmarkArtefact
+    const { conditions, comparator, subject, measurements, overheadPct, thresholdDecision } = artefact
+
+    const subjectHeader = `${subject.name} ${subject.version}`
+    const comparatorHeader = `${comparator.name} ${comparator.version}`
+
+    sections.push(
+      '',
+      `## ${row.id}`,
+      '',
+      `**Workload class:** ${artefact.workloadClass}`,
+      `**Runtime:** ${artefact.runtime}`,
+      '',
+      '### Conditions',
+      '',
+      '| Parameter | Value |',
+      '|-----------|-------|',
+      `| Node version | ${conditions.nodeVersion} |`,
+      `| Platform | ${conditions.platform} |`,
+      `| Architecture | ${conditions.arch} |`,
+      `| Iterations | ${conditions.iterations} |`,
+      `| Warmup iterations | ${conditions.warmupIterations} |`,
+      '',
+      '### Comparator',
+      '',
+      `**Name:** ${comparator.name}`,
+      `**Version:** ${comparator.version}`,
+      '',
+      '### Measurements',
+      '',
+      `| Metric | ${subjectHeader} | ${comparatorHeader} |`,
+      `|--------|${'-'.repeat(subjectHeader.length + 2)}|${'-'.repeat(comparatorHeader.length + 2)}|`,
+      `| Median | ${measurements.subject.median.toFixed(6)} ms | ${measurements.comparator.median.toFixed(6)} ms |`,
+      `| Mean | ${measurements.subject.mean.toFixed(6)} ms | ${measurements.comparator.mean.toFixed(6)} ms |`,
+      `| Min | ${measurements.subject.min.toFixed(6)} ms | ${measurements.comparator.min.toFixed(6)} ms |`,
+      `| Max | ${measurements.subject.max.toFixed(6)} ms | ${measurements.comparator.max.toFixed(6)} ms |`,
+      '',
+      '### Threshold',
+      '',
+      `**Overhead:** ${overheadPct}%`,
+      `**Policy:** ${thresholdDecision.metric} within ${thresholdDecision.minOverheadPct}% to ${thresholdDecision.maxOverheadPct}%`,
+      `**Gate scope:** ${thresholdDecision.runScope.join(', ')}`,
+      `**Result:** ${thresholdDecision.passed ? 'PASSED' : 'FAILED'}`,
+    )
+  }
+
+  return sections.join('\n') + '\n'
 }

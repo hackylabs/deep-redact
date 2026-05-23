@@ -80,7 +80,9 @@
     "verify:examples": "pnpm run build && node --experimental-strip-types ./scripts/verify-examples.ts",
     "verify-generated-files": "node --experimental-strip-types ./scripts/verify-generated-files.ts",
     "generate-example-docs": "node --experimental-strip-types ./scripts/generate-example-docs.ts",
-    "bench:produce": "pnpm run build && node --experimental-strip-types ./scripts/run-benchmarks.ts"
+    "bench:generate-doc": "node --experimental-strip-types ./scripts/generate-benchmark-doc.ts",
+    "bench:produce": "pnpm run build && node --experimental-strip-types ./scripts/run-benchmarks.ts",
+    "verify:benchmarks": "pnpm run build && node --experimental-strip-types ./scripts/verify-benchmarks.ts"
   },
   "//": [
     "autocannon, fast-redact and obglob are installed only as internal benchmark comparisons and are not used in the library",
