@@ -140,6 +140,24 @@
       "fixtureDir": "docs/examples/fixtures/console-redaction",
       "assertionMode": "structured-output",
       "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "migration-fast-redact-dot-path-structured-output",
+      "category": "migration-fast-redact",
+      "docTarget": "docs/examples/migration-fast-redact-dot-path-structured-output.md",
+      "sourceFile": "docs/examples/examples/migration-fast-redact-dot-path-structured-output.ts",
+      "fixtureDir": "test/migration/fast-redact/fixtures/dot-path-structured-output",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected-v4.json"
+    },
+    {
+      "id": "migration-v3-class-instantiation-to-factory",
+      "category": "migration-v3",
+      "docTarget": "docs/examples/migration-v3-class-instantiation-to-factory.md",
+      "sourceFile": "docs/examples/examples/migration-v3-class-instantiation-to-factory.ts",
+      "fixtureDir": "test/migration/v3/fixtures/class-instantiation-to-factory",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected-v4.json"
     }
   ]
 }

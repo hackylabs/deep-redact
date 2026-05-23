@@ -63,7 +63,7 @@
   "scripts": {
     "bench": "pnpm exec vitest bench --config vitest.bench.config.ts --run",
     "build": "pnpm run verify-generated-files && pnpm exec tsdown",
-    "generate": "pnpm run generate-exports && pnpm run generate-readme && pnpm run generate-precedence-doc && pnpm run generate-one-way-redaction-doc && pnpm run generate-fast-redact-migration-doc && pnpm run generate-v3-migration-doc",
+    "generate": "pnpm run generate-exports && pnpm run generate-readme && pnpm run generate-precedence-doc && pnpm run generate-one-way-redaction-doc && pnpm run generate-fast-redact-migration-doc && pnpm run generate-v3-migration-doc && pnpm run generate-example-docs",
     "generate-exports": "node --experimental-strip-types ./scripts/generate-exports.ts",
     "generate-fast-redact-migration-doc": "node --experimental-strip-types ./scripts/generate-fast-redact-migration-doc.ts",
     "generate-v3-migration-doc": "node --experimental-strip-types ./scripts/generate-v3-migration-doc.ts",
@@ -78,7 +78,8 @@
     "verify:migration:fast-redact": "pnpm run build && node --experimental-strip-types ./scripts/verify-fast-redact-migration.ts",
     "verify:migration:v3": "pnpm run build && node --experimental-strip-types ./scripts/verify-v3-migration.ts",
     "verify:examples": "pnpm run build && node --experimental-strip-types ./scripts/verify-examples.ts",
-    "verify-generated-files": "node --experimental-strip-types ./scripts/verify-generated-files.ts"
+    "verify-generated-files": "node --experimental-strip-types ./scripts/verify-generated-files.ts",
+    "generate-example-docs": "node --experimental-strip-types ./scripts/generate-example-docs.ts"
   },
   "//": [
     "autocannon, fast-redact and obglob are installed only as internal benchmark comparisons and are not used in the library",

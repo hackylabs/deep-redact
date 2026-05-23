@@ -213,6 +213,36 @@ export const validateExampleManifest = (
 const validateFixturePath = (row: ExampleRow): void => {
   const { fixtureDir } = row
 
+  if (row.category === 'migration-fast-redact') {
+    if (
+      !fixtureDir.startsWith('test/migration/fast-redact/fixtures/')
+      || /(^|\/)\.\.(\/|$)/.test(fixtureDir)
+      || posix.normalize(fixtureDir) !== fixtureDir
+    ) {
+      throw new ExampleVerificationError({
+        row,
+        phase: 'fixture',
+        message: 'fixtureDir must start with test/migration/fast-redact/fixtures/ with no .. traversal',
+      })
+    }
+    return
+  }
+
+  if (row.category === 'migration-v3') {
+    if (
+      !fixtureDir.startsWith('test/migration/v3/fixtures/')
+      || /(^|\/)\.\.(\/|$)/.test(fixtureDir)
+      || posix.normalize(fixtureDir) !== fixtureDir
+    ) {
+      throw new ExampleVerificationError({
+        row,
+        phase: 'fixture',
+        message: 'fixtureDir must start with test/migration/v3/fixtures/ with no .. traversal',
+      })
+    }
+    return
+  }
+
   if (
     posix.isAbsolute(fixtureDir)
     || fixtureDir.includes('\\')

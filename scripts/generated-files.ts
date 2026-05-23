@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { loadExampleManifest, type ExampleRow } from './example-validation.ts'
 import { renderPrecedenceDocument } from '../test/fixtures/precedence-matrix/index.ts'
 import { renderOneWayRedactionDocument } from '../test/fixtures/one-way-deny-list/index.ts'
 import { buildInstallDocumentation } from './install-documentation.ts'
@@ -23,7 +24,7 @@ type PackageJson = Record<string, unknown> & {
 }
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
-const repositoryRoot = path.resolve(scriptDirectory, '..')
+export const repositoryRoot = path.resolve(scriptDirectory, '..')
 const packageJsonPath = path.join(repositoryRoot, 'package.json')
 const readmeTemplatePath = path.join(scriptDirectory, 'templates', 'README.md.template')
 const nodeVersionPath = path.join(repositoryRoot, '.nvmrc')
@@ -90,6 +91,44 @@ export const buildGeneratedFastRedactMigrationGuide = (): string => {
 
 export const buildGeneratedV3MigrationGuide = (): string => {
   return renderV3MigrationGuide(loadV3MigrationMatrix(repositoryRoot), repositoryRoot)
+}
+
+export const buildGeneratedExampleDoc = (row: ExampleRow, repoRoot: string): string => {
+  const sourceCode = readFileSync(path.join(repoRoot, row.sourceFile), 'utf8').trimEnd()
+  const inputJson = readFileSync(path.join(repoRoot, row.fixtureDir, 'input.json'), 'utf8').trimEnd()
+  const expectedResult = readFileSync(path.join(repoRoot, row.fixtureDir, row.expectedResultFile), 'utf8').trimEnd()
+  const title = row.id.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+  const outputLabel = row.assertionMode === 'serialised-output' ? 'Serialised output' : 'Output'
+  const outputFence = row.assertionMode === 'serialised-output' ? 'text' : 'json'
+  return [
+    `# ${title}`,
+    '',
+    '```typescript',
+    sourceCode,
+    '```',
+    '',
+    '## Input',
+    '',
+    '```json',
+    inputJson,
+    '```',
+    '',
+    `## ${outputLabel}`,
+    '',
+    `\`\`\`${outputFence}`,
+    expectedResult,
+    '```',
+    '',
+  ].join('\n')
+}
+
+export const buildAllGeneratedExampleDocs = (repoRoot: string = repositoryRoot): Record<string, string> => {
+  const manifest = loadExampleManifest(repoRoot)
+  const result: Record<string, string> = {}
+  for (const row of manifest.rows) {
+    result[path.join(repoRoot, row.docTarget)] = buildGeneratedExampleDoc(row, repoRoot)
+  }
+  return result
 }
 
 export const generatedFilePaths = {

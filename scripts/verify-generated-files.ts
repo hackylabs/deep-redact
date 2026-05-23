@@ -1,5 +1,8 @@
 import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
+  buildAllGeneratedExampleDocs,
   buildGeneratedFastRedactMigrationGuide,
   buildGeneratedOneWayRedactionDocument,
   buildGeneratedPrecedenceDocument,
@@ -52,6 +55,22 @@ const expectedV3MigrationGuide = buildGeneratedV3MigrationGuide()
 
 if (currentV3MigrationGuide !== expectedV3MigrationGuide) {
   mismatches.push('docs/migration/from-v3.md is out of date')
+}
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const repositoryRootForDocs = path.resolve(scriptDir, '..')
+
+const exampleDocs = buildAllGeneratedExampleDocs(repositoryRootForDocs)
+for (const [docPath, expectedContent] of Object.entries(exampleDocs)) {
+  const relativePath = path.relative(repositoryRootForDocs, docPath)
+  try {
+    const currentContent = readFileSync(docPath, 'utf8')
+    if (currentContent !== expectedContent) {
+      mismatches.push(`${relativePath} is out of date`)
+    }
+  } catch {
+    mismatches.push(`${relativePath} is missing`)
+  }
 }
 
 if (mismatches.length > 0) {
