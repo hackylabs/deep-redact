@@ -7,6 +7,7 @@ import {
   buildGeneratedOneWayRedactionDocument,
   buildGeneratedPrecedenceDocument,
   buildGeneratedReadme,
+  buildGeneratedStandardisationGuide,
   buildGeneratedV3MigrationGuide,
   generatedFilePaths,
   readPackageJson,
@@ -71,6 +72,18 @@ for (const [docPath, expectedContent] of Object.entries(exampleDocs)) {
   } catch {
     mismatches.push(`${relativePath} is missing`)
   }
+}
+
+let currentStandardisationGuide: string
+try {
+  currentStandardisationGuide = readFileSync(generatedFilePaths.standardisationGuideDocPath, 'utf8')
+} catch {
+  mismatches.push('docs/platform/standardisation-guide.md is missing')
+  currentStandardisationGuide = ''
+}
+const expectedStandardisationGuide = buildGeneratedStandardisationGuide()
+if (currentStandardisationGuide !== expectedStandardisationGuide) {
+  mismatches.push('docs/platform/standardisation-guide.md is out of date')
 }
 
 if (mismatches.length > 0) {

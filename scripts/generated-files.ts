@@ -13,6 +13,7 @@ import {
   loadV3MigrationMatrix,
   renderV3MigrationGuide,
 } from './v3-migration.ts'
+import { buildStandardisationGuide, standardisationGuideDocPath } from './standardisation-guide.ts'
 
 type PackageJson = Record<string, unknown> & {
   exports?: Record<string, unknown>;
@@ -138,4 +139,9 @@ export const generatedFilePaths = {
   packageJsonPath,
   precedenceDocPath: path.join(repositoryRoot, 'docs', 'architecture', 'precedence.md'),
   readmePath: path.join(repositoryRoot, 'README.md'),
+  standardisationGuideDocPath,
+}
+
+export const buildGeneratedStandardisationGuide = (repoRoot: string = repositoryRoot): string => {
+  return buildStandardisationGuide(repoRoot)
 }

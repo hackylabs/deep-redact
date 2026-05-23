@@ -70,6 +70,7 @@
     "generate-one-way-redaction-doc": "node --experimental-strip-types ./scripts/generate-one-way-redaction-doc.ts",
     "generate-precedence-doc": "node --experimental-strip-types ./scripts/generate-precedence-doc.ts",
     "generate-readme": "node --experimental-strip-types ./scripts/generate-readme.ts",
+    "generate:standardisation-guide": "node --experimental-strip-types ./scripts/generate-standardisation-guide.ts",
     "lint": "pnpm exec eslint . && pnpm exec tsc --noEmit",
     "test": "pnpm run build && pnpm run test:contract",
     "test:contract": "pnpm exec vitest run test/build.test.ts test/contract/**/*.test.ts --reporter=verbose",

@@ -1,3 +1,13 @@
+## Deferred from: code review of 5-11-publish-platform-adoption-guidance-through-a-canonical-standardisation-guide (2026-05-23)
+
+- **No static guarantee that CAPABILITY_EXAMPLES IDs exist in manifest** — runtime throw is adequate for a build-time script; revisit if a CI-time static check is desired. `scripts/standardisation-guide.ts:31-37`.
+- **Test re-derives `repoRoot` independently from verify script's default** — both resolve to the same directory in practice; revisit if `buildGeneratedStandardisationGuide` is ever tested with an isolated repo root. `test/contract/platform/standardisation-guide.test.ts:7`.
+- **`buildGeneratedStandardisationGuide()` throws not caught in verify script** — pre-existing pattern across all generators; an unhandled throw here would discard any already-accumulated mismatches. `scripts/verify-generated-files.ts`.
+- **No null-safety on `row.v4Action` sub-fields for intentional-divergence rows** — if a matrix row has a missing `v4Action` or sub-field, the guide would emit `undefined` strings silently; pre-existing matrix schema concern. `scripts/standardisation-guide.ts:30`.
+- **No error handling in generate script's `writeFileSync`** — pre-existing project-wide pattern; a write failure exits with a raw FS stack trace and no cleanup. `scripts/generate-standardisation-guide.ts:6`.
+- **Zero divergence rows would produce double blank lines in guide output** — cosmetic rendering gap; current matrix has divergences so no current impact. `scripts/standardisation-guide.ts:26`.
+- **No test asserting divergence list is non-empty** — acceptable for current matrix state; revisit if the matrix is ever cleaned to remove all intentional-divergence rows. `test/contract/platform/standardisation-guide.test.ts`.
+
 ## Deferred from: code review of 5-9-produce-canonical-benchmark-runs-and-publish-benchmark-artefacts (2026-05-23)
 
 - **`--id` flag: missing value silently runs all rows; unmatched ID silently exits with no output** — `process.argv[idFlag + 1]` is never bounds-checked; an unknown id produces an empty rows array with no error. Low severity for a dev-only script. Revisit if this script is ever used in CI or given to users. `scripts/run-benchmarks.ts:8-9`.
@@ -28,11 +38,3 @@
 - **`buildAllGeneratedExampleDocs` calls `loadExampleManifest` without prior `validateExampleManifest`** — In the build-script context, the manifest is a trusted committed file, so the risk is theoretical. Pre-existing pattern across `generated-files.ts` functions. Revisit if the generator is ever called with untrusted manifest paths. `scripts/generated-files.ts:125`.
 - **No backtick-fence escaping in `buildGeneratedExampleDoc`** — If any source file or fixture ever contains a line starting with three backticks, the generated Markdown doc will have its fence closed prematurely. Theoretical for the specific content currently generated. Revisit if example source files become more complex. `scripts/generated-files.ts:103`.
 - **Contract test `expectRepositoryPath` is less strict than runtime `validateFixturePath` for migration rows** — `expectRepositoryPath(row.fixtureDir, 'test/migration/.../fixtures')` accepts the bare base directory, while the runtime guard requires a trailing-slash subdirectory. Theoretical gap; the current manifest is not affected. Revisit if migration row fixture dir validation is tightened. `test/contract/examples/example-manifest.test.ts:95`.
-
-## Deferred from: code review of 5-9-produce-canonical-benchmark-runs-and-publish-benchmark-artefacts (2026-05-23)
-
-- **`--id` flag: missing value silently runs all rows; unmatched ID silently exits with no output** — `process.argv[idFlag + 1]` is never bounds-checked; an unknown id produces an empty rows array with no error. Low severity for a dev-only script. Revisit if this script is ever used in CI or given to users. `scripts/run-benchmarks.ts:8-9`.
-- **Division by zero when `comparatorStats.median === 0`** — `((s - c) / c) * 100` produces `Infinity` or `NaN` if the comparator median is exactly zero. Practically impossible on modern Node.js. Revisit if ever running on coarse-grained timing environments. `scripts/benchmark-runner.ts:132-134`.
-- **`competitor` field not used to resolve CJS module — `require('fast-redact')` hardcoded** — Any future manifest row naming a different competitor silently runs fast-redact and labels the artefact with the wrong competitor. Revisit when a second competitor row is added to the manifest. `scripts/benchmark-runner.ts:122-123`.
-- **`overheadPct` always uses `.median` regardless of `thresholdPolicy.comparatorMetric`** — Works correctly for the current manifest (all rows use `"median"`). Revisit when adding a row with a non-median comparatorMetric. `scripts/benchmark-runner.ts:132`.
-- **Contract test: `row.thresholdPolicy` accessed directly before existence check** — Produces a confusing `TypeError` on malformed rows rather than a clear assertion message. Low severity. `test/contract/benchmarks/benchmark-manifest.test.ts:53-57`.
