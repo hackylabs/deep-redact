@@ -1,0 +1,48 @@
+{
+  "id": "path-based-single-object-node24",
+  "workloadClass": "path-based",
+  "runtime": "node24",
+  "conditions": {
+    "nodeVersion": "v24.14.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "iterations": 100000,
+    "warmupIterations": 10000
+  },
+  "comparator": {
+    "name": "fast-redact",
+    "version": "3.5.0"
+  },
+  "subject": {
+    "name": "@hackylabs/deep-redact",
+    "version": "4.0.0"
+  },
+  "measurements": {
+    "subject": {
+      "median": 0.00687500000003638,
+      "mean": 0.007174632970000548,
+      "min": 0.006582999999977801,
+      "max": 0.13358399999998483,
+      "unit": "ms"
+    },
+    "comparator": {
+      "median": 0.00012500000002546585,
+      "mean": 0.00014565994000007094,
+      "min": 0.000041999999893960194,
+      "max": 0.012500000000045475,
+      "unit": "ms"
+    }
+  },
+  "overheadPct": 5400,
+  "thresholdDecision": {
+    "passed": false,
+    "metric": "median",
+    "minOverheadPct": 0,
+    "maxOverheadPct": 50,
+    "runScope": [
+      "protected-branch",
+      "release-candidate"
+    ]
+  },
+  "generatedAt": "2026-05-23T11:41:37.351Z"
+}

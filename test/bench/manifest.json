@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "description": "Canonical benchmark manifest for Deep Redact v4"
+  },
+  "rows": [
+    {
+      "id": "path-based-single-object-node24",
+      "fixtureDir": "test/bench/fixtures/path-based-single-object",
+      "workloadClass": "path-based",
+      "competitor": "fast-redact",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id path-based-single-object-node24",
+      "outputArtefact": "path-based-single-object-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": 0,
+        "maxOverheadPct": 50,
+        "runScope": ["protected-branch", "release-candidate"]
+      }
+    }
+  ]
+}

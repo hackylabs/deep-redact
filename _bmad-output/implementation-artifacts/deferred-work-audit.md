@@ -1,3 +1,11 @@
+## Deferred from: code review of 5-9-produce-canonical-benchmark-runs-and-publish-benchmark-artefacts (2026-05-23)
+
+- **`--id` flag: missing value silently runs all rows; unmatched ID silently exits with no output** — `process.argv[idFlag + 1]` is never bounds-checked; an unknown id produces an empty rows array with no error. Low severity for a dev-only script. Revisit if this script is ever used in CI or given to users. `scripts/run-benchmarks.ts:8-9`.
+- **Division by zero when `comparatorStats.median === 0`** — `((s - c) / c) * 100` produces `Infinity` or `NaN` if the comparator median is exactly zero. Practically impossible on modern Node.js. Revisit if ever running on coarse-grained timing environments. `scripts/benchmark-runner.ts:132-134`.
+- **`competitor` field not used to resolve CJS module — `require('fast-redact')` hardcoded** — Any future manifest row naming a different competitor silently runs fast-redact and labels the artefact with the wrong competitor. Revisit when a second competitor row is added to the manifest. `scripts/benchmark-runner.ts:122-123`.
+- **`overheadPct` always uses `.median` regardless of `thresholdPolicy.comparatorMetric`** — Works correctly for the current manifest (all rows use `"median"`). Revisit when adding a row with a non-median comparatorMetric. `scripts/benchmark-runner.ts:132`.
+- **Contract test: `row.thresholdPolicy` accessed directly before existence check** — Produces a confusing `TypeError` on malformed rows rather than a clear assertion message. Low severity. `test/contract/benchmarks/benchmark-manifest.test.ts:53-57`.
+
 ## Deferred from: code review of 5-6-establish-the-worked-example-manifest-and-validation-harness (2026-05-22)
 
 - **Test hardcodes `[]` expectation for `verifyExampleManifest`** — correct for Story 5.6 scope (empty manifest) but will break when Story 5.7 adds rows; update this test as part of Story 5.7. `test/contract/examples/example-manifest.test.ts`.
