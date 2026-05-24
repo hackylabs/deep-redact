@@ -145,6 +145,8 @@ FR36: Epic 4 - prevent recursive redaction from Deep Redact diagnostics
 FR37: Epic 5 - publish benchmark artefacts for platform evaluation
 FR38: Epic 5 - publish guidance on capabilities, targeting semantics, and migration expectations
 
+**Technical Constraint (no FR number):** Story 7.4 - enforce traversal depth limits, node/edge budgets, hostile-input protection, and security corpus validation (PRD Domain-Specific Requirements — traversal and memory safety)
+
 ## Epic List
 
 ### Epic 1: Enable Service-Wide Redaction with One Configuration
@@ -166,6 +168,10 @@ Teams can understand redaction outcomes, trust deterministic one-way behaviour, 
 ### Epic 5: Roll Out, Migrate, and Standardise Adoption
 Teams can migrate existing usage, verify cross-environment support, evaluate performance, and standardise Deep Redact with strong examples and guidance.
 **FRs covered:** FR28, FR29, FR30, FR31, FR34, FR37, FR38
+
+### Epic 7: Runtime Performance — Pass the Benchmark Gate
+Address the open performance gate and traversal safety controls.
+**Technical Constraints covered:** Story 7.1 — compiled path executor; Story 7.2 — equivalence proof; Story 7.3 — general traversal allocation; Story 7.4 — traversal safety limits, hostile-input protection, security corpus
 
 ## Epic 1: Enable Service-Wide Redaction with One Configuration
 
@@ -1829,6 +1835,38 @@ so that a descendant whose key independently matches a different key rule does n
 
 **Deferred from:** Story 2.2 code review.
 
+**Acceptance Criteria:**
+
+**Inherited policy under retainStructure**
+- **Given** a key rule matching key `A` with `retainStructure: true`, and a separate key rule matching key `B` with a distinct literal censor value
+  **When** `A` is a container holding a descendant `B` and another key `C` with no matching rule
+  **And** redaction runs on a payload containing `{ A: { B: <sensitive>, C: <safe> } }`
+  **Then** `A` is retained as a container in the returned result (not replaced with any censor value)
+  **And** `B` inside `A` is redacted using its own rule's censor value (not any censor inherited from rule `A`)
+  **And** `C` remains unchanged
+
+- **Given** a key rule matching key `A` with `retainStructure: true` and `censor: '[STRUCT]'`, and a separate key rule matching key `B` with `censor: '[SECRET]'`
+  **When** `B` is a nested key inside `A`
+  **And** redaction runs
+  **Then** the returned container for `A` is retained with its structure preserved
+  **And** the value for `B` inside `A` is `'[SECRET]'`, not `'[STRUCT]'`
+
+- **Given** a key rule matching key `A` with `retainStructure: true` and a descendant key `B` that does NOT independently match any rule
+  **When** redaction runs on a payload containing `{ A: { B: <value> } }`
+  **Then** `A` is retained as a container
+  **And** `B` is not redacted
+
+- **Given** a key rule matching key `A` with `retainStructure: true`, and a separate key rule matching key `B` with `remove: true`
+  **When** redaction runs on a payload containing `{ A: { B: <sensitive>, C: <safe> } }`
+  **Then** `A` is retained as a container in the returned result
+  **And** property `B` is absent from the returned result
+  **And** `C` remains unchanged
+
+**Regression guard**
+- **Given** the full existing test suite for key-based redaction, retainStructure behaviour, and policy precedence
+  **When** Story 6.1 is implemented
+  **Then** all pre-existing tests pass without modification
+
 ### Story 6.2: Extend Exact-Path Equivalence Corpus to Cover Deferred Selector Scenarios
 
 As a backend engineer,
@@ -1836,6 +1874,36 @@ I want the exact-path equivalence corpus to cover all deferred selector scenario
 so that the behavioural equivalence proof between the fast lane and generic traversal lane is complete.
 
 **Deferred from:** Story 4.3 code review (7 items).
+
+**Acceptance Criteria:**
+
+**Corpus extension**
+- **Given** the exact-path equivalence corpus established by Story 4.3
+  **When** Story 6.2 is implemented
+  **Then** all selector scenarios explicitly deferred in the Story 4.3 code review are admitted to the equivalence corpus
+  **And** each admitted fixture is recorded in the corpus manifest with: fixture name, exact-path eligibility reason, configuration, golden expected structured output, and where relevant golden expected serialised output
+
+- **Given** each newly admitted corpus fixture
+  **When** its selector configuration is reviewed
+  **Then** every targeted selector in that fixture compiles to an exact static absolute path eligible for the fast lane
+  **And** no fixture in the corpus uses wildcard, recursive-wildcard, ignore, regex path-segment, or key-only targeting as the primary trigger for the asserted redaction outcome
+
+**Equivalence proof for new fixtures**
+- **Given** each newly admitted exact-path corpus fixture with `serialise: false`
+  **When** it is executed once through the forced `fast` lane and once through the forced `generic` lane
+  **Then** both structured outputs are deeply equal to each other
+  **And** both are deeply equal to that fixture's golden expected structured output
+
+- **Given** each newly admitted exact-path corpus fixture with `serialise: true`
+  **When** it is executed through both forced lanes
+  **Then** both serialised outputs are byte-for-byte identical to each other
+  **And** both match that fixture's golden expected serialised output
+
+**Completeness verification**
+- **Given** the extended corpus
+  **When** the list of open deferred items from the Story 4.3 code review is reviewed
+  **Then** every open item is either admitted to the corpus with a fixture or explicitly documented as out of scope with a justification
+  **And** no deferred item remains unresolved without a recorded decision
 
 ### Story 6.3: Harden Structured-Determinism Fixture Set and Symbol Serialisation Guard
 
@@ -1845,6 +1913,37 @@ so that the determinism tests remain meaningful under fixture pruning and do not
 
 **Deferred from:** Story 4.2 code review (2 items).
 
+**Acceptance Criteria:**
+
+**Cross-contamination guard**
+- **Given** the structured-determinism fixture set
+  **When** any single fixture is removed from the set
+  **Then** the remaining fixtures still provide meaningful determinism coverage
+  **And** removing one fixture does not cause all remaining determinism assertions to trivially pass
+  **And** each fixture asserts at least one behaviour not asserted by any other fixture in the set
+
+- **Given** the fixture independence requirement
+  **When** the fixture set is reviewed
+  **Then** independence is documented in a fixture manifest or inline comments
+  **And** fixtures that would be trivial subsets of each other are consolidated or removed
+
+**Symbol serialisation guard**
+- **Given** a structured-determinism fixture whose redacted output contains Symbol-keyed properties or Symbol values
+  **When** that fixture is run in a fork-based or worker-based test runner that serialises results across a process boundary
+  **Then** the test harness detects potential symbol serialisation loss before the equality assertion is evaluated
+  **And** if symbol data would be lost across the process boundary, the test fails with a descriptive error rather than silently passing with a corrupted assertion
+
+- **Given** a determinism fixture whose redacted output contains no Symbol-keyed properties
+  **When** the symbol guard runs
+  **Then** the guard does not introduce false failures for that fixture
+  **And** the test passes or fails correctly on its deep-equality assertion alone
+
+**Regression guard**
+- **Given** the full existing structured-determinism test suite
+  **When** Story 6.3 is implemented
+  **Then** all pre-existing determinism tests continue to assert the same golden outputs
+  **And** no existing test is weakened or removed without explicit justification
+
 ### Story 6.4: Harden v3 Migration Validation Scripts
 
 As a backend engineer,
@@ -1852,6 +1951,49 @@ I want the v3 migration validation scripts to handle edge cases, CRLF line endin
 so that contributors receive clear error messages and validation failures are never silently swallowed.
 
 **Deferred from:** Story 5.5 code review (7 items).
+
+**Acceptance Criteria:**
+
+**CRLF line endings**
+- **Given** a v3 migration manifest or fixture file that uses CRLF line endings
+  **When** the v3 migration validation script processes that file
+  **Then** the script normalises line endings before parsing
+  **And** validation completes without error due to line-ending differences
+  **And** the migration assertion is evaluated against the normalised content
+
+**Malformed JSON input**
+- **Given** a v3 migration manifest or fixture file that contains malformed JSON
+  **When** the v3 migration validation script processes that file
+  **Then** the script fails with a clear descriptive error identifying the file path and the parse error location
+  **And** no partial validation output is silently emitted
+  **And** the script exits with a non-zero exit code
+
+**Config typos and schema violations**
+- **Given** a v3 migration manifest row that contains an unrecognised field name or a misspelt required field
+  **When** the v3 migration validation script processes that row
+  **Then** the script fails with a clear error identifying the row `id` and the offending field
+  **And** the error message distinguishes between an unrecognised field and a missing required field
+  **And** subsequent rows are not silently processed after a schema violation is detected
+
+**Reporting gaps**
+- **Given** the v3 migration validation script processes a batch of manifest rows with mixed pass and fail outcomes
+  **When** validation completes
+  **Then** the summary report lists every failing row by `id`, the nature of the failure (schema, assertion, or fixture resolution), and the fixture directory path
+  **And** the summary report states the total pass count, fail count, and skip count
+  **And** no failing row is silently omitted from the summary
+
+**No silent failure swallowing**
+- **Given** any internal error during v3 migration validation (file I/O failure, unexpected exception, or assertion timeout)
+  **When** that error occurs
+  **Then** the script emits the error details to stderr
+  **And** the script exits with a non-zero exit code
+  **And** no partial or misleadingly positive result is written to stdout
+
+**Regression guard**
+- **Given** the existing v3 migration validation corpus from Story 5.5
+  **When** Story 6.4 is implemented
+  **Then** all currently-passing migration rows continue to pass
+  **And** the hardening changes do not alter validation semantics for well-formed inputs
 
 ### Story 6.5: Harden Example Validation and Documentation Generation Scripts
 
@@ -1861,6 +2003,44 @@ so that failures surface with clear context and generated documentation remains 
 
 **Deferred from:** Story 5.6 and 5.8 code reviews (6 items).
 
+**Acceptance Criteria:**
+
+**Malformed manifest handling**
+- **Given** an example manifest that fails JSON schema validation (missing required fields, wrong field types, or unrecognised `category` values)
+  **When** the example validation script processes that manifest
+  **Then** the script fails with a clear error identifying the row `id` and the violated schema constraint
+  **And** the script exits with a non-zero exit code
+  **And** no partial validation output is emitted for rows processed after the first schema failure
+
+- **Given** an example manifest row whose `fixtureDir` does not exist or does not contain the expected artefacts
+  **When** the example validation script processes that row
+  **Then** the script fails with a clear error identifying the missing fixture path
+  **And** the error is distinct from a schema validation error
+
+**Untested error fields**
+- **Given** an example fixture whose expected result includes an error output (for example, a row asserting an initialisation failure)
+  **When** the example validation script evaluates that row
+  **Then** the script validates the error output against the row's `expectedResultFile`
+  **And** the assertion does not silently pass when the error field is absent from the actual result
+
+**Unsafe Markdown output**
+- **Given** the documentation generation script produces Markdown from example fixture content
+  **When** that content includes characters that would create invalid Markdown (for example, unescaped backticks in inline code, unclosed fenced code blocks, or embedded content that alters document structure)
+  **Then** the generation script detects and escapes or rejects the offending content
+  **And** the generated Markdown is structurally well-formed and parses without error under a standard Markdown parser
+
+**Reporting completeness**
+- **Given** the example validation script processes a batch of manifest rows with mixed pass and fail outcomes
+  **When** validation completes
+  **Then** the summary report includes every failing row with its `id`, `category`, and failure reason
+  **And** no failing row is silently omitted
+
+**Regression guard**
+- **Given** the existing canonical example manifest and fixture set from Stories 5.6 and 5.8
+  **When** Story 6.5 is implemented
+  **Then** all currently-passing example rows continue to pass
+  **And** the hardening changes do not alter validation semantics for well-formed inputs
+
 ### Story 6.6: Harden Benchmark Runner and Release Gate Scripts
 
 As a platform evaluator,
@@ -1869,6 +2049,47 @@ so that CI failures are diagnosable and benchmark artefacts accurately reflect t
 
 **Deferred from:** Story 5.9 and 5.10 code reviews (8 items).
 
+**Acceptance Criteria:**
+
+**Unknown competitor handling**
+- **Given** a benchmark manifest row whose `competitor` field names a package that cannot be resolved in the benchmark environment
+  **When** the benchmark runner processes that row
+  **Then** the runner fails with a clear error identifying the row `id` and the unresolvable competitor
+  **And** no benchmark result is emitted for that row
+  **And** the runner exits with a non-zero exit code
+
+**Missing required flags**
+- **Given** the benchmark runner or release gate script is invoked without a required flag (for example, `--runtime` or `--artefact-dir`)
+  **When** the script initialises
+  **Then** it fails immediately with a usage error identifying the missing flag by name
+  **And** no partial benchmark run is started
+
+**Platform-provenance information**
+- **Given** a benchmark artefact is written to `test/artefacts/benchmarks/`
+  **When** the artefact is inspected
+  **Then** it includes platform-provenance fields: operating system, Node.js or runtime version, CPU model, and benchmark timestamp
+  **And** these fields are populated from the actual runtime environment at the time of the benchmark run
+  **And** they are not hard-coded or inferred from configuration alone
+
+**Artefact structural integrity**
+- **Given** the benchmark runner completes a row
+  **When** the output artefact is written
+  **Then** the artefact is valid JSON
+  **And** all required fields (`id`, `workloadClass`, `runtime`, `thresholdDecision`) are present and non-null
+  **And** `overheadPct` is present and numeric for all comparable path-based rows
+
+**Release gate robustness**
+- **Given** the release gate script encounters a benchmark artefact whose `overheadPct` field is missing, null, or non-numeric
+  **When** the gate evaluates that artefact
+  **Then** the gate fails with a clear error identifying the artefact path and the missing or invalid field
+  **And** the gate does not silently pass on an invalid artefact
+
+**Regression guard**
+- **Given** the existing benchmark manifest and artefact set from Stories 5.9 and 5.10
+  **When** Story 6.6 is implemented
+  **Then** all existing well-formed benchmark rows continue to produce correct artefacts
+  **And** the hardening changes do not alter benchmark measurement or comparison semantics for valid inputs
+
 ### Story 6.7: Harden Standardisation Guide Generation Scripts
 
 As a platform or security evaluator,
@@ -1876,3 +2097,217 @@ I want the standardisation guide generation scripts to validate their inputs, ha
 so that guide generation fails visibly rather than silently and the rendered Markdown is always well-formed.
 
 **Deferred from:** Story 5.11 code review (7 items).
+
+**Acceptance Criteria:**
+
+**Input validation before generation**
+- **Given** the standardisation guide generation script is invoked
+  **When** it loads the canonical artefact sources (example manifest, migration manifests, benchmark manifest, precedence contract)
+  **Then** it validates each source against its expected schema before using it to generate content
+  **And** if any source fails validation, the script fails with a clear error identifying the source file and the constraint violated
+  **And** no partially-generated guide is written to the output path
+
+**Required section headings enforced**
+- **Given** the guide generation script runs to completion
+  **When** the output file is inspected
+  **Then** it contains each of the five required section headings exactly once: `Supported capabilities`, `Targeting semantics`, `Migration expectations`, `Verification evidence`, `Adoption decision scope`
+  **And** if any required heading would be missing from the generated output, the generation script fails with a clear error before writing the file
+
+**Link resolution**
+- **Given** the guide generation script emits links to canonical artefacts
+  **When** those links are validated after generation
+  **Then** each emitted link references an artefact that exists at the declared path at generation time
+  **And** if any linked artefact is absent, the generation script fails with a clear error before writing the guide
+
+**Error handling during generation**
+- **Given** any I/O error, missing source file, or unexpected exception during guide generation
+  **When** that error occurs
+  **Then** the script emits the error details to stderr and exits with a non-zero exit code
+  **And** no incomplete or truncated guide is written to the output path
+
+**Structurally well-formed Markdown output**
+- **Given** the generated standardisation guide
+  **When** it is parsed by a standard Markdown parser
+  **Then** it contains no unclosed fenced code blocks, no mismatched heading levels, and no embedded content that would corrupt its rendered structure
+
+**Idempotency**
+- **Given** the guide generation script is run twice with identical source artefacts
+  **When** both outputs are compared
+  **Then** the outputs are byte-for-byte identical
+  **And** the second run does not fail due to the output file already existing
+
+**Regression guard**
+- **Given** the existing standardisation guide generation scenario from Story 5.11
+  **When** Story 6.7 is implemented
+  **Then** the generated guide continues to satisfy all section, link, and content requirements defined in Story 5.11's acceptance criteria
+  **And** the hardening changes do not alter generated content for valid inputs
+
+## Epic 7: Runtime Performance — Pass the Benchmark Gate
+
+The `path-based-single-object-node24` benchmark artefact in `test/artefacts/benchmarks/` records a `thresholdDecision.passed: false` with an `overheadPct` of 5566.4% against a `maxOverheadPct` gate of 50. The gap exists because the general traversal algorithm allocates per-call state (WeakMaps, frozen path-segment arrays, canonical path strings) and walks the full object graph on every invocation, while fast-redact compiles exact paths into direct property accessors at init time and executes them with near-zero per-call overhead.
+
+This epic closes the gate through a compiled path executor for exact-path-only configurations and targeted hot-path allocation reductions in the general traversal.
+
+### Story 7.1: Implement Compiled Path Executor for Exact-Path-Only Configurations
+
+As a platform or performance engineer,
+I want the redactor to use compiled direct path operations at runtime when configured exclusively with exact string paths,
+so that the `path-based-single-object-node24` benchmark gate of ≤50% overhead vs fast-redact is met.
+
+**Motivation:** When all entries in `paths` are exact string selectors (no `*`, `**`, `!<key>`, `!<index>`, regex segments, or bracket-quoted wildcard syntax) and no `keys`, `stringTests`, `fuzzyKeyMatch`, or `caseSensitiveKeyMatch: false` options are present, the general traversal algorithm's fixed per-call cost (three WeakMap constructions, `Object.freeze` on every path-segment array, `Object.defineProperty` on every output property, canonical path string concatenation per node) dominates the measured time. For a small object with four exact paths, this overhead is approximately 56× fast-redact. A compiled executor compiled at init time eliminates these fixed costs from the hot path.
+
+**Acceptance Criteria:**
+
+**Given** a redactor initialised with a config whose `paths` array contains only exact string selectors (no wildcard, recursive-wildcard, ignore, or regex path segments) and whose config sets none of `keys`, `stringTests`, `fuzzyKeyMatch: true`, or `caseSensitiveKeyMatch: false`
+**When** the redactor factory compiles the plan
+**Then** the plan is flagged as eligible for the compiled path executor
+**And** compiled direct-path accessor closures are generated at init time for each configured path — one per unique target — with no deferred work left to each `.redact()` call
+
+**Given** a compiled-path-executor-eligible redactor and a runtime payload
+**When** `.redact(payload)` is invoked
+**Then** the executor applies each compiled accessor in turn to produce the redacted output
+**And** no per-call WeakMap, frozen array, or canonical path string is allocated
+**And** the output is behaviourally identical to what the general traversal would produce for the same config and input
+
+**Given** the `path-based-single-object-node24` benchmark row in `test/bench/manifest.json`
+**When** the benchmark is run and the artefact is written to `test/artefacts/benchmarks/path-based-single-object-node24.json`
+**Then** `thresholdDecision.passed` is `true`
+**And** `overheadPct` is ≤50
+
+**Given** a redactor initialised with any config that includes dynamic path segments (`*`, `**`, ignore segments, regex), `keys`, `stringTests`, fuzzy matching, or case-insensitive matching
+**When** `.redact(payload)` is invoked
+**Then** the general traversal algorithm is used unchanged
+**And** no compiled path executor is involved
+**And** no change in output or observable behaviour occurs
+
+**Given** a payload in which a configured exact path does not exist (missing intermediate key or missing terminal key)
+**When** the compiled executor processes the payload
+**Then** the missing path is silently skipped
+**And** the remainder of the output is unaffected
+
+**Given** a payload in which a configured exact path resolves to `null`, `undefined`, a primitive, or a nested object
+**When** the compiled executor processes the payload
+**Then** the configured censor, remove, or retainStructure policy is applied identically to what the general traversal would apply
+
+### Story 7.2: Prove Behavioural Equivalence of the Compiled Path Executor
+
+As a backend engineer,
+I want a comprehensive equivalence corpus verifying that the compiled path executor and the general traversal produce identical output for all valid exact-path-only configurations,
+so that the compiled fast path cannot silently diverge from the general traversal as the codebase evolves.
+
+**Motivation:** Story 4.3 established a behavioural equivalence proof between the then-current fast lane and the general traversal. Story 7.1 introduces a new fast lane. The equivalence corpus must be extended to cover the compiled path executor across the edge cases specific to exact-path-only configs.
+
+**Acceptance Criteria:**
+
+**Given** the compiled path executor and the general traversal are both applied to the same exact-path-only config and the same input
+**When** the inputs cover the following cases:
+- a single-segment path (root-level key)
+- a two-segment path (one level of nesting)
+- a three-or-more-segment path (deep nesting)
+- multiple paths that share a common prefix segment
+- multiple paths that share no prefix
+- a path whose terminal key is absent from the input
+- a path whose intermediate key is absent from the input
+- a path whose value is `null`
+- a path whose value is a number, boolean, or empty string
+- a path whose value is a nested object
+- a path whose value is an array
+- two paths pointing to the same terminal key under different parent paths
+**Then** both executors produce byte-for-byte identical output for every case
+
+**Given** the equivalence corpus test file
+**When** a new case is added to the compiled path executor's code path
+**Then** a corresponding equivalence case is added to this corpus
+
+**Given** the compiled path executor produces output that differs from the general traversal for any input in the corpus
+**When** that difference is detected by the test suite
+**Then** the test fails with a diff that identifies the diverging key and value
+
+### Story 7.3: Reduce Hot-Path Allocation Overhead in the General Traversal
+
+As a backend engineer,
+I want the general traversal algorithm's per-call and per-node allocation overhead reduced,
+so that configs using key rules, dynamic paths, fuzzy matching, or string tests perform closer to their theoretical minimum and the general path benefits from the same discipline applied to the compiled executor.
+
+**Motivation:** Even after Story 7.1, the general traversal carries avoidable allocation costs that affect every non-compiled config. The benchmark manifest currently has one row (path-based). If additional rows for key-based or mixed configs are added in future, those rows will also benefit from this story. The changes are purely internal — no public API or output behaviour is affected.
+
+**Acceptance Criteria:**
+
+**Given** any redactor using the general traversal path
+**When** `.redact(payload)` is invoked
+**Then** `setObjectEntry` uses direct property assignment (`target[key] = value`) instead of `Object.defineProperty`
+**And** the path-segment array passed through the traversal is managed as a mutable stack (push at entry, pop at exit) rather than a new frozen spread-copy at every depth level
+**And** `resolveDynamicPathRule` is not called when `plan.dynamicPathRules.length === 0`
+**And** `resolveDirectKeyMatch` is not called when `plan.exactKeyRules.literalMatchers.length === 0` and `plan.regexKeyRules.matchers.length === 0`
+**And** `buildRuleContextKey` is not called when `activePolicy` is `undefined`
+
+**Given** the general traversal changes
+**When** the full test suite is executed
+**Then** all existing tests pass without modification
+**And** no change in output, error behaviour, or observable semantics is introduced
+
+### Story 7.4: Enforce Traversal Safety Limits and Validate Hostile-Input Protection
+
+Implements: PRD Technical Constraint (Domain-Specific Requirements — traversal and memory safety)
+
+As a backend engineer,
+I want the redactor to enforce maximum traversal depth and edge budgets, and to be validated against a hostile-input security corpus,
+So that production services are protected from memory exhaustion, stack overflow, and indefinite execution when Deep Redact processes adversarial or pathological payloads.
+
+**Acceptance Criteria:**
+
+**Maximum traversal depth**
+- **Given** a payload whose nesting exceeds the configured maximum traversal depth
+  **When** redaction runs
+  **Then** traversal stops at the maximum depth boundary
+  **And** values beyond that boundary are replaced with `[UNSUPPORTED]`
+  **And** redaction does not throw and does not enter unbounded recursion
+- **Given** the maximum traversal depth configuration
+  **When** the factory initialises with no explicit depth limit
+  **Then** a default maximum depth is applied automatically
+- **Given** the factory is provided an explicit depth limit through public configuration
+  **When** a payload reaches that depth
+  **Then** the declared depth-limit behaviour applies
+
+**Edge and node budget**
+- **Given** a payload whose total traversed node count would exceed the configured visited-node or edge budget
+  **When** redaction runs
+  **Then** traversal stops at the budget boundary
+  **And** nodes beyond the budget are replaced with `[UNSUPPORTED]`
+  **And** the call completes without throwing
+
+**Hostile-input protection**
+- **Given** a payload with extreme breadth (an object with at least ten thousand keys at a single level)
+  **When** redaction runs
+  **Then** the call completes without throwing, without memory exhaustion, and within a bounded wall-clock time
+- **Given** a payload with extreme nesting depth (an object nested at least one thousand levels deep)
+  **When** redaction runs
+  **Then** the call completes without stack overflow and within the declared depth-limit behaviour
+- **Given** a payload combining extreme breadth and depth simultaneously
+  **When** redaction runs
+  **Then** the call completes safely within both declared budgets
+
+**Safe regex handling at runtime**
+- **Given** an initialised redactor whose regex-based property or path-segment rules are already validated at init time
+  **When** those rules are evaluated against a string value at runtime
+  **Then** the match operation completes within a bounded time even for adversarially crafted string content
+  **And** a runtime step-count guard or equivalent protection is enforced so that catastrophic-backtracking inputs cannot block the event loop indefinitely
+
+**Security corpus**
+- **Given** a named hostile-input security corpus at `test/security/hostile-input-corpus.json`
+  **When** it is inspected
+  **Then** it includes named cases covering: extreme nesting depth, extreme object breadth, circular references at depth, extremely long string values, regex-triggering string content, and combined adversarial shapes
+- **Given** the security corpus
+  **When** the test suite runs
+  **Then** every corpus case completes without throwing, without stack overflow, without memory exhaustion, and within declared traversal budgets
+  **And** redaction output for each corpus case is either a valid redacted structure or contains `[UNSUPPORTED]` placeholders at the exceeded boundary
+- **Given** the CI quality gate configuration
+  **When** any CI run executes
+  **Then** security corpus validation is a required passing gate before build success is reported
+
+**Scope guard**
+- **Given** this story's scope
+  **When** the implementation is reviewed
+  **Then** it covers traversal depth limits, node/edge budgets, hostile-input corpus validation, and runtime regex safety only
+  **And** init-time regex validation remains governed by Stories 1.5 and 1.6
+  **And** allocation optimisations in the general traversal remain governed by Story 7.3

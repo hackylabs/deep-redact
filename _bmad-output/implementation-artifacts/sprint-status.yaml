@@ -99,3 +99,9 @@ development_status:
   6-6-harden-benchmark-runner-and-release-gate-scripts: done
   6-7-harden-standardisation-guide-generation-scripts: done
   epic-6-retrospective: optional
+
+  epic-7: backlog
+  7-1-implement-compiled-path-executor-for-exact-path-only-configurations: backlog
+  7-2-prove-behavioural-equivalence-of-the-compiled-path-executor: backlog
+  7-3-reduce-hot-path-allocation-overhead-in-the-general-traversal: backlog
+  epic-7-retrospective: optional

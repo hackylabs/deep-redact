@@ -32,7 +32,7 @@ classification:
   projectContext: "brownfield"
 workflowType: "prd"
 workflow: "edit"
-lastEdited: "2026-04-07T16:04:38+01:00"
+lastEdited: "2026-05-23T00:00:00+01:00"
 editHistory:
   - date: "2026-04-07T14:38:44Z"
     changes: "Tightened FR and NFR wording, added explicit out-of-scope scope language, and completed edit workflow metadata."
@@ -46,6 +46,8 @@ editHistory:
     changes: "Aligned the PRD with v3 docs and source by restoring removal, retain-structure, same-length replacement, serialised output, and transformer support, while narrowing overstated awkward-value claims."
   - date: "2026-04-07T16:04:38+01:00"
     changes: "Removed explicit Console API wording from the failure-handling NFR and compressed the scoping section to focus on delivery strategy, constraints, trade-offs, and risks."
+  - date: "2026-05-23T00:00:00+01:00"
+    changes: "Updated Performance NFR and Technical Risk sections to record the benchmark gate failure at v4.0.0 and the Epic 7 remediation plan. Overhead target unchanged."
 ---
 
 # Product Requirements Document - deep-redact
@@ -379,7 +381,7 @@ If trade-offs become necessary, formal IDE integration may slip before core reda
 
 ### Risk Mitigation Strategy
 
-**Technical Risks:** The primary technical risk is performance recovery. v4 must preserve and extend capability breadth while recovering enough runtime performance to remain credible against `fast-redact`. Mitigation requires benchmark-led development, published artefacts, and aggressive focus on hot-path costs during design and implementation.
+**Technical Risks:** The primary technical risk is performance recovery. v4 must preserve and extend capability breadth while recovering enough runtime performance to remain credible against `fast-redact`. Mitigation requires benchmark-led development, published artefacts, and aggressive focus on hot-path costs during design and implementation. This risk has partially materialised: the v4.0.0 benchmark artefact for the `path-based-single-object-node24` workload records 5566.4% overhead, against the 25–50% target, because the general traversal engine (correctness-complete as of Epic 6) carries per-call allocation costs that dominate on small exact-path workloads. Epic 7 delivers the compiled path executor (Story 7.1) that addresses this directly. The risk is considered open until the gate passes.
 
 **Market Risks:** The main market risk is that the release is perceived as richer but still not practical enough to replace incumbent tooling. The mitigation is to make the release easy to evaluate: clear migration guides, explicit parity and divergence documentation, strong examples, and published performance evidence.
 
@@ -457,6 +459,8 @@ If trade-offs become necessary, formal IDE integration may slip before core reda
 - Performance claims must be backed by published benchmark artefacts included with the release.
 - Performance evaluation must use a published benchmark set with clearly documented comparable workloads and benchmark conditions.
 - Performance regressions against the published benchmark set must be treated as release-blocking when they push equivalent path-based workloads outside the agreed `25% to 50%` overhead range versus `fast-redact`.
+
+**Current status (v4.0.0):** The `path-based-single-object-node24` benchmark artefact records `overheadPct: 5566.4` against the `maxOverheadPct: 50` gate, a gap of two orders of magnitude. The overhead target above is unchanged. Epic 7 is the remediation plan: Story 7.1 delivers the compiled path executor that eliminates per-call traversal allocation for exact-path-only configurations, which is the only approach capable of closing the gap to within the target range. The gate remains blocking for protected-branch and release-candidate runs.
 
 ### Security
 
