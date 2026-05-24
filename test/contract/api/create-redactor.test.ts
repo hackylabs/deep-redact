@@ -2501,6 +2501,166 @@ describe('Reusable redactor factory contract', () => {
     expect(payload).toStrictEqual(originalPayload)
   })
 
+  it('preserves the inherited key-rule policy when a descendant key independently matches a different key rule', () => {
+    // Uses a function censor so that ctx.rulePath is observable: it will be 'parent'
+    // for values under the parent container (inherited policy) and 'password' for
+    // values matched directly by the password key rule.
+    const redact = deepRedact({
+      retainStructure: true,
+      censor: (_value: unknown, ctx) => `[rule:${String(ctx.rulePath[0])}]`,
+      keys: ['parent', 'password'],
+    })
+    const payload = {
+      parent: {
+        username: 'alice',
+        password: 'secret',
+      },
+      other: {
+        password: 'other-secret',
+      },
+    }
+    const originalPayload = structuredClone(payload)
+
+    expect(redact(payload)).toEqual({
+      parent: {
+        username: '[rule:parent]',   // inherited policy from parent key rule
+        password: '[rule:parent]',   // inherited policy, NOT [rule:password]
+      },
+      other: {
+        password: '[rule:password]', // direct key match — no inherited policy
+      },
+    })
+    expect(payload).toStrictEqual(originalPayload)
+  })
+
+  it('preserves the inherited exact-path policy when a descendant key independently matches a key rule', () => {
+    const redact = deepRedact({
+      censor: '[KEY]',
+      keys: ['password'],
+      paths: [
+        {
+          path: 'user',
+          censor: '[PATH]',
+          retainStructure: true,
+        },
+      ],
+    })
+    const payload = {
+      user: {
+        username: 'alice',
+        password: 'secret',
+      },
+      other: {
+        password: 'other-secret',
+      },
+    }
+    const originalPayload = structuredClone(payload)
+
+    expect(redact(payload)).toEqual({
+      user: {
+        username: '[PATH]',  // inherited policy from exact-path rule
+        password: '[PATH]',  // inherited policy, NOT [KEY]
+      },
+      other: {
+        password: '[KEY]',   // direct key match — no inherited policy
+      },
+    })
+    expect(payload).toStrictEqual(originalPayload)
+  })
+
+  it('propagates inherited key-rule policy through multiple nesting levels', () => {
+    const redact = deepRedact({
+      retainStructure: true,
+      censor: (_value: unknown, ctx) => `[rule:${String(ctx.rulePath[0])}]`,
+      keys: ['grandparent', 'parent', 'password'],
+    })
+    const payload = {
+      grandparent: {
+        parent: {
+          password: 'secret',
+          username: 'alice',
+        },
+        other: 'value',
+      },
+      parent: {
+        password: 'other-secret',
+      },
+    }
+    const originalPayload = structuredClone(payload)
+
+    expect(redact(payload)).toEqual({
+      grandparent: {
+        parent: {
+          password: '[rule:grandparent]',  // inherited from grandparent through two levels
+          username: '[rule:grandparent]',
+        },
+        other: '[rule:grandparent]',
+      },
+      parent: {
+        password: '[rule:parent]',         // direct match at root — no grandparent policy
+      },
+    })
+    expect(payload).toStrictEqual(originalPayload)
+  })
+
+  it('preserves the inherited regex-key policy when a descendant key independently matches a different key rule', () => {
+    const redact = deepRedact({
+      retainStructure: true,
+      censor: (_value: unknown, ctx) => `[rule:${String(ctx.rulePath[0])}]`,
+      keys: [/^secret/i, 'password'],
+    })
+    const payload = {
+      secretData: {
+        username: 'alice',
+        password: 'hidden',
+      },
+      other: {
+        password: 'other-secret',
+      },
+    }
+    const originalPayload = structuredClone(payload)
+
+    expect(redact(payload)).toEqual({
+      secretData: {
+        username: `[rule:${String(/^secret/i)}]`,  // inherited regex-key policy
+        password: `[rule:${String(/^secret/i)}]`,  // inherited policy, NOT [rule:password]
+      },
+      other: {
+        password: '[rule:password]',               // direct key match — no inherited policy
+      },
+    })
+    expect(payload).toStrictEqual(originalPayload)
+  })
+
+  it('allows an exact-path descendant rule to override an inherited key-rule policy', () => {
+    const redact = deepRedact({
+      retainStructure: true,
+      censor: '[KEY]',
+      keys: ['parent'],
+      paths: [
+        {
+          path: 'parent.password',
+          censor: '[PATH]',
+        },
+      ],
+    })
+    const payload = {
+      parent: {
+        username: 'alice',
+        password: 'secret',
+      },
+    }
+    const originalPayload = structuredClone(payload)
+
+    expect(redact(payload)).toEqual({
+      parent: {
+        username: '[KEY]',   // inherited key-rule policy
+        password: '[PATH]',  // exact-path rule takes precedence over inherited key-rule policy
+      },
+    })
+    expect(payload).toStrictEqual(originalPayload)
+  })
+
   it('gives exact-path rules precedence over exact-key rules on the same leaf', () => {
     const redact = deepRedact({
       censor: '[KEY]',

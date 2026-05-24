@@ -1,7 +1,3 @@
-## Deferred from: code review of 2-2-support-function-censors-and-same-length-string-replacement (2026-05-03)
-
-- **Inherited key-rule policy overridden by deeper direct-key match when `retainStructure: true`** — `selectActivePolicy` protects inherited `exact-path`/`dynamic-path` source policies from being displaced by a child `directKeyMatch`, but `exact-key`/`regex-key` source policies have no equivalent guard. A key rule using `retainStructure: true` can have its inherited policy silently replaced for any descendant whose key independently matches a different key rule. Pre-existing precedence behaviour predating Story 2.2. Tracked in `src/core/runtime/redact-value.ts`.
-
 ## Deferred from: code review of 4-2-return-deterministic-serialised-output-across-repeated-runs (2026-05-09)
 
 - **Single-fixture fixture set reduces the cross-contamination warm-up test to a trivial duplicate** — If any fixture set ever has only one fixture, the second corpus test reduces to two runs of the same fixture, not cross-contamination proof. No current set triggers this. Revisit if any fixture set is pruned to a single entry during corpus cleanup. `test/contract/api/create-redactor.test.ts:3639`.

@@ -10,6 +10,11 @@ export type PathSegments = readonly (string | number | RegExp | IgnorePathSegmen
 
 export interface FunctionCensorContext {
   readonly matchedPath: PathSegments;
+  /**
+   * The path segments of the rule that produced this redaction.
+   * When an inherited policy is active (e.g. a parent key rule with `retainStructure: true`),
+   * this reflects the ancestor rule's key or path — not the current node's own key.
+   */
   readonly rulePath: PathSegments;
   readonly rootInput: unknown;
   readonly terminalKey?: string | number;

@@ -512,7 +512,12 @@ const selectActivePolicy = (
     }
   }
 
-  if (inheritedPolicy?.source === 'exact-path' || inheritedPolicy?.source === 'dynamic-path') {
+  if (
+    inheritedPolicy?.source === 'exact-path'
+    || inheritedPolicy?.source === 'dynamic-path'
+    || inheritedPolicy?.source === 'exact-key'
+    || inheritedPolicy?.source === 'regex-key'
+  ) {
     return inheritedPolicy
   }
 
@@ -532,7 +537,7 @@ const selectActivePolicy = (
     }
   }
 
-  return inheritedPolicy
+  return undefined
 }
 
 const buildFunctionCensorContext = (

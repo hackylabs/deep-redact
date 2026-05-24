@@ -957,7 +957,7 @@ const selectActivePolicy = (plan, exactPathRule, dynamicPathRule, directKeyMatch
 		source: "dynamic-path",
 		rulePath: dynamicPathRule.rulePath
 	};
-	if (inheritedPolicy?.source === "exact-path" || inheritedPolicy?.source === "dynamic-path") return inheritedPolicy;
+	if (inheritedPolicy?.source === "exact-path" || inheritedPolicy?.source === "dynamic-path" || inheritedPolicy?.source === "exact-key" || inheritedPolicy?.source === "regex-key") return inheritedPolicy;
 	if (directKeyMatch?.source === "exact-key") return {
 		policy: plan.exactKeyRules.policy,
 		source: "exact-key",
@@ -968,7 +968,6 @@ const selectActivePolicy = (plan, exactPathRule, dynamicPathRule, directKeyMatch
 		source: "regex-key",
 		rulePath: directKeyMatch.rulePath
 	};
-	return inheritedPolicy;
 };
 const buildFunctionCensorContext = (pathSegments, rulePath, rootInput) => {
 	const matchedPath = Object.freeze(pathSegments.map((seg) => seg.value));
