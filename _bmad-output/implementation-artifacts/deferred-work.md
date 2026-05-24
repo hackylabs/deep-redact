@@ -2,17 +2,8 @@
 
 - **`verify:examples` triggers a full rebuild on every CI run** — consistent with all other `verify:*` scripts; not worth changing in isolation. `package.json`, `.github/workflows/npmPublish.yml`.
 
-## Deferred from: code review of 5-9-produce-canonical-benchmark-runs-and-publish-benchmark-artefacts (2026-05-23)
-
-- **`--id` flag: missing value silently runs all rows; unmatched ID silently exits with no output** — `process.argv[idFlag + 1]` is never bounds-checked; an unknown id produces an empty rows array with no error. Low severity for a dev-only script. Revisit if this script is ever used in CI or given to users. `scripts/run-benchmarks.ts:8-9`.
-- **Division by zero when `comparatorStats.median === 0`** — `((s - c) / c) * 100` produces `Infinity` or `NaN` if the comparator median is exactly zero. Practically impossible on modern Node.js. Revisit if ever running on coarse-grained timing environments. `scripts/benchmark-runner.ts:132-134`.
-- **`competitor` field not used to resolve CJS module — `require('fast-redact')` hardcoded** — Any future manifest row naming a different competitor silently runs fast-redact and labels the artefact with the wrong competitor. Revisit when a second competitor row is added to the manifest. `scripts/benchmark-runner.ts:122-123`.
-- **`overheadPct` always uses `.median` regardless of `thresholdPolicy.comparatorMetric`** — Works correctly for the current manifest (all rows use `"median"`). Revisit when adding a row with a non-median comparatorMetric. `scripts/benchmark-runner.ts:132`.
-- **Contract test: `row.thresholdPolicy` accessed directly before existence check** — Produces a confusing `TypeError` on malformed rows rather than a clear assertion message. Low severity. `test/contract/benchmarks/benchmark-manifest.test.ts:53-57`.
-
 ## Deferred from: code review of 5-10-enforce-the-release-benchmark-gate-and-benchmark-documentation-lockstep (2026-05-23)
 
-- **`benchmarkResultsDocPath` anchored to module-level `repositoryRoot` rather than `repoRoot` parameter** — latent inconsistency; works correctly in all current call sites; would be a correctness trap if `buildBenchmarkResultsDoc` were ever called with a different `repoRoot` (e.g. a temp dir in tests). Revisit if the function is ever tested with an isolated repo root. `scripts/benchmark-runner.ts:180`.
 - **Artefact generated on darwin/arm64 but CI runs ubuntu-latest/x86-64** — the gate reads `thresholdDecision.passed` from the committed artefact rather than re-running the benchmark, so CI never reflects actual CI-machine performance. A passing arm64 artefact could mask a threshold failure on x86-64. Architectural decision out of scope for story 5-10; revisit if cross-platform benchmark accuracy becomes a requirement.
 - **`build` → `verify-generated-files` coupling** — `verify:benchmarks` calls `pnpm run build`, which runs `verify-generated-files` first; a stale generated file causes a confusing build failure before any benchmark logic runs. Pre-existing coupling not introduced by this story.
 

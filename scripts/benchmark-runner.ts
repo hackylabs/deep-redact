@@ -66,7 +66,13 @@ export interface BenchmarkArtefact {
     subject: MeasurementStats;
     comparator: MeasurementStats;
   };
-  overheadPct: number;
+  overheadPct: number | null;
+  comparatorMetricWasZero?: true;
+  generatingPlatform: {
+    os: string;
+    arch: string;
+    nodeVersion: string;
+  };
   thresholdDecision: {
     passed: boolean;
     metric: string;
@@ -115,22 +121,41 @@ export function runBenchmarkRow(row: BenchmarkRow, repoRoot: string): BenchmarkA
   const payload = JSON.parse(readFileSync(payloadPath, 'utf8')) as unknown
 
   const subjectPkg = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as { name: string; version: string }
-  const frPkg = JSON.parse(readFileSync(path.join(repoRoot, 'node_modules/fast-redact/package.json'), 'utf8')) as { version: string }
+  const competitorPkg = JSON.parse(
+    readFileSync(path.join(repoRoot, 'node_modules', row.competitor, 'package.json'), 'utf8'),
+  ) as { version: string }
 
   const redactor = deepRedact(subjectConfig)
 
-  const fastRedact = require('fast-redact') as (config: Record<string, unknown>) => (payload: unknown) => unknown
-  const frInstance = fastRedact(frConfig)
+  const competitorFn = require(row.competitor) as (config: Record<string, unknown>) => (payload: unknown) => unknown
+  const frInstance = competitorFn(frConfig)
 
   const subjectStats = collectSamples(fresh => redactor(fresh), payload)
 
   const comparatorStats = collectSamples(fresh => frInstance(fresh), payload)
 
-  const overheadPct = Math.round(
-    ((subjectStats.median - comparatorStats.median) / comparatorStats.median) * 100 * 100,
-  ) / 100
+  const metric = row.thresholdPolicy.comparatorMetric as keyof MeasurementStats
+  const comparatorValue = comparatorStats[metric] as number | undefined
+  const subjectValue = subjectStats[metric] as number | undefined
 
-  const passed =
+  if (comparatorValue === undefined || subjectValue === undefined) {
+    throw new Error(
+      `Unknown comparatorMetric "${row.thresholdPolicy.comparatorMetric}" for row "${row.id}". Valid metrics: median, mean, min, max`,
+    )
+  }
+
+  let overheadPct: number | null
+  let comparatorMetricWasZero = false
+  if (comparatorValue === 0) {
+    overheadPct = null
+    comparatorMetricWasZero = true
+  } else {
+    overheadPct = Math.round(
+      ((subjectValue - comparatorValue) / comparatorValue) * 100 * 100,
+    ) / 100
+  }
+
+  const passed = overheadPct !== null &&
     overheadPct <= row.thresholdPolicy.maxOverheadPct &&
     overheadPct >= row.thresholdPolicy.minOverheadPct
 
@@ -147,7 +172,7 @@ export function runBenchmarkRow(row: BenchmarkRow, repoRoot: string): BenchmarkA
     },
     comparator: {
       name: row.competitor,
-      version: frPkg.version,
+      version: competitorPkg.version,
     },
     subject: {
       name: subjectPkg.name,
@@ -158,6 +183,12 @@ export function runBenchmarkRow(row: BenchmarkRow, repoRoot: string): BenchmarkA
       comparator: comparatorStats,
     },
     overheadPct,
+    ...(comparatorMetricWasZero ? { comparatorMetricWasZero: true as const } : {}),
+    generatingPlatform: {
+      os: process.platform,
+      arch: process.arch,
+      nodeVersion: process.version,
+    },
     thresholdDecision: {
       passed,
       metric: row.thresholdPolicy.comparatorMetric,
@@ -177,7 +208,9 @@ export function writeArtefact(artefact: BenchmarkArtefact, repoRoot: string, out
   return outputPath
 }
 
-export const benchmarkResultsDocPath = path.join(repositoryRoot, 'docs', 'benchmarks', 'results.md')
+export function benchmarkResultsDocPath(repoRoot: string): string {
+  return path.join(repoRoot, 'docs', 'benchmarks', 'results.md')
+}
 
 export function buildBenchmarkResultsDoc(repoRoot: string): string {
   const manifest = loadBenchmarkManifest(repoRoot)
@@ -231,7 +264,7 @@ export function buildBenchmarkResultsDoc(repoRoot: string): string {
       '',
       '### Threshold',
       '',
-      `**Overhead:** ${overheadPct}%`,
+      `**Overhead:** ${overheadPct === null ? 'N/A (comparator metric was zero)' : `${overheadPct}%`}`,
       `**Policy:** ${thresholdDecision.metric} within ${thresholdDecision.minOverheadPct}% to ${thresholdDecision.maxOverheadPct}%`,
       `**Gate scope:** ${thresholdDecision.runScope.join(', ')}`,
       `**Result:** ${thresholdDecision.passed ? 'PASSED' : 'FAILED'}`,

@@ -17,6 +17,7 @@ const requiredArtefactKeys = [
   'overheadPct',
   'thresholdDecision',
   'generatedAt',
+  'generatingPlatform',
 ]
 
 const requiredThresholdDecisionKeys = ['passed', 'metric', 'minOverheadPct', 'maxOverheadPct', 'runScope']
@@ -61,12 +62,14 @@ describe('benchmark artefacts contract', () => {
   })
 
   it('docs/benchmarks/results.md exists on disk', () => {
-    expect(existsSync(benchmarkResultsDocPath), 'docs/benchmarks/results.md does not exist').toBe(true)
+    const resultsDocPath = benchmarkResultsDocPath(repoRoot)
+    expect(existsSync(resultsDocPath), 'docs/benchmarks/results.md does not exist').toBe(true)
   })
 
   it('docs/benchmarks/results.md matches generated doc from committed artefacts', () => {
+    const resultsDocPath = benchmarkResultsDocPath(repoRoot)
     const expected = buildBenchmarkResultsDoc(repoRoot)
-    const current = readFileSync(benchmarkResultsDocPath, 'utf8')
+    const current = readFileSync(resultsDocPath, 'utf8')
     expect(current).toBe(expected)
   })
 })

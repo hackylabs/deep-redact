@@ -46,12 +46,16 @@ describe('benchmark manifest contract', () => {
 
   it('requires all four fields on every thresholdPolicy', () => {
     const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'test/bench/manifest.json'), 'utf8')) as {
-      rows: Array<{ thresholdPolicy: Record<string, unknown> }>;
+      rows: Array<Record<string, unknown>>;
     }
 
     for (const row of manifest.rows) {
+      expect(
+        row.thresholdPolicy,
+        `row "${row.id}" is missing thresholdPolicy`,
+      ).toBeDefined()
       for (const key of requiredThresholdPolicyKeys) {
-        expect(row.thresholdPolicy, `thresholdPolicy missing field: ${key}`).toHaveProperty(key)
+        expect(row.thresholdPolicy as Record<string, unknown>, `thresholdPolicy missing field: ${key}`).toHaveProperty(key)
       }
     }
   })

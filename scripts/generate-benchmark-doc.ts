@@ -7,7 +7,7 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDirectory, '..')
 
 const content = buildBenchmarkResultsDoc(repoRoot)
-const outputPath = benchmarkResultsDocPath
+const outputPath = benchmarkResultsDocPath(repoRoot)
 
 mkdirSync(path.dirname(outputPath), { recursive: true })
 writeFileSync(outputPath, content)

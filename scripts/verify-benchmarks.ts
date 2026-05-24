@@ -36,8 +36,11 @@ async function runCli(): Promise<void> {
 
     const artefact = JSON.parse(readFileSync(artefactPath, 'utf8')) as BenchmarkArtefact
 
+    const overheadDisplay = artefact.overheadPct === null
+      ? 'N/A (comparator metric was zero)'
+      : `${artefact.overheadPct}%`
     console.log(
-      `[${row.id}] overhead: ${artefact.overheadPct}% | threshold: ${artefact.thresholdDecision.minOverheadPct}%–${artefact.thresholdDecision.maxOverheadPct}% | passed: ${artefact.thresholdDecision.passed}`,
+      `[${row.id}] overhead: ${overheadDisplay} | threshold: ${artefact.thresholdDecision.minOverheadPct}%–${artefact.thresholdDecision.maxOverheadPct}% | passed: ${artefact.thresholdDecision.passed}`,
     )
 
     if (
@@ -45,17 +48,22 @@ async function runCli(): Promise<void> {
       artefact.thresholdDecision.runScope.includes(runScope) &&
       !artefact.thresholdDecision.passed
     ) {
-      const reason = artefact.overheadPct > artefact.thresholdDecision.maxOverheadPct
-        ? `exceeds max threshold ${artefact.thresholdDecision.maxOverheadPct}%`
-        : `is below min threshold ${artefact.thresholdDecision.minOverheadPct}%`
-      failures.push(`${row.id}: overhead ${artefact.overheadPct}% ${reason}`)
+      if (artefact.overheadPct === null) {
+        failures.push(`${row.id}: overhead unevaluable — comparator metric was zero`)
+      } else {
+        const reason = artefact.overheadPct > artefact.thresholdDecision.maxOverheadPct
+          ? `exceeds max threshold ${artefact.thresholdDecision.maxOverheadPct}%`
+          : `is below min threshold ${artefact.thresholdDecision.minOverheadPct}%`
+        failures.push(`${row.id}: overhead ${artefact.overheadPct}% ${reason}`)
+      }
     }
   }
 
   const expectedDoc = buildBenchmarkResultsDoc(repoRoot)
 
-  if (existsSync(benchmarkResultsDocPath)) {
-    const currentDoc = readFileSync(benchmarkResultsDocPath, 'utf8')
+  const docPath = benchmarkResultsDocPath(repoRoot)
+  if (existsSync(docPath)) {
+    const currentDoc = readFileSync(docPath, 'utf8')
     if (currentDoc !== expectedDoc) {
       mismatches.push('docs/benchmarks/results.md is out of date')
     }
