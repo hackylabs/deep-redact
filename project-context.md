@@ -50,7 +50,7 @@ The review agent **must not** write any item to `_bmad-output/implementation-art
 > **Proposed deferral:** [item title and detail]
 > Approve adding to the deferred work register?
 > 1. Yes — add to deferred-work.md
-> 2. No — reclassify as `patch` (fix it now)
+> 2. No — reclassify as `patch`
 > 3. No — dismiss (noise, not worth tracking)
 
 Only proceed to write the entry if the user selects option 1. If denied, reclassify per the user's choice. Never batch-write defer findings to deferred-work.md without per-item approval.
