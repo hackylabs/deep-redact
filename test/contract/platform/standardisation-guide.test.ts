@@ -1,10 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { buildGeneratedStandardisationGuide, generatedFilePaths } from '../../../scripts/generated-files.ts'
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 
 describe('standardisation guide', () => {
   it('docs/platform/standardisation-guide.md exists', () => {
@@ -12,7 +8,7 @@ describe('standardisation guide', () => {
   })
 
   it('docs/platform/standardisation-guide.md matches generated guide (lockstep)', () => {
-    const expected = buildGeneratedStandardisationGuide(repoRoot)
+    const expected = buildGeneratedStandardisationGuide()
     const current = readFileSync(generatedFilePaths.standardisationGuideDocPath, 'utf8')
     expect(current).toBe(expected)
   })
@@ -76,5 +72,13 @@ describe('standardisation guide', () => {
     expect(content).toContain('one-way')
     expect(content).toContain('no `restore`')
     expect(content).toContain('unredact')
+  })
+
+  it('guide divergence list is non-empty', () => {
+    const content = readFileSync(generatedFilePaths.standardisationGuideDocPath, 'utf8')
+    const sectionStart = content.indexOf('### fast-redact migration')
+    const sectionEnd = content.indexOf('\n### ', sectionStart + 1)
+    const section = sectionEnd === -1 ? content.slice(sectionStart) : content.slice(sectionStart, sectionEnd)
+    expect(section, 'Expected at least one intentional-divergence bullet in fast-redact migration section').toMatch(/^- \*\*/m)
   })
 })

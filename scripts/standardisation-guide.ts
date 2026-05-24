@@ -23,16 +23,24 @@ const CAPABILITY_EXAMPLES = [
 export const buildStandardisationGuide = (repoRoot: string): string => {
   const manifest = loadExampleManifest(repoRoot)
   const matrix = loadFastRedactMigrationMatrix(repoRoot)
+
+  for (const { exampleId } of CAPABILITY_EXAMPLES) {
+    if (!manifest.rows.some(r => r.id === exampleId)) {
+      throw new Error(`standardisation-guide: CAPABILITY_EXAMPLES references unknown example ID: "${exampleId}"`)
+    }
+  }
+
   const divergences = matrix.rows.filter(row => row.classification === 'intentional-divergence')
-  const divergenceLines = divergences.map(row =>
-    `- **${row.id}**: ${row.v4Action.fastRedactBehaviour} → ${row.v4Action.v4Behaviour} (${row.v4Action.reason})`
-  )
+  const divergenceLines = divergences.map(row => {
+    if (!row.v4Action) throw new Error(`standardisation-guide: row "${row.id}" is missing v4Action`)
+    if (!row.v4Action.fastRedactBehaviour) throw new Error(`standardisation-guide: row "${row.id}" is missing v4Action.fastRedactBehaviour`)
+    if (!row.v4Action.v4Behaviour) throw new Error(`standardisation-guide: row "${row.id}" is missing v4Action.v4Behaviour`)
+    if (!row.v4Action.reason) throw new Error(`standardisation-guide: row "${row.id}" is missing v4Action.reason`)
+    return `- **${row.id}**: ${row.v4Action.fastRedactBehaviour} → ${row.v4Action.v4Behaviour} (${row.v4Action.reason})`
+  })
 
   const capabilityLines = CAPABILITY_EXAMPLES.map(({ label, exampleId }) => {
-    const manifestRow = manifest.rows.find(r => r.id === exampleId)
-    if (manifestRow === undefined) {
-      throw new Error(`standardisation-guide: example ID '${exampleId}' not found in example manifest`)
-    }
+    const manifestRow = manifest.rows.find(r => r.id === exampleId)!
     return `- [${label}](${manifestRow.docTarget})`
   })
 
@@ -67,10 +75,14 @@ export const buildStandardisationGuide = (repoRoot: string): string => {
     '',
     '### fast-redact migration',
     '',
-    'The following intentional behavioural divergences from `fast-redact` have been validated for Deep Redact v4:',
-    '',
-    ...divergenceLines,
-    '',
+    ...(divergences.length > 0
+      ? [
+          'The following intentional behavioural divergences from `fast-redact` have been validated for Deep Redact v4:',
+          '',
+          ...divergenceLines,
+          '',
+        ]
+      : []),
     'For the complete migration matrix and fixture-verified examples, see [docs/migration/from-fast-redact.md](docs/migration/from-fast-redact.md).',
     '',
     '### Deep Redact v3 migration',

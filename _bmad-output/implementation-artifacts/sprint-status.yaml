@@ -34,7 +34,7 @@
 # - Scrum Master typically creates the next story after the previous one is 'done'
 
 generated: 2026-04-13T09:43:13+0100
-last_updated: 2026-05-24T11:55:00+0100
+last_updated: 2026-05-24T12:30:00+0100
 project: deep-redact
 project_key: NOKEY
 tracking_system: file-system
@@ -97,5 +97,5 @@ development_status:
   6-4-harden-v3-migration-validation-scripts: done
   6-5-harden-example-validation-and-documentation-generation-scripts: done
   6-6-harden-benchmark-runner-and-release-gate-scripts: done
-  6-7-harden-standardisation-guide-generation-scripts: ready-for-dev
+  6-7-harden-standardisation-guide-generation-scripts: done
   epic-6-retrospective: optional

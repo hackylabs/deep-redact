@@ -157,6 +157,6 @@ export const generatedFilePaths = {
   standardisationGuideDocPath,
 }
 
-export const buildGeneratedStandardisationGuide = (repoRoot: string = repositoryRoot): string => {
-  return buildStandardisationGuide(repoRoot)
+export const buildGeneratedStandardisationGuide = (): string => {
+  return buildStandardisationGuide(repositoryRoot)
 }

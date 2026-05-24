@@ -74,16 +74,21 @@ for (const [docPath, expectedContent] of Object.entries(exampleDocs)) {
   }
 }
 
-let currentStandardisationGuide: string
+let currentStandardisationGuide: string | undefined
 try {
   currentStandardisationGuide = readFileSync(generatedFilePaths.standardisationGuideDocPath, 'utf8')
 } catch {
   mismatches.push('docs/platform/standardisation-guide.md is missing')
-  currentStandardisationGuide = ''
 }
-const expectedStandardisationGuide = buildGeneratedStandardisationGuide()
-if (currentStandardisationGuide !== expectedStandardisationGuide) {
-  mismatches.push('docs/platform/standardisation-guide.md is out of date')
+if (currentStandardisationGuide !== undefined) {
+  try {
+    const expectedStandardisationGuide = buildGeneratedStandardisationGuide()
+    if (currentStandardisationGuide !== expectedStandardisationGuide) {
+      mismatches.push('docs/platform/standardisation-guide.md is out of date')
+    }
+  } catch (err) {
+    mismatches.push(`standardisation guide generation failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
 }
 
 if (mismatches.length > 0) {
