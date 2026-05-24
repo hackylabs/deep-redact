@@ -4081,6 +4081,8 @@ describe('Structured determinism fixture corpus', () => {
     fixtureSet,
     fixture,
   ) => {
+    expect(fixtureSet.fixtures.length).toBeGreaterThanOrEqual(2)
+
     const redact = fixtureSet.createRedactor()
     const firstRun = runStructuredDeterminismFixture(redact, fixture)
 
@@ -4134,6 +4136,8 @@ describe('Serialised determinism fixture corpus', () => {
     fixtureSet,
     fixture,
   ) => {
+    expect(fixtureSet.fixtures.length).toBeGreaterThanOrEqual(2)
+
     const redact = fixtureSet.createRedactor(true)
     const firstRun = runSerialisedDeterminismFixture(redact, fixture)
 

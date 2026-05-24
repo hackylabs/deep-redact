@@ -94,22 +94,16 @@ const createFixtureError = (message: string): FixtureRuntimeError => {
   return error
 }
 
-const failingMapMarker = Symbol('failingMapMarker')
+const failingMapRegistry = new WeakSet<Map<string, unknown>>()
 
-type MarkedFailingMap = Map<string, unknown> & {
-  [failingMapMarker]?: true;
+const markFailingMap = (value: Map<string, unknown>): Map<string, unknown> => {
+  failingMapRegistry.add(value)
+
+  return value
 }
 
-const markFailingMap = (value: Map<string, unknown>): MarkedFailingMap => {
-  const markedValue = value as MarkedFailingMap
-
-  markedValue[failingMapMarker] = true
-
-  return markedValue
-}
-
-const isMarkedFailingMap = (value: unknown): value is MarkedFailingMap => {
-  return value instanceof Map && (value as MarkedFailingMap)[failingMapMarker] === true
+const isMarkedFailingMap = (value: unknown): value is Map<string, unknown> => {
+  return value instanceof Map && failingMapRegistry.has(value)
 }
 
 const createPathSensitiveCensor = (
