@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { loadExampleManifest, type ExampleRow } from './example-validation.ts'
+import { loadExampleManifest, validateExampleManifest, type ExampleRow } from './example-validation.ts'
 import { renderPrecedenceDocument } from '../test/fixtures/precedence-matrix/index.ts'
 import { renderOneWayRedactionDocument } from '../test/fixtures/one-way-deny-list/index.ts'
 import { buildInstallDocumentation } from './install-documentation.ts'
@@ -94,6 +94,26 @@ export const buildGeneratedV3MigrationGuide = (): string => {
   return renderV3MigrationGuide(loadV3MigrationMatrix(repositoryRoot), repositoryRoot)
 }
 
+const countMaxBacktickRun = (text: string): number => {
+  let max = 0
+  let current = 0
+  for (const char of text) {
+    if (char === '`') {
+      current++
+      if (current > max) max = current
+    } else {
+      current = 0
+    }
+  }
+  return max
+}
+
+const makeFence = (content: string, lang = ''): string => {
+  const delimLength = Math.max(3, countMaxBacktickRun(content) + 1)
+  const delim = '`'.repeat(delimLength)
+  return `${delim}${lang}\n${content}\n${delim}`
+}
+
 export const buildGeneratedExampleDoc = (row: ExampleRow, repoRoot: string): string => {
   const sourceCode = readFileSync(path.join(repoRoot, row.sourceFile), 'utf8').trimEnd()
   const inputJson = readFileSync(path.join(repoRoot, row.fixtureDir, 'input.json'), 'utf8').trimEnd()
@@ -104,27 +124,22 @@ export const buildGeneratedExampleDoc = (row: ExampleRow, repoRoot: string): str
   return [
     `# ${title}`,
     '',
-    '```typescript',
-    sourceCode,
-    '```',
+    makeFence(sourceCode, 'typescript'),
     '',
     '## Input',
     '',
-    '```json',
-    inputJson,
-    '```',
+    makeFence(inputJson, 'json'),
     '',
     `## ${outputLabel}`,
     '',
-    `\`\`\`${outputFence}`,
-    expectedResult,
-    '```',
+    makeFence(expectedResult, outputFence),
     '',
   ].join('\n')
 }
 
 export const buildAllGeneratedExampleDocs = (repoRoot: string = repositoryRoot): Record<string, string> => {
   const manifest = loadExampleManifest(repoRoot)
+  validateExampleManifest(manifest)
   const result: Record<string, string> = {}
   for (const row of manifest.rows) {
     result[path.join(repoRoot, row.docTarget)] = buildGeneratedExampleDoc(row, repoRoot)

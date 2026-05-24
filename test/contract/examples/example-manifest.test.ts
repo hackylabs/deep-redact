@@ -3,6 +3,7 @@ import { dirname, posix, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  ExampleVerificationError,
   loadExampleManifest,
   validateExampleManifest,
   verifyExampleManifest,
@@ -41,7 +42,8 @@ const expectRepositoryPath = (candidatePath: string, expectedPrefix: string): vo
   expect(candidatePath).not.toContain('\\')
   expect(candidatePath).not.toMatch(/(^|\/)\.\.(\/|$)/)
   expect(posix.normalize(candidatePath)).toBe(candidatePath)
-  expect(candidatePath === expectedPrefix || candidatePath.startsWith(`${expectedPrefix}/`)).toBe(true)
+  const normalizedPrefix = expectedPrefix.endsWith('/') ? expectedPrefix : `${expectedPrefix}/`
+  expect(candidatePath === expectedPrefix || candidatePath.startsWith(normalizedPrefix)).toBe(true)
 
   const resolvedPath = resolve(repoRoot, candidatePath)
   expect(relative(repoRoot, resolvedPath)).not.toMatch(/^\.\.(?:\/|\\|$)/)
@@ -90,10 +92,11 @@ describe('example manifest contract', () => {
 
     for (const row of manifest.rows) {
       if (row.category === 'migration-fast-redact') {
-        expectRepositoryPath(row.fixtureDir, 'test/migration/fast-redact/fixtures')
+        expectRepositoryPath(row.fixtureDir, 'test/migration/fast-redact/fixtures/')
       } else if (row.category === 'migration-v3') {
-        expectRepositoryPath(row.fixtureDir, 'test/migration/v3/fixtures')
+        expectRepositoryPath(row.fixtureDir, 'test/migration/v3/fixtures/')
       } else {
+        expect(row.category).not.toMatch(/^migration-/)
         expectRepositoryPath(row.fixtureDir, `${fixtureRoot}/${row.id}`)
       }
     }
@@ -202,6 +205,38 @@ describe('example manifest contract', () => {
     }
 
     expect(() => validateExampleManifest(invalidManifest)).toThrow(/fixtureDir/)
+  })
+
+  it('throws ExampleVerificationError with rowId, fixtureDir, assertionMode, and phase when a migration row has an invalid fixtureDir', () => {
+    expect.assertions(5)
+    const manifest = loadExampleManifest(repoRoot)
+
+    const badRow = {
+      id: 'migration-test-row',
+      category: 'migration-fast-redact' as const,
+      docTarget: 'docs/examples/migration-test-row.md',
+      sourceFile: 'docs/examples/examples/migration-test-row.ts',
+      fixtureDir: 'test/migration/fast-redact/fixtures/dot-path-structured-output/../../../escape',
+      assertionMode: 'structured-output' as const,
+      expectedResultFile: 'expected-v4.json',
+    }
+
+    const invalidManifest: ExampleManifest = { ...manifest, rows: [badRow] }
+
+    let caughtError: unknown
+    try {
+      validateExampleManifest(invalidManifest)
+    } catch (err) {
+      caughtError = err
+    }
+
+    expect(caughtError).toBeInstanceOf(ExampleVerificationError)
+    const verificationError = caughtError as ExampleVerificationError
+    expect(verificationError.rowId).toBe('migration-test-row')
+    expect(verificationError.fixtureDir).toBe('test/migration/fast-redact/fixtures/dot-path-structured-output/../../../escape')
+    expect(verificationError.assertionMode).toBe('structured-output')
+    const expectedPhase: typeof verificationError.phase = 'fixture'
+    expect(verificationError.phase).toBe(expectedPhase)
   })
 
   it('runs verifyExampleManifest against the real manifest and returns verified rows without error', async () => {

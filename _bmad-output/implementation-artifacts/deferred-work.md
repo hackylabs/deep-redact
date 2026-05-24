@@ -1,14 +1,6 @@
 ## Deferred from: code review of 5-6-establish-the-worked-example-manifest-and-validation-harness (2026-05-22)
 
-- **`loadExampleManifest` surfaces a raw `SyntaxError` on invalid JSON** — no filename context in the error message. Consistent with existing `loadV3MigrationMatrix` pattern; CI runs committed files. `scripts/example-validation.ts:88–90`.
-- **Contract tests do not assert `ExampleVerificationError` property fields** — `rowId`, `fixtureDir`, `assertionMode`, `phase` not exercised. Stories 5.7/5.8 complete but these remain unasserted. `test/contract/examples/example-manifest.test.ts`.
 - **`verify:examples` triggers a full rebuild on every CI run** — consistent with all other `verify:*` scripts; not worth changing in isolation. `package.json`, `.github/workflows/npmPublish.yml`.
-
-## Deferred from: code review of 5-8-publish-verified-migration-worked-examples-and-enforce-example-documentation-lockstep (2026-05-23)
-
-- **`buildAllGeneratedExampleDocs` calls `loadExampleManifest` without prior `validateExampleManifest`** — In the build-script context, the manifest is a trusted committed file, so the risk is theoretical. Pre-existing pattern across `generated-files.ts` functions. Revisit if the generator is ever called with untrusted manifest paths. `scripts/generated-files.ts:125`.
-- **No backtick-fence escaping in `buildGeneratedExampleDoc`** — If any source file or fixture ever contains a line starting with three backticks, the generated Markdown doc will have its fence closed prematurely. Theoretical for the specific content currently generated. Revisit if example source files become more complex. `scripts/generated-files.ts:103`.
-- **Contract test `expectRepositoryPath` is less strict than runtime `validateFixturePath` for migration rows** — `expectRepositoryPath(row.fixtureDir, 'test/migration/.../fixtures')` accepts the bare base directory, while the runtime guard requires a trailing-slash subdirectory. Theoretical gap; the current manifest is not affected. Revisit if migration row fixture dir validation is tightened. `test/contract/examples/example-manifest.test.ts:95`.
 
 ## Deferred from: code review of 5-9-produce-canonical-benchmark-runs-and-publish-benchmark-artefacts (2026-05-23)
 

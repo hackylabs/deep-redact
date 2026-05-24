@@ -130,7 +130,15 @@ const fail = (
 export const loadExampleManifest = (
   repositoryRoot = defaultRepositoryRoot,
 ): ExampleManifest => {
-  return readJsonFile<ExampleManifest>(path.join(repositoryRoot, manifestPath))
+  const fullPath = path.join(repositoryRoot, manifestPath)
+  try {
+    return readJsonFile<ExampleManifest>(fullPath)
+  } catch (err) {
+    throw new Error(
+      `Failed to load example manifest at ${fullPath}: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    )
+  }
 }
 
 const isRelativePathSafe = (value: string): boolean => {
