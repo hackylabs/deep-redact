@@ -8,11 +8,20 @@ import {
 } from '../../../scripts/generated-files.ts'
 import {
   loadV3MigrationMatrix,
+  KNOWN_V4_OPTIONS,
   renderV3MigrationGuide,
   validateV3MigrationMatrix,
   verifyV3MigrationMatrix,
   type V3MigrationMatrix,
 } from '../../../scripts/v3-migration.ts'
+import type { DeepRedactOptions } from '../../../src/index.js'
+
+type _KnownV4Option = typeof KNOWN_V4_OPTIONS extends Set<infer K> ? K : never
+// Compile-time guard: fails if any DeepRedactOptions key is absent from KNOWN_V4_OPTIONS
+const _knownV4OptionsCoverage: [Exclude<keyof DeepRedactOptions, _KnownV4Option>] extends [never]
+  ? true
+  : 'KNOWN_V4_OPTIONS in v3-migration.ts is missing one or more DeepRedactOptions keys — update the set' = true
+void _knownV4OptionsCoverage
 
 const repoRoot = process.cwd()
 const matrixPath = 'test/migration/v3/matrix.json'
@@ -39,6 +48,7 @@ const expectedRowIds = [
   'serialise-option-carryover',
   'remove-option-carryover',
   'combined-migration',
+  'v3-unsupported-option',
 ]
 
 const readRepositoryFile = (filePath: string): string => readFileSync(resolve(repoRoot, filePath), 'utf8')
@@ -231,7 +241,14 @@ describe('v3 migration matrix contract', () => {
     expect(generatedFilePaths.v3MigrationGuidePath).toBe(resolve(repoRoot, guidePath))
     expect(buildGeneratedV3MigrationGuide()).toBe(renderedGuide)
     expect(readRepositoryFile(guidePath)).toBe(renderedGuide)
+    const structuredCount = matrix.rows.filter((r) => r.assertionMode === 'v4-structured-output').length
+    const serialisedCount = matrix.rows.filter((r) => r.assertionMode === 'v4-serialised-output').length
+    const initialisationErrorCount = matrix.rows.filter((r) => r.assertionMode === 'v4-initialisation-error').length
+
     expect(renderedGuide).toContain('This file is generated. Do not edit it by hand.')
+    expect(renderedGuide).toContain(`- Structured output rows: ${structuredCount}`)
+    expect(renderedGuide).toContain(`- Serialised output rows: ${serialisedCount}`)
+    expect(renderedGuide).toContain(`- Initialisation error rows: ${initialisationErrorCount}`)
     expect(renderedGuide).toContain('`blacklistedKeys` to `keys`')
     expect(renderedGuide).toContain('`replacement` to `censor`')
     expect(renderedGuide).toContain('`serialize` (alias)')
@@ -250,6 +267,17 @@ describe('v3 migration matrix contract', () => {
       'pnpm run build && node --experimental-strip-types ./scripts/verify-v3-migration.ts',
     )
     expect(packageJson.dependencies).toBeUndefined()
+  })
+
+  it('KNOWN_V4_OPTIONS contains no keys that v4 treats as unsupported', () => {
+    for (const key of KNOWN_V4_OPTIONS) {
+      try {
+        deepRedact({ [key]: null as never })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        expect(message).not.toMatch(/Unsupported option/)
+      }
+    }
   })
 
   it('proves v4 does not silently accept v3-only option names', () => {

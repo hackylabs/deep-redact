@@ -1,0 +1,1 @@
+Using a v3-only option name (`blacklistedKeys`) in a v4 configuration causes Deep Redact to throw at initialisation. Rename `blacklistedKeys` to `keys` before calling `deepRedact(options)`.

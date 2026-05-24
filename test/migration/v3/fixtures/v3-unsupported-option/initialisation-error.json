@@ -1,0 +1,5 @@
+{
+  "unsupportedOption": "blacklistedKeys",
+  "expectedErrorFragment": "Unsupported option \"blacklistedKeys\".",
+  "description": "Deep Redact v4 rejects the v3 option name blacklistedKeys. Rename it to keys."
+}

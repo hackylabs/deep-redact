@@ -270,6 +270,34 @@
         "kind": "structured",
         "file": "expected-v4.json"
       }
+    },
+    {
+      "id": "v3-unsupported-option",
+      "fixtureDir": "test/migration/v3/fixtures/v3-unsupported-option",
+      "v3Usage": {
+        "import": "DeepRedact",
+        "instantiation": "new DeepRedact({ blacklistedKeys: ['password'] })",
+        "invocation": "redactor.redact(payload)"
+      },
+      "v4Usage": {
+        "import": "deepRedact",
+        "factory": "deepRedact({ blacklistedKeys: ['password'] })",
+        "invocation": "not applicable — factory throws before any redaction call",
+        "config": {
+          "blacklistedKeys": ["password"]
+        },
+        "unsupportedOption": "blacklistedKeys"
+      },
+      "migrationSteps": [
+        "Rename `blacklistedKeys` to `keys`. Deep Redact v4 does not accept the v3 option name — passing it causes an initialisation error.",
+        "Replace `new DeepRedact(options)` with `deepRedact(options)`.",
+        "Replace `redactor.redact(payload)` with `redactor(payload)`."
+      ],
+      "assertionMode": "v4-initialisation-error",
+      "expectedResult": {
+        "kind": "initialisation-error",
+        "file": "initialisation-error.json"
+      }
     }
   ]
 }

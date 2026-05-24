@@ -15,6 +15,7 @@ This guide covers the Deep Redact v3-to-v4 migration only. The `fast-redact` mig
 - Fixture root: `test/migration/v3/fixtures`
 - Structured output rows: 8
 - Serialised output rows: 1
+- Initialisation error rows: 1
 
 ## Key Changes
 
@@ -43,6 +44,7 @@ This guide covers the Deep Redact v3-to-v4 migration only. The `fast-redact` mig
 | `serialise-option-carryover` | `v4-serialised-output` |
 | `remove-option-carryover` | `v4-structured-output` |
 | `combined-migration` | `v4-structured-output` |
+| `v3-unsupported-option` | `v4-initialisation-error` |
 
 ## Rows
 
@@ -504,4 +506,52 @@ Migration steps:
 
 Notes: A real migration typically involves renaming multiple options at once. This row proves `blacklistedKeys` → `keys`, `replacement` → `censor`, and `retainStructure` carrying over, all in one configuration.
 
+### v3-unsupported-option
 
+Assertion mode: `v4-initialisation-error`
+
+Fixture directory: `test/migration/v3/fixtures/v3-unsupported-option`
+
+v3 usage:
+
+```json
+{
+  "import": "DeepRedact",
+  "instantiation": "new DeepRedact({ blacklistedKeys: ['password'] })",
+  "invocation": "redactor.redact(payload)"
+}
+```
+
+v4 usage:
+
+```json
+{
+  "import": "deepRedact",
+  "factory": "deepRedact({ blacklistedKeys: ['password'] })",
+  "invocation": "not applicable — factory throws before any redaction call",
+  "config": {
+    "blacklistedKeys": [
+      "password"
+    ]
+  },
+  "unsupportedOption": "blacklistedKeys"
+}
+```
+
+Expected result:
+
+```json
+{
+  "unsupportedOption": "blacklistedKeys",
+  "expectedErrorFragment": "Unsupported option \"blacklistedKeys\".",
+  "description": "Deep Redact v4 rejects the v3 option name blacklistedKeys. Rename it to keys."
+}
+```
+
+Migration steps:
+
+- Rename `blacklistedKeys` to `keys`. Deep Redact v4 does not accept the v3 option name — passing it causes an initialisation error.
+- Replace `new DeepRedact(options)` with `deepRedact(options)`.
+- Replace `redactor.redact(payload)` with `redactor(payload)`.
+
+Notes: Using a v3-only option name (`blacklistedKeys`) in a v4 configuration causes Deep Redact to throw at initialisation. Rename `blacklistedKeys` to `keys` before calling `deepRedact(options)`.

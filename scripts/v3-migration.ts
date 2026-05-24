@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import path, { posix, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
+import type { DeepRedactOptions } from '../src/types/public.js'
 
 export type V3MigrationAssertionMode =
   | 'v4-structured-output'
@@ -99,6 +100,24 @@ const expectedResultKindValues = new Set<V3MigrationExpectedResult['kind']>([
   'initialisation-error',
 ])
 
+const KNOWN_V4_OPTIONS_ARRAY = [
+  'caseSensitiveKeyMatch',
+  'censor',
+  'diagnostics',
+  'fuzzyKeyMatch',
+  'keys',
+  'paths',
+  'remove',
+  'replaceStringByLength',
+  'retainStructure',
+  'ignoredValueTypes',
+  'serialise',
+  'stringTests',
+  'transformers',
+] as const satisfies ReadonlyArray<keyof DeepRedactOptions>
+
+export const KNOWN_V4_OPTIONS = new Set<keyof DeepRedactOptions>(KNOWN_V4_OPTIONS_ARRAY)
+
 export const helperImplementations: Record<string, (value: unknown) => unknown> = {
   maskValueType: (value: unknown): string => `[masked-${typeof value}]`,
 }
@@ -111,6 +130,7 @@ const isHelperReference = (value: unknown): value is HelperReference => {
   return isRecord(value)
     && Object.keys(value).length === 1
     && typeof value.helperId === 'string'
+    && value.helperId.length > 0
 }
 
 const materialiseHelperConfig = (value: unknown): unknown => {
@@ -150,7 +170,15 @@ const readFixtureJson = <T>(
   row: V3MigrationRow,
   fileName: string,
 ): T => {
-  return readJsonFile<T>(path.join(repositoryRoot, row.fixtureDir, fileName))
+  const fixturePath = path.join(repositoryRoot, row.fixtureDir, fileName)
+
+  try {
+    return readJsonFile<T>(fixturePath)
+  } catch (err) {
+    throw new Error(
+      `Row "${row.id}": failed to parse ${fixturePath}: ${err instanceof Error ? err.message : String(err)}`,
+    )
+  }
 }
 
 const readFixtureText = (
@@ -158,7 +186,9 @@ const readFixtureText = (
   row: V3MigrationRow,
   fileName: string,
 ): string => {
-  return readFileSync(path.join(repositoryRoot, row.fixtureDir, fileName), 'utf8').replace(/\r?\n$/, '')
+  return readFileSync(path.join(repositoryRoot, row.fixtureDir, fileName), 'utf8')
+    .replace(/\r\n|\r/g, '\n')
+    .replace(/\n$/, '')
 }
 
 export class V3MigrationVerificationError extends Error {
@@ -275,7 +305,9 @@ export const validateV3MigrationMatrix = (
     const candidateRow = row as V3MigrationRow
 
     if (Object.keys(candidateRow).join('\n') !== rowKeys.join('\n')) {
-      fail(candidateRow, 'fixture', `row keys must be exactly ${rowKeys.join(', ')}`)
+      const actualKeys = Object.keys(candidateRow).join(', ')
+      const expectedKeys = rowKeys.join(', ')
+      fail(candidateRow, 'fixture', `row keys must be [${expectedKeys}] but got [${actualKeys}]`)
     }
 
     if (typeof candidateRow.id !== 'string' || candidateRow.id.length === 0) {
@@ -310,7 +342,7 @@ export const validateV3MigrationMatrix = (
       }
     }
 
-    if (!isRecord(candidateRow.v4Usage)) {
+if (!isRecord(candidateRow.v4Usage)) {
       fail(candidateRow, 'fixture', 'v4Usage must be an object')
     }
 
@@ -322,6 +354,14 @@ export const validateV3MigrationMatrix = (
 
     if (!isRecord(candidateRow.v4Usage.config)) {
       fail(candidateRow, 'fixture', 'v4Usage.config must be an object')
+    }
+
+    if (candidateRow.assertionMode !== 'v4-initialisation-error') {
+      for (const key of Object.keys(candidateRow.v4Usage.config)) {
+        if (!KNOWN_V4_OPTIONS.has(key)) {
+          fail(candidateRow, 'fixture', `v4Usage.config contains unknown v4 option key "${key}"`)
+        }
+      }
     }
 
     assertStringArray(candidateRow.migrationSteps, candidateRow, 'migrationSteps')
@@ -450,13 +490,18 @@ const verifySerialisedOutputRow = ({
 
 const verifyInitialisationErrorRow = ({
   row,
-  repositoryRoot: _repositoryRoot,
+  repositoryRoot,
   redactorFactory,
 }: {
   row: V3MigrationRow;
   repositoryRoot: string;
   redactorFactory: RedactorFactory;
 }): void => {
+  const fixtureData = readFixtureJson<{ expectedErrorFragment?: string }>(
+    repositoryRoot,
+    row,
+    row.expectedResult.file,
+  )
   const v4Config = materialiseConfig(row.v4Usage.config)
 
   try {
@@ -469,6 +514,13 @@ const verifyInitialisationErrorRow = ({
       && !message.includes(row.v4Usage.unsupportedOption)
     ) {
       fail(row, 'v4', `initialisation error did not identify ${row.v4Usage.unsupportedOption}`)
+    }
+
+    if (
+      fixtureData.expectedErrorFragment !== undefined
+      && !message.includes(fixtureData.expectedErrorFragment)
+    ) {
+      fail(row, 'v4', `initialisation error message did not include expected fragment "${fixtureData.expectedErrorFragment}"`)
     }
 
     return
@@ -601,8 +653,9 @@ export const renderV3MigrationGuide = (
 
   const structuredCount = matrix.rows.filter((row) => row.assertionMode === 'v4-structured-output').length
   const serialisedCount = matrix.rows.filter((row) => row.assertionMode === 'v4-serialised-output').length
+  const initialisationErrorCount = matrix.rows.filter((row) => row.assertionMode === 'v4-initialisation-error').length
 
-  return `${[
+  return [
     '<!-- This file is generated by scripts/generate-v3-migration-doc.ts. This file is generated. Do not edit it by hand. -->',
     '',
     '# Migrating From Deep Redact v3',
@@ -620,6 +673,7 @@ export const renderV3MigrationGuide = (
     `- Fixture root: \`${matrix.metadata.fixtureRoot}\``,
     `- Structured output rows: ${structuredCount}`,
     `- Serialised output rows: ${serialisedCount}`,
+    `- Initialisation error rows: ${initialisationErrorCount}`,
     '',
     '## Key Changes',
     '',
@@ -644,6 +698,5 @@ export const renderV3MigrationGuide = (
     '## Rows',
     '',
     ...matrix.rows.map((row) => renderRow(repositoryRoot, row)),
-    '',
-  ].join('\n')}\n`
+  ].join('\n')
 }
