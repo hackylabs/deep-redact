@@ -4,6 +4,7 @@ import {
   type CompiledExactPathRule,
   type CompiledRedactorPlan,
 } from '../../../src/core/compiler/compile-redactor-plan.js'
+import { renderSelectorSignature } from '../../../src/core/matching/path-normaliser.js'
 import { redactValue } from '../../../src/core/runtime/redact-value.js'
 import type { DeepRedactOptions, FunctionCensorContext } from '../../../src/index.js'
 import type { PathSegment } from '../../../src/core/matching/path-parser.js'
@@ -14,16 +15,24 @@ const createEmptyLookupTable = <T>(): Record<string, T> =>
   Object.create(null) as Record<string, T>
 
 export const createGenericisedPlan = (plan: CompiledRedactorPlan): CompiledRedactorPlan => {
+  if (plan.dynamicPathRules.length !== 0) {
+    throw new Error('createGenericisedPlan: plan must have no pre-existing dynamicPathRules')
+  }
+
   const convertedRules: CompiledDynamicPathRule[] = []
 
   for (const canonicalPath of Object.keys(plan.exactPathRules)) {
     const exactRule = plan.exactPathRules[canonicalPath]!
     convertedRules.push(Object.freeze({
-      signature: canonicalPath,
+      signature: renderSelectorSignature(exactRule.segments as readonly PathSegment[]),
       policy: exactRule.policy,
       rulePath: exactRule.rulePath,
       segments: exactRule.segments as readonly PathSegment[],
     }))
+  }
+
+  if (convertedRules.length !== Object.keys(plan.exactPathRules).length) {
+    throw new Error('createGenericisedPlan: internal error — converted rule count mismatch')
   }
 
   return Object.freeze({
@@ -96,6 +105,24 @@ const SERIALISED_MULTIPLE_POLICIES_CANARY =
 
 const CUSTOM_SERIALISED_SINGLE_EXACT_PATH_CANARY =
   '{"v":{"user":{"password":"[REDACTED]","safe":"keep"}}}' as const
+
+const SERIALISED_BRACKET_QUOTED_KEY_CANARY =
+  '{"users":{"first.name":{"email":"[REDACTED]"}}}' as const
+
+const SERIALISED_PRIMITIVE_LEAF_VALUES_CANARY =
+  '{"data":{"count":"[REDACTED]","active":"[REDACTED]","extra":"[REDACTED]"}}' as const
+
+const SERIALISED_ABSENT_PATH_CANARY =
+  '{"user":{"name":"alice","age":30}}' as const
+
+const SERIALISED_REPLACE_STRING_BY_LENGTH_CANARY =
+  '{"user":{"password":"[REDAC","safe":"keep"}}' as const
+
+const SERIALISED_REPLACE_STRING_BY_LENGTH_CUSTOM_CENSOR_CANARY =
+  '{"user":{"password":"******","safe":"keep"}}' as const
+
+const SERIALISED_RETAIN_STRUCTURE_ALIAS_REPLAY_CANARY =
+  '{"primary":{"secret":"[REDACTED]","name":"[REDACTED]"},"secondary":{"secret":"[REDACTED]","name":"[REDACTED]"}}' as const
 
 // ── Corpus ───────────────────────────────────────────────────────────────────
 
@@ -202,5 +229,70 @@ export const exactPathEquivalenceCorpus: readonly ExactPathEquivalenceCorpusEntr
     createPayload: () => ({ config: { apiKey: 'key123', secret: 'secret456', safe: 'keep' } }),
     expectedStructured: { config: { apiKey: '[API-KEY]', secret: '[SECRET]', safe: 'keep' } },
     expectedSerialised: SERIALISED_MULTIPLE_POLICIES_CANARY,
+  },
+  {
+    name: 'exact-path-bracket-quoted-key',
+    title: 'exact path with bracket-quoted property key — users["first.name"].email',
+    exactPathEligibilityReason: 'all segments are exact static properties; the middle segment uses bracket-quoted notation because its key contains a dot',
+    options: { paths: ['users["first.name"].email'] },
+    createPayload: () => ({ users: { 'first.name': { email: 'user@example.com' } } }),
+    expectedStructured: { users: { 'first.name': { email: '[REDACTED]' } } },
+    expectedSerialised: SERIALISED_BRACKET_QUOTED_KEY_CANARY,
+  },
+  {
+    name: 'exact-path-primitive-leaf-values',
+    title: 'exact paths targeting number, boolean, and null leaf values',
+    exactPathEligibilityReason: 'three exact static absolute paths; leaf values are non-string primitives',
+    options: { paths: ['data.count', 'data.active', 'data.extra'] },
+    createPayload: () => ({ data: { count: 42, active: true, extra: null } }),
+    expectedStructured: { data: { count: '[REDACTED]', active: '[REDACTED]', extra: '[REDACTED]' } },
+    expectedSerialised: SERIALISED_PRIMITIVE_LEAF_VALUES_CANARY,
+  },
+  {
+    name: 'exact-path-absent-key',
+    title: 'exact path targeting a key absent from the payload — no-op',
+    exactPathEligibilityReason: 'one exact static absolute path; the targeted key does not exist in the payload',
+    options: { paths: ['user.missing'] },
+    createPayload: () => ({ user: { name: 'alice', age: 30 } }),
+    expectedStructured: { user: { name: 'alice', age: 30 } },
+    expectedSerialised: SERIALISED_ABSENT_PATH_CANARY,
+  },
+  {
+    name: 'exact-path-replace-string-by-length',
+    title: 'exact path with replaceStringByLength: true — user.password',
+    exactPathEligibilityReason: 'one exact static absolute path with replaceStringByLength: true per-path override',
+    options: { paths: [{ path: 'user.password', replaceStringByLength: true }] },
+    createPayload: () => ({ user: { password: 'secret', safe: 'keep' } }),
+    expectedStructured: { user: { password: '[REDAC', safe: 'keep' } },
+    expectedSerialised: SERIALISED_REPLACE_STRING_BY_LENGTH_CANARY,
+  },
+  {
+    name: 'exact-path-replace-string-by-length-custom-censor',
+    title: 'exact path with replaceStringByLength: true and single-character censor — quotient branch of buildSameLengthReplacement',
+    exactPathEligibilityReason: 'one exact static absolute path with replaceStringByLength: true and a single-character censor, exercising the repeat branch (quotient > 0) of buildSameLengthReplacement',
+    options: { paths: [{ path: 'user.password', replaceStringByLength: true, censor: '*' }] },
+    createPayload: () => ({ user: { password: 'secret', safe: 'keep' } }),
+    expectedStructured: { user: { password: '******', safe: 'keep' } },
+    expectedSerialised: SERIALISED_REPLACE_STRING_BY_LENGTH_CUSTOM_CENSOR_CANARY,
+  },
+  {
+    name: 'exact-path-retain-structure-alias-replay',
+    title: 'retainStructure alias-replay — same object identity reached via two branches',
+    exactPathEligibilityReason: 'two exact static absolute paths with retainStructure: true; the payload uses shared object identity across both branches',
+    options: {
+      paths: [
+        { path: 'primary', retainStructure: true },
+        { path: 'secondary', retainStructure: true },
+      ],
+    },
+    createPayload: () => {
+      const sharedProfile = { secret: 'hidden', name: 'alice' }
+      return { primary: sharedProfile, secondary: sharedProfile }
+    },
+    expectedStructured: {
+      primary: { secret: '[REDACTED]', name: '[REDACTED]' },
+      secondary: { secret: '[REDACTED]', name: '[REDACTED]' },
+    },
+    expectedSerialised: SERIALISED_RETAIN_STRUCTURE_ALIAS_REPLAY_CANARY,
   },
 ]

@@ -3,16 +3,6 @@
 - **Single-fixture fixture set reduces the cross-contamination warm-up test to a trivial duplicate** — If any fixture set ever has only one fixture, the second corpus test reduces to two runs of the same fixture, not cross-contamination proof. No current set triggers this. Revisit if any fixture set is pruned to a single entry during corpus cleanup. `test/contract/api/create-redactor.test.ts:3639`.
 - **`failingMapMarker` Symbol lost across `structuredClone` or worker serialisation** — Symbol properties are silently dropped by `structuredClone` and structured-clone-based IPC. No current test path exercises this. Revisit if a `--pool=forks` Vitest configuration serialises the edge-case payload across a worker boundary; replace the Symbol marker with a `WeakSet` or named class predicate at that point. `test/fixtures/structured-determinism/index.ts:97`.
 
-## Deferred from: code review of 4-3-prove-exact-path-fast-lane-and-generic-traversal-are-behaviourally-equivalent (2026-05-14)
-
-- `signature` field on converted dynamic rule uses `canonicalPath` string rather than a `renderSelectorSignature`-produced value — semantically imprecise but no runtime impact for current corpus (`test/fixtures/exact-path-equivalence/index.ts`)
-- No corpus entry for bracket-quoted or special-character property keys — equivalence proof incomplete for paths whose canonical representation differs from dot-notation
-- `retainStructure` alias-replay caching behaviour not exercised across lanes — `createPayload` creates fresh objects so no shared-identity alias is ever replayed
-- No corpus entry for non-string primitive leaf values (number, boolean, null) under an exact path
-- No corpus entry for a path that is absent from the payload — silent no-op divergence between lanes would go undetected
-- No corpus entry for `replaceStringByLength: true` policy
-- Converted-rule ordering in `createGenericisedPlan` appends after pre-existing `dynamicPathRules`; relies on the `dynamicPathRules.length === 0` invariant enforced by the control assertion (`test/fixtures/exact-path-equivalence/index.ts`)
-
 ## Deferred from: code review of 5-5-publish-a-dedicated-deep-redact-v3-to-v4-migration-path (2026-05-22)
 
 - **No `v4-initialisation-error` manifest rows** — declared mode never exercised via `verify:migration:v3`; rejection proofs exist only as direct contract-test calls. Deferred: contract-test coverage accepted as sufficient. `scripts/v3-migration.ts`, `test/migration/v3/matrix.json`.
