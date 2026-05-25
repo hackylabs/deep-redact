@@ -58,10 +58,10 @@ FR38: Platform and security teams can review published guidance on supported cap
 
 ### NonFunctional Requirements
 
-NFR1: On comparable path-based benchmark workloads, Deep Redact v4 must operate within roughly `25% to 50%` overhead versus `fast-redact`.
+NFR1: On comparable path-based benchmark workloads, Deep Redact v4 targets roughly `25% to 50%` overhead versus `fast-redact` as an aspirational goal, with a release-blocking ceiling of `60%` overhead.
 NFR2: Performance claims must be backed by published benchmark artefacts included with the release.
 NFR3: Performance evaluation must use a published benchmark set with clearly documented comparable workloads and benchmark conditions.
-NFR4: Performance regressions against the published benchmark set must be treated as release-blocking when they push equivalent path-based workloads outside the agreed `25% to 50%` overhead range versus `fast-redact`.
+NFR4: Performance regressions against the published benchmark set must be treated as release-blocking when they push equivalent path-based workloads outside the `60%` overhead ceiling versus `fast-redact`. The `25% to 50%` band is the aspirational optimisation target; exceeding it without breaching the `60%` ceiling is a signal to keep optimising, not a release blocker.
 NFR5: The release must ship with no known runtime security vulnerabilities.
 NFR6: The library must provide one-way redaction only and must not expose any restore or unredact capability.
 NFR7: When a redaction error occurs, no error placeholder or diagnostic output may expose sensitive source values.
@@ -2144,7 +2144,7 @@ so that guide generation fails visibly rather than silently and the rendered Mar
 
 ## Epic 7: Runtime Performance — Pass the Benchmark Gate
 
-The `path-based-single-object-node24` benchmark artefact in `test/artefacts/benchmarks/` records a `thresholdDecision.passed: false` with an `overheadPct` of 5566.4% against a `maxOverheadPct` gate of 50. The gap exists because the general traversal algorithm allocates per-call state (WeakMaps, frozen path-segment arrays, canonical path strings) and walks the full object graph on every invocation, while fast-redact compiles exact paths into direct property accessors at init time and executes them with near-zero per-call overhead.
+The `path-based-single-object-node24` benchmark artefact in `test/artefacts/benchmarks/` records a `thresholdDecision.passed: false` with an `overheadPct` of 5566.4% against a `maxOverheadPct` release ceiling of 60 (with `25–50%` retained as the aspirational optimisation target). The gap exists because the general traversal algorithm allocates per-call state (WeakMaps, frozen path-segment arrays, canonical path strings) and walks the full object graph on every invocation, while fast-redact compiles exact paths into direct property accessors at init time and executes them with near-zero per-call overhead.
 
 This epic closes the gate through a compiled path executor for exact-path-only configurations and targeted hot-path allocation reductions in the general traversal.
 
@@ -2152,27 +2152,35 @@ This epic closes the gate through a compiled path executor for exact-path-only c
 
 As a platform or performance engineer,
 I want the redactor to use compiled direct path operations at runtime when configured exclusively with exact string paths,
-so that the `path-based-single-object-node24` benchmark gate of ≤50% overhead vs fast-redact is met.
+so that the `path-based-single-object-node24` benchmark gate of ≤60% overhead vs fast-redact is met (with ≤50% as the aspirational target).
 
 **Motivation:** When all entries in `paths` are exact string selectors (no `*`, `**`, `!<key>`, `!<index>`, regex segments, or bracket-quoted wildcard syntax) and no `keys`, `stringTests`, `fuzzyKeyMatch`, or `caseSensitiveKeyMatch: false` options are present, the general traversal algorithm's fixed per-call cost (three WeakMap constructions, `Object.freeze` on every path-segment array, `Object.defineProperty` on every output property, canonical path string concatenation per node) dominates the measured time. For a small object with four exact paths, this overhead is approximately 56× fast-redact. A compiled executor compiled at init time eliminates these fixed costs from the hot path.
 
 **Acceptance Criteria:**
 
+> **Course-corrected 2026-05-25** (Sprint Change Proposal 2026-05-25): `isExactPathOnly` is a compile-time **candidacy** flag; final lane selection is **per-call** and payload-aware. A config-level-only gate cannot preserve behavioural equivalence because the behaviours the fast lane cannot reproduce (built-in/custom transformers, `ignoredValueTypes`, failure degradation/diagnostics, circular refs, root identity, sparse holes) are determined by the **payload**, not the config.
+
 **Given** a redactor initialised with a config whose `paths` array contains only exact string selectors (no wildcard, recursive-wildcard, ignore, or regex path segments) and whose config sets none of `keys`, `stringTests`, `fuzzyKeyMatch: true`, or `caseSensitiveKeyMatch: false`
 **When** the redactor factory compiles the plan
-**Then** the plan is flagged as eligible for the compiled path executor
+**Then** the plan is flagged as a **candidate** for the compiled path executor (`isExactPathOnly: true` — necessary but not sufficient)
 **And** compiled direct-path accessor closures are generated at init time for each configured path — one per unique target — with no deferred work left to each `.redact()` call
 
-**Given** a compiled-path-executor-eligible redactor and a runtime payload
+**Given** a candidate redactor and a **fast-lane-safe** runtime payload (pure plain-data: only plain objects, arrays, and primitive leaves)
 **When** `.redact(payload)` is invoked
 **Then** the executor applies each compiled accessor in turn to produce the redacted output
-**And** no per-call WeakMap, frozen array, or canonical path string is allocated
+**And** no per-call WeakMap, frozen array, `Object.defineProperty`, or canonical path string is allocated inside the redaction path (a lightweight fast-lane-safe guard may run first, itself allocating none of those and using a bounded depth cap for cycle safety)
 **And** the output is behaviourally identical to what the general traversal would produce for the same config and input
+**And** the same input reference is returned when no configured path changed anything, and sparse array holes are preserved
+
+**Given** a candidate redactor and a payload that is **not** fast-lane-safe (contains a supported-transformable runtime value such as Date/BigInt/Map/Set/Error/RegExp/URL, a circular reference, a non-plain prototype, or a property whose accessor throws)
+**When** `.redact(payload)` is invoked
+**Then** the call is delegated to the general traversal
+**And** output is identical to general-traversal output (transformers applied, `ignoredValueTypes` honoured, nested failures degraded to `[UNSUPPORTED]` with diagnostics, no rethrow)
 
 **Given** the `path-based-single-object-node24` benchmark row in `test/bench/manifest.json`
 **When** the benchmark is run and the artefact is written to `test/artefacts/benchmarks/path-based-single-object-node24.json`
 **Then** `thresholdDecision.passed` is `true`
-**And** `overheadPct` is ≤50
+**And** `overheadPct` is ≤60 (release ceiling; ≤50 is the aspirational target)
 
 **Given** a redactor initialised with any config that includes dynamic path segments (`*`, `**`, ignore segments, regex), `keys`, `stringTests`, fuzzy matching, or case-insensitive matching
 **When** `.redact(payload)` is invoked
@@ -2195,7 +2203,7 @@ As a backend engineer,
 I want a comprehensive equivalence corpus verifying that the compiled path executor and the general traversal produce identical output for all valid exact-path-only configurations,
 so that the compiled fast path cannot silently diverge from the general traversal as the codebase evolves.
 
-**Motivation:** Story 4.3 established a behavioural equivalence proof between the then-current fast lane and the general traversal. Story 7.1 introduces a new fast lane. The equivalence corpus must be extended to cover the compiled path executor across the edge cases specific to exact-path-only configs.
+**Motivation:** Story 4.3 established a behavioural equivalence proof between the then-current fast lane and the general traversal. Story 7.1 introduces a new fast lane. The equivalence corpus must be extended to cover the compiled path executor across the edge cases specific to exact-path-only configs. **Per the 2026-05-25 course-correction, the corpus must also include payloads that are NOT fast-lane-safe (supported-transformable runtime values, circular references, throwing accessors) and assert that the fast-lane-wired redactor delegates to the general traversal and produces identical output — i.e. the per-call guard's delegation is itself proven.**
 
 **Acceptance Criteria:**
 

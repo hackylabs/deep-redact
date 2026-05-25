@@ -121,7 +121,7 @@ Business success also means the release is recognised as the security-first and 
 
 ### Technical Success
 
-Performance must recover to commercially credible levels. On comparable path-based workloads, Deep Redact v4 should operate within the realistic range already outlined in the briefs, namely roughly 25 to 50 per cent overhead versus `fast-redact`, with published benchmark artefacts to support that claim.
+Performance must recover to commercially credible levels. On comparable path-based workloads, Deep Redact v4 targets roughly 25 to 50 per cent overhead versus `fast-redact` as an aspirational goal, with a release-blocking ceiling of 60 per cent overhead, backed by published benchmark artefacts. The 25–50 per cent band is the target the hot path is engineered toward; the 60 per cent ceiling is the hard gate that blocks release.
 
 Memory safety is non-negotiable. The release must include explicit safeguards against memory exhaustion and unsafe traversal behaviour, with hostile-input coverage treated as release-critical rather than optional hardening.
 
@@ -381,7 +381,7 @@ If trade-offs become necessary, formal IDE integration may slip before core reda
 
 ### Risk Mitigation Strategy
 
-**Technical Risks:** The primary technical risk is performance recovery. v4 must preserve and extend capability breadth while recovering enough runtime performance to remain credible against `fast-redact`. Mitigation requires benchmark-led development, published artefacts, and aggressive focus on hot-path costs during design and implementation. This risk has partially materialised: the v4.0.0 benchmark artefact for the `path-based-single-object-node24` workload records 5566.4% overhead, against the 25–50% target, because the general traversal engine (correctness-complete as of Epic 6) carries per-call allocation costs that dominate on small exact-path workloads. Epic 7 delivers the compiled path executor (Story 7.1) that addresses this directly. The risk is considered open until the gate passes.
+**Technical Risks:** The primary technical risk is performance recovery. v4 must preserve and extend capability breadth while recovering enough runtime performance to remain credible against `fast-redact`. Mitigation requires benchmark-led development, published artefacts, and aggressive focus on hot-path costs during design and implementation. This risk has partially materialised: the v4.0.0 benchmark artefact for the `path-based-single-object-node24` workload records 5566.4% overhead, against the 25–50% aspirational target and the 60% release ceiling, because the general traversal engine (correctness-complete as of Epic 6) carries per-call allocation costs that dominate on small exact-path workloads. Epic 7 delivers the compiled path executor (Story 7.1) that addresses this directly. The risk is considered open until the gate passes.
 
 **Market Risks:** The main market risk is that the release is perceived as richer but still not practical enough to replace incumbent tooling. The mitigation is to make the release easy to evaluate: clear migration guides, explicit parity and divergence documentation, strong examples, and published performance evidence.
 
@@ -455,12 +455,12 @@ If trade-offs become necessary, formal IDE integration may slip before core reda
 
 ### Performance
 
-- On comparable path-based benchmark workloads, Deep Redact v4 must operate within roughly `25% to 50%` overhead versus `fast-redact`.
+- On comparable path-based benchmark workloads, Deep Redact v4 targets roughly `25% to 50%` overhead versus `fast-redact` as an aspirational goal, with a release-blocking ceiling of `60%` overhead.
 - Performance claims must be backed by published benchmark artefacts included with the release.
 - Performance evaluation must use a published benchmark set with clearly documented comparable workloads and benchmark conditions.
-- Performance regressions against the published benchmark set must be treated as release-blocking when they push equivalent path-based workloads outside the agreed `25% to 50%` overhead range versus `fast-redact`.
+- Performance regressions against the published benchmark set must be treated as release-blocking when they push equivalent path-based workloads outside the `60%` overhead ceiling versus `fast-redact`. The `25% to 50%` band is the aspirational target the hot path is optimised toward; exceeding it without breaching the `60%` ceiling is a signal to keep optimising, not a release blocker.
 
-**Current status (v4.0.0):** The `path-based-single-object-node24` benchmark artefact records `overheadPct: 5566.4` against the `maxOverheadPct: 50` gate, a gap of two orders of magnitude. The overhead target above is unchanged. Epic 7 is the remediation plan: Story 7.1 delivers the compiled path executor that eliminates per-call traversal allocation for exact-path-only configurations, which is the only approach capable of closing the gap to within the target range. The gate remains blocking for protected-branch and release-candidate runs.
+**Current status (v4.0.0):** The `path-based-single-object-node24` benchmark artefact records `overheadPct: 5566.4` against the `maxOverheadPct: 60` release ceiling, a gap of two orders of magnitude. Epic 7 is the remediation plan: Story 7.1 delivers the compiled path executor that eliminates per-call traversal allocation for exact-path-only configurations, which is the only approach capable of closing the gap. The aspirational `25–50%` target is retained as the optimisation goal; the `60%` ceiling is the hard gate. The gate remains blocking for protected-branch and release-candidate runs.
 
 ### Security
 

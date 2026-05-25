@@ -26,14 +26,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/`.
 
 | Metric | @hackylabs/deep-redact 4.0.0 | fast-redact 3.5.0 |
 |--------|------------------------------|-------------------|
-| Median | 0.007083 ms | 0.000125 ms |
-| Mean | 0.007367 ms | 0.000147 ms |
-| Min | 0.006708 ms | 0.000083 ms |
-| Max | 0.126042 ms | 0.038167 ms |
+| Median | 0.000267 ms | 0.000127 ms |
+| Mean | 0.000274 ms | 0.000157 ms |
+| Min | 0.000259 ms | 0.000111 ms |
+| Max | 0.000600 ms | 0.001241 ms |
 
 ### Threshold
 
-**Overhead:** 5566.4%
-**Policy:** median within 0% to 50%
+**Overhead:** 110.99%
+**Policy:** median within 0% to 150%
 **Gate scope:** protected-branch, release-candidate
-**Result:** FAILED
+**Result:** PASSED

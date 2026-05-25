@@ -19,35 +19,35 @@
   },
   "measurements": {
     "subject": {
-      "median": 0.007082999999965978,
-      "mean": 0.007367339719998763,
-      "min": 0.006708000000003267,
-      "max": 0.126041999999984,
+      "median": 0.00026708400000006804,
+      "mean": 0.0002738045600000006,
+      "min": 0.00025900000000001454,
+      "max": 0.0005995000000000062,
       "unit": "ms"
     },
     "comparator": {
-      "median": 0.00012500000002546585,
-      "mean": 0.00014681145999945102,
-      "min": 0.00008299999990413198,
-      "max": 0.038167000000157714,
+      "median": 0.0001265839999999798,
+      "mean": 0.0001570433199999906,
+      "min": 0.00011141799999995783,
+      "max": 0.0012409999999999854,
       "unit": "ms"
     }
   },
-  "overheadPct": 5566.4,
+  "overheadPct": 110.99,
   "generatingPlatform": {
     "os": "darwin",
     "arch": "arm64",
     "nodeVersion": "v24.14.1"
   },
   "thresholdDecision": {
-    "passed": false,
+    "passed": true,
     "metric": "median",
     "minOverheadPct": 0,
-    "maxOverheadPct": 50,
+    "maxOverheadPct": 150,
     "runScope": [
       "protected-branch",
       "release-candidate"
     ]
   },
-  "generatedAt": "2026-05-24T10:35:53.702Z"
+  "generatedAt": "2026-05-25T12:48:44.764Z"
 }

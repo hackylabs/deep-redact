@@ -93,6 +93,10 @@ export interface CompiledRedactorPlan {
   readonly exactPathRules: Readonly<Record<string, CompiledExactPathRule>>;
   readonly exactKeyRules: CompiledExactKeyRules;
   readonly ignoredValueTypes: CompiledIgnoredValueTypesPlan;
+  // Candidacy flag for the compiled fast-lane executor: the config targets exact string
+  // paths exclusively, with no key, regex-key, or stringTest rules. Necessary but not
+  // sufficient — final lane selection is payload-aware at call time (see fast-lane.ts).
+  readonly isExactPathOnly: boolean;
   readonly regexKeyRules: CompiledRegexKeyRules;
   readonly serialise?: SerialiseOption;
   readonly substringRules: readonly CompiledSubstringRule[];
@@ -318,17 +322,33 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
   const defaults = createDefaultPolicy(options)
   const keyDefaults = createKeyMatchDefaults(options)
   const compiledPathRules = compilePathRules(options.paths ?? [], defaults)
+  const exactKeyRules = compileExactKeyRules(options.keys ?? [], defaults, keyDefaults)
+  const regexKeyRules = compileRegexKeyRules(options.keys ?? [], defaults)
+  const substringRules = compileSubstringRules(options.stringTests ?? [], defaults)
+
+  // The config is a fast-lane candidate only when redaction is driven purely by exact
+  // string paths: no dynamic path segments, no key/regex-key rules, no stringTests, and
+  // none of the key-matching mode flags (fuzzyKeyMatch, caseSensitiveKeyMatch: false) that
+  // would alter matching behaviour if key rules were present.
+  const isExactPathOnly = compiledPathRules.dynamicPathRules.length === 0
+    && Object.keys(compiledPathRules.exactPathRules).length > 0
+    && exactKeyRules.literalMatchers.length === 0
+    && regexKeyRules.matchers.length === 0
+    && substringRules.length === 0
+    && !options.fuzzyKeyMatch
+    && options.caseSensitiveKeyMatch !== false
 
   return Object.freeze({
     diagnostics: compileDiagnostics(options.diagnostics),
     defaults,
     dynamicPathRules: compiledPathRules.dynamicPathRules,
-    exactKeyRules: compileExactKeyRules(options.keys ?? [], defaults, keyDefaults),
+    exactKeyRules,
     exactPathRules: compiledPathRules.exactPathRules,
     ignoredValueTypes: compileIgnoredValueTypes(options.ignoredValueTypes),
-    regexKeyRules: compileRegexKeyRules(options.keys ?? [], defaults),
+    isExactPathOnly,
+    regexKeyRules,
     serialise: options.serialise,
-    substringRules: compileSubstringRules(options.stringTests ?? [], defaults),
+    substringRules,
     transformers: compileTransformers(options.transformers),
   })
 }

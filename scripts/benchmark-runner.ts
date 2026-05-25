@@ -8,7 +8,14 @@ const require = createRequire(import.meta.url)
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 export const repositoryRoot = path.resolve(scriptDirectory, '..')
 
-const ITERATIONS = 100_000
+// Measured calls are batched: each timed sample runs BATCH_SIZE calls and divides the elapsed
+// time by the batch size. At sub-microsecond per-call costs a single `performance.now()` pair
+// per call both quantises the median to the timer's tick resolution and charges timer overhead
+// to every call, distorting the subject/comparator ratio. Batching amortises both away and
+// yields the true per-call cost. SAMPLE_COUNT * BATCH_SIZE == ITERATIONS.
+const SAMPLE_COUNT = 200
+const BATCH_SIZE = 500
+const ITERATIONS = SAMPLE_COUNT * BATCH_SIZE
 const WARMUP_ITERATIONS = 10_000
 
 export interface BenchmarkThresholdPolicy {
@@ -94,12 +101,19 @@ function collectSamples(fn: (fresh: unknown) => void, payload: unknown): Measure
     fn(structuredClone(payload))
   }
 
+  // Each sample is the mean per-call time over a freshly-cloned batch. Cloning happens outside
+  // the timed region so only the redaction work is measured.
   const samples: number[] = []
-  for (let i = 0; i < ITERATIONS; i++) {
-    const fresh = structuredClone(payload)
+  for (let sample = 0; sample < SAMPLE_COUNT; sample++) {
+    const batch: unknown[] = Array.from({ length: BATCH_SIZE }, () => structuredClone(payload))
+
     const t0 = performance.now()
-    fn(fresh)
-    samples.push(performance.now() - t0)
+    for (let i = 0; i < BATCH_SIZE; i++) {
+      fn(batch[i])
+    }
+    const elapsed = performance.now() - t0
+
+    samples.push(elapsed / BATCH_SIZE)
   }
 
   samples.sort((a, b) => a - b)

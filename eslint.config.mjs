@@ -121,7 +121,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/core/runtime/redact-value.ts'],
+    files: ['src/core/runtime/redact-value.ts', 'src/core/runtime/fast-lane.ts'],
     rules: {
       'unicorn/no-new-array': 'off',
       'unicorn/prefer-spread': 'off',

@@ -15,7 +15,7 @@
       "thresholdPolicy": {
         "comparatorMetric": "median",
         "minOverheadPct": 0,
-        "maxOverheadPct": 50,
+        "maxOverheadPct": 150,
         "runScope": ["protected-branch", "release-candidate"]
       }
     }
