@@ -30,6 +30,7 @@ export interface BenchmarkRow {
   fixtureDir: string;
   workloadClass: string;
   competitor: string;
+  competitorConfigFile?: string;
   runtime: string;
   command: string;
   outputArtefact: string;
@@ -126,8 +127,9 @@ function collectSamples(fn: (fresh: unknown) => void, payload: unknown): Measure
 }
 
 export function runBenchmarkRow(row: BenchmarkRow, repoRoot: string): BenchmarkArtefact {
+  const configFileName = row.competitorConfigFile ?? 'competitor-config.json'
   const subjectConfigPath = path.join(repoRoot, row.fixtureDir, 'deep-redact-config.json')
-  const competitorConfigPath = path.join(repoRoot, row.fixtureDir, 'competitor-config.json')
+  const competitorConfigPath = path.join(repoRoot, row.fixtureDir, configFileName)
   const payloadPath = path.join(repoRoot, row.fixtureDir, 'input.json')
 
   const subjectConfig = JSON.parse(readFileSync(subjectConfigPath, 'utf8')) as Record<string, unknown>
@@ -135,13 +137,19 @@ export function runBenchmarkRow(row: BenchmarkRow, repoRoot: string): BenchmarkA
   const payload = JSON.parse(readFileSync(payloadPath, 'utf8')) as unknown
 
   const subjectPkg = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as { name: string; version: string }
-  const competitorPkg = JSON.parse(
-    readFileSync(path.join(repoRoot, 'node_modules', row.competitor, 'package.json'), 'utf8'),
-  ) as { version: string }
+
+  const isLocalCompetitor = row.competitor.startsWith('./')
+  const resolvedCompetitorPath = isLocalCompetitor
+    ? path.resolve(repoRoot, row.competitor)
+    : row.competitor
+  const competitorPkgPath = isLocalCompetitor
+    ? path.join(resolvedCompetitorPath, 'package.json')
+    : path.join(repoRoot, 'node_modules', row.competitor, 'package.json')
+  const competitorPkg = JSON.parse(readFileSync(competitorPkgPath, 'utf8')) as { version: string }
 
   const redactor = deepRedact(subjectConfig)
 
-  const competitorFn = require(row.competitor) as (config: Record<string, unknown>) => (payload: unknown) => unknown
+  const competitorFn = require(resolvedCompetitorPath) as (config: Record<string, unknown>) => (payload: unknown) => unknown
   const frInstance = competitorFn(frConfig)
 
   const subjectStats = collectSamples(fresh => redactor(fresh), payload)

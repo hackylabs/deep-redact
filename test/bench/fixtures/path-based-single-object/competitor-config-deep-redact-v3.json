@@ -1,0 +1,3 @@
+{
+  "blacklistedKeys": ["password", "email", "firstName", "ip"]
+}

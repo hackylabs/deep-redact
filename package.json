@@ -92,6 +92,7 @@
   "devDependencies": {
     "@eslint/js": "9.39.4",
     "@hackylabs/obglob": "1.1.2",
+    "deep-redact-v3": "npm:@hackylabs/deep-redact@^3.0.0",
     "@memlab/core": "2.0.0",
     "@stylistic/eslint-plugin": "4.4.1",
     "@types/autocannon": "7.12.7",

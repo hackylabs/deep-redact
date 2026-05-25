@@ -18,6 +18,85 @@
         "maxOverheadPct": 150,
         "runScope": ["protected-branch", "release-candidate"]
       }
+    },
+    {
+      "id": "path-based-single-object-v3-node24",
+      "fixtureDir": "test/bench/fixtures/path-based-single-object",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/deep-redact-v3",
+      "competitorConfigFile": "competitor-config-deep-redact-v3.json",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id path-based-single-object-v3-node24",
+      "outputArtefact": "path-based-single-object-v3-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": -100,
+        "maxOverheadPct": 0,
+        "runScope": ["protected-branch", "release-candidate"]
+      }
+    },
+    {
+      "id": "path-based-single-object-json-stringify-regex-node24",
+      "fixtureDir": "test/bench/fixtures/path-based-single-object",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/json-stringify-regex",
+      "competitorConfigFile": "competitor-config-json-stringify-regex.json",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id path-based-single-object-json-stringify-regex-node24",
+      "outputArtefact": "path-based-single-object-json-stringify-regex-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": -100,
+        "maxOverheadPct": 0,
+        "runScope": ["protected-branch", "release-candidate"]
+      }
+    },
+    {
+      "id": "wildcard-single-object-fast-redact-node24",
+      "fixtureDir": "test/bench/fixtures/wildcard-single-object",
+      "workloadClass": "wildcard",
+      "competitor": "fast-redact",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id wildcard-single-object-fast-redact-node24",
+      "outputArtefact": "wildcard-single-object-fast-redact-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": 0,
+        "maxOverheadPct": 2500,
+        "runScope": ["protected-branch", "release-candidate"]
+      }
+    },
+    {
+      "id": "wildcard-single-object-v3-node24",
+      "fixtureDir": "test/bench/fixtures/wildcard-single-object",
+      "workloadClass": "wildcard",
+      "competitor": "./test/bench/competitors/deep-redact-v3",
+      "competitorConfigFile": "competitor-config-deep-redact-v3.json",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id wildcard-single-object-v3-node24",
+      "outputArtefact": "wildcard-single-object-v3-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": 0,
+        "maxOverheadPct": 200,
+        "runScope": ["protected-branch", "release-candidate"]
+      }
+    },
+    {
+      "id": "wildcard-single-object-json-stringify-regex-node24",
+      "fixtureDir": "test/bench/fixtures/wildcard-single-object",
+      "workloadClass": "wildcard",
+      "competitor": "./test/bench/competitors/json-stringify-regex",
+      "competitorConfigFile": "competitor-config-json-stringify-regex.json",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id wildcard-single-object-json-stringify-regex-node24",
+      "outputArtefact": "wildcard-single-object-json-stringify-regex-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": 0,
+        "maxOverheadPct": 700,
+        "runScope": ["protected-branch", "release-candidate"]
+      }
     }
   ]
 }

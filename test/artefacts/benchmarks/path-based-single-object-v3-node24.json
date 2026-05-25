@@ -1,0 +1,53 @@
+{
+  "id": "path-based-single-object-v3-node24",
+  "workloadClass": "path-based",
+  "runtime": "node24",
+  "conditions": {
+    "nodeVersion": "v24.14.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "iterations": 100000,
+    "warmupIterations": 10000
+  },
+  "comparator": {
+    "name": "./test/bench/competitors/deep-redact-v3",
+    "version": "3.0.5"
+  },
+  "subject": {
+    "name": "@hackylabs/deep-redact",
+    "version": "4.0.0"
+  },
+  "measurements": {
+    "subject": {
+      "median": 0.0002751660000000129,
+      "mean": 0.00031384128999999524,
+      "min": 0.00025424999999995633,
+      "max": 0.0012069179999999733,
+      "unit": "ms"
+    },
+    "comparator": {
+      "median": 0.006713081999999986,
+      "mean": 0.007488495010000004,
+      "min": 0.006027500000000146,
+      "max": 0.03166708399999971,
+      "unit": "ms"
+    }
+  },
+  "overheadPct": -95.9,
+  "generatingPlatform": {
+    "os": "darwin",
+    "arch": "arm64",
+    "nodeVersion": "v24.14.1"
+  },
+  "thresholdDecision": {
+    "passed": true,
+    "metric": "median",
+    "minOverheadPct": -100,
+    "maxOverheadPct": 0,
+    "runScope": [
+      "protected-branch",
+      "release-candidate"
+    ]
+  },
+  "generatedAt": "2026-05-25T13:51:52.483Z"
+}

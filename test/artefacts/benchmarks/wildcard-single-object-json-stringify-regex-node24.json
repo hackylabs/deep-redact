@@ -1,0 +1,53 @@
+{
+  "id": "wildcard-single-object-json-stringify-regex-node24",
+  "workloadClass": "wildcard",
+  "runtime": "node24",
+  "conditions": {
+    "nodeVersion": "v24.14.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "iterations": 100000,
+    "warmupIterations": 10000
+  },
+  "comparator": {
+    "name": "./test/bench/competitors/json-stringify-regex",
+    "version": "1.0.0"
+  },
+  "subject": {
+    "name": "@hackylabs/deep-redact",
+    "version": "4.0.0"
+  },
+  "measurements": {
+    "subject": {
+      "median": 0.010066334000000097,
+      "mean": 0.01154271074999998,
+      "min": 0.009339999999999918,
+      "max": 0.029348831999999676,
+      "unit": "ms"
+    },
+    "comparator": {
+      "median": 0.0015890000000003965,
+      "mean": 0.0016384382900000117,
+      "min": 0.0015264160000001538,
+      "max": 0.003781583999999839,
+      "unit": "ms"
+    }
+  },
+  "overheadPct": 533.5,
+  "generatingPlatform": {
+    "os": "darwin",
+    "arch": "arm64",
+    "nodeVersion": "v24.14.1"
+  },
+  "thresholdDecision": {
+    "passed": true,
+    "metric": "median",
+    "minOverheadPct": 0,
+    "maxOverheadPct": 700,
+    "runScope": [
+      "protected-branch",
+      "release-candidate"
+    ]
+  },
+  "generatedAt": "2026-05-25T13:51:59.644Z"
+}

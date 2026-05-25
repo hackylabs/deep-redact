@@ -1,0 +1,53 @@
+{
+  "id": "path-based-single-object-json-stringify-regex-node24",
+  "workloadClass": "path-based",
+  "runtime": "node24",
+  "conditions": {
+    "nodeVersion": "v24.14.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "iterations": 100000,
+    "warmupIterations": 10000
+  },
+  "comparator": {
+    "name": "./test/bench/competitors/json-stringify-regex",
+    "version": "1.0.0"
+  },
+  "subject": {
+    "name": "@hackylabs/deep-redact",
+    "version": "4.0.0"
+  },
+  "measurements": {
+    "subject": {
+      "median": 0.0002682500000000232,
+      "mean": 0.00027813165000000075,
+      "min": 0.00025916800000004515,
+      "max": 0.000569166000000024,
+      "unit": "ms"
+    },
+    "comparator": {
+      "median": 0.0017545000000000074,
+      "mean": 0.0020380916200000002,
+      "min": 0.0015302500000000236,
+      "max": 0.005132334000000128,
+      "unit": "ms"
+    }
+  },
+  "overheadPct": -84.71,
+  "generatingPlatform": {
+    "os": "darwin",
+    "arch": "arm64",
+    "nodeVersion": "v24.14.1"
+  },
+  "thresholdDecision": {
+    "passed": true,
+    "metric": "median",
+    "minOverheadPct": -100,
+    "maxOverheadPct": 0,
+    "runScope": [
+      "protected-branch",
+      "release-candidate"
+    ]
+  },
+  "generatedAt": "2026-05-25T13:51:53.272Z"
+}

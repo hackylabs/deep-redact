@@ -1,0 +1,53 @@
+{
+  "id": "wildcard-single-object-fast-redact-node24",
+  "workloadClass": "wildcard",
+  "runtime": "node24",
+  "conditions": {
+    "nodeVersion": "v24.14.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "iterations": 100000,
+    "warmupIterations": 10000
+  },
+  "comparator": {
+    "name": "fast-redact",
+    "version": "3.5.0"
+  },
+  "subject": {
+    "name": "@hackylabs/deep-redact",
+    "version": "4.0.0"
+  },
+  "measurements": {
+    "subject": {
+      "median": 0.010233916000000022,
+      "mean": 0.010947327560000003,
+      "min": 0.009465416000000004,
+      "max": 0.019144249999999828,
+      "unit": "ms"
+    },
+    "comparator": {
+      "median": 0.000474250000000211,
+      "mean": 0.0005578361800000039,
+      "min": 0.0004375,
+      "max": 0.002501082000000224,
+      "unit": "ms"
+    }
+  },
+  "overheadPct": 2057.92,
+  "generatingPlatform": {
+    "os": "darwin",
+    "arch": "arm64",
+    "nodeVersion": "v24.14.1"
+  },
+  "thresholdDecision": {
+    "passed": true,
+    "metric": "median",
+    "minOverheadPct": 0,
+    "maxOverheadPct": 2500,
+    "runScope": [
+      "protected-branch",
+      "release-candidate"
+    ]
+  },
+  "generatedAt": "2026-05-25T13:51:55.085Z"
+}
