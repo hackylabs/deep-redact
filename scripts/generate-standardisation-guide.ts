@@ -6,9 +6,8 @@ try {
   mkdirSync(path.dirname(generatedFilePaths.standardisationGuideDocPath), { recursive: true })
   writeFileSync(generatedFilePaths.standardisationGuideDocPath, buildGeneratedStandardisationGuide())
   console.log(`Wrote standardisation guide: ${generatedFilePaths.standardisationGuideDocPath}`)
-} catch (err) {
-  process.stderr.write(
-    `Error writing standardisation guide to ${generatedFilePaths.standardisationGuideDocPath}: ${err instanceof Error ? err.message : String(err)}\n`,
+} catch (error) {
+  throw new Error(
+    `Error writing standardisation guide to ${generatedFilePaths.standardisationGuideDocPath}: ${error instanceof Error ? error.message : String(error)}`,
   )
-  process.exit(1)
 }

@@ -133,10 +133,10 @@ export const loadExampleManifest = (
   const fullPath = path.join(repositoryRoot, manifestPath)
   try {
     return readJsonFile<ExampleManifest>(fullPath)
-  } catch (err) {
+  } catch (error) {
     throw new Error(
-      `Failed to load example manifest at ${fullPath}: ${err instanceof Error ? err.message : String(err)}`,
-      { cause: err },
+      `Failed to load example manifest at ${fullPath}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     )
   }
 }

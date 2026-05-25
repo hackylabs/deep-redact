@@ -116,7 +116,7 @@ const KNOWN_V4_OPTIONS_ARRAY = [
   'transformers',
 ] as const satisfies ReadonlyArray<keyof DeepRedactOptions>
 
-export const KNOWN_V4_OPTIONS = new Set<keyof DeepRedactOptions>(KNOWN_V4_OPTIONS_ARRAY)
+export const KNOWN_V4_OPTIONS = new Set<string>(KNOWN_V4_OPTIONS_ARRAY)
 
 export const helperImplementations: Record<string, (value: unknown) => unknown> = {
   maskValueType: (value: unknown): string => `[masked-${typeof value}]`,
@@ -174,9 +174,9 @@ const readFixtureJson = <T>(
 
   try {
     return readJsonFile<T>(fixturePath)
-  } catch (err) {
+  } catch (error) {
     throw new Error(
-      `Row "${row.id}": failed to parse ${fixturePath}: ${err instanceof Error ? err.message : String(err)}`,
+      `Row "${row.id}": failed to parse ${fixturePath}: ${error instanceof Error ? error.message : String(error)}`,
     )
   }
 }
@@ -187,7 +187,7 @@ const readFixtureText = (
   fileName: string,
 ): string => {
   return readFileSync(path.join(repositoryRoot, row.fixtureDir, fileName), 'utf8')
-    .replace(/\r\n|\r/g, '\n')
+    .replaceAll(/\r\n|\r/g, '\n')
     .replace(/\n$/, '')
 }
 

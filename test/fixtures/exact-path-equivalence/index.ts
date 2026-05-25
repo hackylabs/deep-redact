@@ -15,7 +15,7 @@ const createEmptyLookupTable = <T>(): Record<string, T> =>
   Object.create(null) as Record<string, T>
 
 export const createGenericisedPlan = (plan: CompiledRedactorPlan): CompiledRedactorPlan => {
-  if (plan.dynamicPathRules.length !== 0) {
+  if (plan.dynamicPathRules.length > 0) {
     throw new Error('createGenericisedPlan: plan must have no pre-existing dynamicPathRules')
   }
 

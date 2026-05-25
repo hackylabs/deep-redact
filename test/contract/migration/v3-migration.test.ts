@@ -273,8 +273,8 @@ describe('v3 migration matrix contract', () => {
     for (const key of KNOWN_V4_OPTIONS) {
       try {
         deepRedact({ [key]: null as never })
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
         expect(message).not.toMatch(/Unsupported option/)
       }
     }

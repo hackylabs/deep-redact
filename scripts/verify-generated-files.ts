@@ -86,8 +86,8 @@ if (currentStandardisationGuide !== undefined) {
     if (currentStandardisationGuide !== expectedStandardisationGuide) {
       mismatches.push('docs/platform/standardisation-guide.md is out of date')
     }
-  } catch (err) {
-    mismatches.push(`standardisation guide generation failed: ${err instanceof Error ? err.message : String(err)}`)
+  } catch (error) {
+    mismatches.push(`standardisation guide generation failed: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 

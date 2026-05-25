@@ -226,8 +226,8 @@ describe('example manifest contract', () => {
     let caughtError: unknown
     try {
       validateExampleManifest(invalidManifest)
-    } catch (err) {
-      caughtError = err
+    } catch (error) {
+      caughtError = error
     }
 
     expect(caughtError).toBeInstanceOf(ExampleVerificationError)
