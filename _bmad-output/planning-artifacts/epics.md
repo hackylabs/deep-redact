@@ -116,7 +116,7 @@ FR7: Epic 2 - enable case-insensitive key matching
 FR8: Epic 1 - provide typed API discoverability for TypeScript users
 FR9: Epic 1 - target values by key or regex property match
 FR10: Epic 1 - target values by explicit object path and regex path segment
-FR11: Epic 1 - support single-level wildcard path segments
+FR11: Epic 1 Story 1.4 (functional) + Epic 7 Story 7.5 (performance fast lane) - support single-level wildcard path segments
 FR12: Epic 1 - support recursive wildcard path segments
 FR13: Epic 1 - exclude keys or indexes from matching path rules
 FR14: Epic 2 - redact matched substrings and root primitive inputs
@@ -2142,9 +2142,11 @@ so that guide generation fails visibly rather than silently and the rendered Mar
   **Then** the generated guide continues to satisfy all section, link, and content requirements defined in Story 5.11's acceptance criteria
   **And** the hardening changes do not alter generated content for valid inputs
 
-## Epic 7: Runtime Performance — Pass the Benchmark Gate
+## Epic 7: Deliver Production-Credible Performance on Path-Based Workloads
 
-The `path-based-single-object-node24` benchmark artefact in `test/artefacts/benchmarks/` records a `thresholdDecision.passed: false` with an `overheadPct` of 5566.4% against a `maxOverheadPct` release ceiling of 60 (with `25–50%` retained as the aspirational optimisation target). The gap exists because the general traversal algorithm allocates per-call state (WeakMaps, frozen path-segment arrays, canonical path strings) and walks the full object graph on every invocation, while fast-redact compiles exact paths into direct property accessors at init time and executes them with near-zero per-call overhead.
+Developers can use Deep Redact on path-based workloads with performance comparable to `fast-redact`, backed by published benchmark evidence, and trust that the library is safe under hostile or adversarial inputs.
+
+**Background:** The `path-based-single-object-node24` benchmark artefact in `test/artefacts/benchmarks/` records a `thresholdDecision.passed: false` with an `overheadPct` of 5566.4% against a `maxOverheadPct` release ceiling of 60 (with `25–50%` retained as the aspirational optimisation target). The gap exists because the general traversal algorithm allocates per-call state (WeakMaps, frozen path-segment arrays, canonical path strings) and walks the full object graph on every invocation, while fast-redact compiles exact paths into direct property accessors at init time and executes them with near-zero per-call overhead.
 
 This epic closes the gate through a compiled path executor for exact-path-only configurations and targeted hot-path allocation reductions in the general traversal.
 
@@ -2200,8 +2202,8 @@ so that the `path-based-single-object-node24` benchmark gate of ≤60% overhead 
 ### Story 7.2: Prove Behavioural Equivalence of the Compiled Path Executor
 
 As a backend engineer,
-I want a comprehensive equivalence corpus verifying that the compiled path executor and the general traversal produce identical output for all valid exact-path-only configurations,
-so that the compiled fast path cannot silently diverge from the general traversal as the codebase evolves.
+I want guaranteed identical redaction output regardless of which internal execution path processes my call,
+so that the performance optimisation introduced by Story 7.1 cannot silently change my redaction results as the codebase evolves.
 
 **Motivation:** Story 4.3 established a behavioural equivalence proof between the then-current fast lane and the general traversal. Story 7.1 introduces a new fast lane. The equivalence corpus must be extended to cover the compiled path executor across the edge cases specific to exact-path-only configs. **Per the 2026-05-25 course-correction, the corpus must also include payloads that are NOT fast-lane-safe (supported-transformable runtime values, circular references, throwing accessors) and assert that the fast-lane-wired redactor delegates to the general traversal and produces identical output — i.e. the per-call guard's delegation is itself proven.**
 
@@ -2319,3 +2321,58 @@ So that production services are protected from memory exhaustion, stack overflow
   **Then** it covers traversal depth limits, node/edge budgets, hostile-input corpus validation, and runtime regex safety only
   **And** init-time regex validation remains governed by Stories 1.5 and 1.6
   **And** allocation optimisations in the general traversal remain governed by Story 7.3
+
+### Story 7.5: Extend the Fast Lane to Support Single-Level Wildcard Path Segments
+
+Implements: NFR1–NFR2 (performance targets), FR11 (single-level wildcard targeting)
+
+As a backend engineer,
+I want the compiled fast lane to handle configurations that combine exact path segments with single-level wildcard (`*`) path segments,
+So that the most common real-world path policies — such as `user.password` alongside `*.email` — remain in the low-allocation fast lane rather than falling back to the general traversal, and the benchmark overhead versus `fast-redact` for these workloads approaches the aspirational 25–50% band.
+
+**Motivation:**
+The current `isExactPathOnly` candidacy condition rejects any configuration that contains a `*` segment, routing mixed exact + wildcard configs entirely to the general traversal. Because a two-pass approach (fast lane for exact paths, then general traversal for wildcards) would require two full O(N) traversals — costing more than a single general pass — the only net-win strategy is to extend the fast lane's prefix trie itself so that a single pass handles both exact and `*.field` paths. This story delivers that extension.
+
+**Acceptance Criteria:**
+
+**Trie node extension**
+- **Given** the `PathTreeNode` interface used by the fast-lane trie builder
+  **When** this story is complete
+  **Then** the interface includes a `wildcardChild?: PathTreeNode` field alongside the existing `propertyChildren` and `indexChildren` maps
+  **And** the trie builder populates `wildcardChild` for any `*` segment encountered in a compiled path rule
+  **And** existing exact-segment and index-segment construction is unchanged
+
+**Single-pass wildcard traversal**
+- **Given** the fast-lane traversal logic
+  **When** a node in the trie has a `wildcardChild`
+  **Then** for each property or array index encountered at that depth, the traversal follows the `wildcardChild` branch in addition to any matching exact child
+  **And** this check adds one null-guard per depth level with no heap allocation
+  **And** the `delegate` sentinel path is unchanged: payloads with supported-transformable runtime values, non-plain prototypes, or circular references are still escalated to the general lane
+
+**Broadened fast-lane candidacy**
+- **Given** the `isExactPathOnly` compile-time flag (or its replacement, `isFastLaneEligible`)
+  **When** a configuration contains only exact path segments and/or single-level `*` path segments, with no `**` recursive wildcards, no regex path segments, no ignore rules on paths, no key rules, no substring tests, no fuzzy key matching, and case-sensitive matching enabled
+  **Then** the candidacy flag is `true` and the fast lane is selected
+- **Given** a configuration that includes any `**` segment, regex path segment, key rule, substring test, fuzzy match option, or case-insensitive match option
+  **When** the candidacy flag is evaluated
+  **Then** it is `false` and the general traversal is selected, unchanged from current behaviour
+
+**Behavioural equivalence**
+- **Given** a configuration containing a mix of exact and `*.field` paths
+  **When** the fast lane processes a payload
+  **Then** the redacted output is byte-for-byte identical to the output produced by the general traversal for the same input and configuration
+  **And** this equivalence is covered by an automated test that runs both lanes against the same fixtures and asserts output equality
+
+**Benchmark regression**
+- **Given** the `wildcard-single-object-*` benchmark rows in the manifest
+  **When** this story is complete and benchmarks are re-run
+  **Then** the recorded overhead for the wildcard workload versus `fast-redact` is materially lower than the pre-story baseline
+  **And** the threshold policy for `wildcard-single-object-fast-redact-node24` in `test/bench/manifest.json` is tightened to reflect the new achievable overhead
+  **And** the `wildcard-single-object-v3-node24` and `wildcard-single-object-json-stringify-regex-node24` thresholds are reviewed and tightened accordingly
+
+**Scope guard**
+- **Given** this story's scope
+  **When** the implementation is reviewed
+  **Then** it covers `PathTreeNode` wildcard extension, trie builder update, fast-lane traversal wildcard handling, `isFastLaneEligible` condition broadening, equivalence tests, and benchmark threshold updates only
+  **And** recursive wildcard (`**`) support in the fast lane is explicitly out of scope and remains a candidate for a future story
+  **And** general traversal allocation reductions remain governed by Story 7.3
