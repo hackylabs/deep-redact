@@ -18,9 +18,12 @@ import {
   type StructuredDeterminismFixtureSet,
   type StructuredDeterminismRun,
 } from '../../fixtures/structured-determinism/index.js'
+import { buildFastLaneExecutor } from '../../../src/core/runtime/fast-lane.js'
+import { redactValue } from '../../../src/core/runtime/redact-value.js'
 import {
   createLaneForcedRedactor,
   createLaneForcedRedactorFromPlan,
+  delegationProofCorpus,
   exactPathEquivalenceCorpus,
 } from '../../fixtures/exact-path-equivalence/index.js'
 import {
@@ -4795,5 +4798,76 @@ describe('Exact-path fast-lane and generic traversal equivalence', () => {
     expect(fastResult).toBe('{"user":{"password":"[REDACTED]","safe":"keep"}}')
     expect(genericResult).toBe('{"user":{"password":"[REDACTED]","safe":"keep"}}')
     expect(fastResult).toBe(genericResult)
+  })
+})
+
+describe('Compiled path executor vs. general traversal equivalence', () => {
+  const failOnDelegation = (): never => {
+    throw new Error('fast lane unexpectedly delegated to the general traversal')
+  }
+
+  it.each(exactPathEquivalenceCorpus)(
+    'compiled executor and general traversal produce identical output for: $title',
+    (entry) => {
+      const plan = compileRedactorPlan(entry.options)
+      expect(plan.isExactPathOnly).toBe(true)
+
+      const payload = entry.createPayload()
+
+      const general = redactValue(payload, plan)
+
+      const fast = buildFastLaneExecutor(plan, failOnDelegation)(entry.createPayload())
+
+      expect(fast).toStrictEqual(general)
+      expect(fast).toStrictEqual(entry.expectedStructured)
+      expect(JSON.stringify(fast)).toBe(entry.expectedSerialised)
+      expect(JSON.stringify(general)).toBe(entry.expectedSerialised)
+    },
+  )
+
+  describe('delegation proof — unsafe payloads produce identical output via wired redactor', () => {
+    it.each(delegationProofCorpus)(
+      'wired redactor delegates and matches general traversal: $title',
+      (entry) => {
+        const plan = compileRedactorPlan(entry.options)
+        const payload = entry.createPayload()
+
+        const wiredResult = createRedactor(entry.options)(payload)
+        const generalResult = redactValue(payload, plan)
+
+        expect(wiredResult).toStrictEqual(generalResult)
+      },
+    )
+
+    it('wired redactor matches general traversal for circular-reference payload', () => {
+      const options = { paths: ['user.password'] }
+      const plan = compileRedactorPlan(options)
+
+      const buildPayload = (): Record<string, unknown> => {
+        const payload: Record<string, unknown> = { user: { password: 'pw', name: 'alice' } }
+        payload.self = payload
+        return payload
+      }
+
+      expect(createRedactor(options)(buildPayload())).toStrictEqual(
+        redactValue(buildPayload(), plan),
+      )
+    })
+
+    it('wired redactor matches general traversal for payload with throwing getter', () => {
+      const options = { paths: ['user.password'] }
+      const plan = compileRedactorPlan(options)
+
+      const buildPayload = (): Record<string, unknown> => ({
+        user: { password: 'pw' },
+        get danger(): never {
+          throw new Error('nope')
+        },
+      })
+
+      expect(createRedactor(options)(buildPayload())).toStrictEqual(
+        redactValue(buildPayload(), plan),
+      )
+    })
   })
 })

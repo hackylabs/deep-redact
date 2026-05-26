@@ -124,6 +124,39 @@ const SERIALISED_REPLACE_STRING_BY_LENGTH_CUSTOM_CENSOR_CANARY =
 const SERIALISED_RETAIN_STRUCTURE_ALIAS_REPLAY_CANARY =
   '{"primary":{"secret":"[REDACTED]","name":"[REDACTED]"},"secondary":{"secret":"[REDACTED]","name":"[REDACTED]"}}' as const
 
+const SERIALISED_SINGLE_SEGMENT_PATH_CANARY =
+  '{"password":"[REDACTED]","safe":"keep"}' as const
+
+const SERIALISED_DEEP_NESTED_PATH_CANARY =
+  '{"a":{"b":{"c":{"secret":"[REDACTED]","safe":"keep"}}}}' as const
+
+const SERIALISED_COMMON_PREFIX_PATHS_CANARY =
+  '{"user":{"password":"[REDACTED]","email":"[REDACTED]","safe":"keep"}}' as const
+
+const SERIALISED_ABSENT_INTERMEDIATE_KEY_CANARY =
+  '{"user":{"name":"alice"}}' as const
+
+const SERIALISED_ARRAY_TERMINAL_VALUE_CANARY =
+  '{"user":{"items":"[REDACTED]","name":"alice"}}' as const
+
+const SERIALISED_SAME_TERMINAL_KEY_DIFFERENT_PARENTS_CANARY =
+  '{"a":{"secret":"[REDACTED]","safe":"keep-a"},"b":{"secret":"[REDACTED]","safe":"keep-b"}}' as const
+
+const SERIALISED_NESTED_OBJECT_TERMINAL_CANARY =
+  '{"user":{"id":1,"address":"[REDACTED]"}}' as const
+
+const SERIALISED_EMPTY_STRING_VALUE_CANARY =
+  '{"data":{"tag":"[REDACTED]","safe":"keep"}}' as const
+
+const SERIALISED_NULL_INTERMEDIATE_KEY_CANARY =
+  '{"user":null}' as const
+
+const SERIALISED_SINGLE_SEGMENT_ABSENT_KEY_CANARY =
+  '{"safe":"keep"}' as const
+
+const SERIALISED_PARENT_AND_CHILD_PATHS_CANARY =
+  '{"user":"[REDACTED]"}' as const
+
 // ── Corpus ───────────────────────────────────────────────────────────────────
 
 const determineFunctionCensorOutput = (
@@ -132,6 +165,19 @@ const determineFunctionCensorOutput = (
 ): string => {
   return `[FN:${(ctx.matchedPath as ReadonlyArray<string | number>).join('.')}]`
 }
+
+// AC coverage map — Story 7.2 requires the following cases to be represented in this corpus:
+//   AC-1a  single-segment path (root-level key)           → 'single-segment-path' + 'single-segment-absent-key' (absent variant)
+//   AC-1b  two-segment path (one level of nesting)        → 'single-exact-path'
+//   AC-1c  three-or-more-segment path (deep nesting)      → 'deep-nested-path'
+//   AC-1d  common prefix paths                            → 'common-prefix-paths'
+//   AC-1e  no common prefix paths                         → 'multiple-exact-paths'
+//   AC-1f  absent terminal key                            → 'exact-path-absent-key'
+//   AC-1g  absent intermediate key                        → 'absent-intermediate-key' + 'null-intermediate-key'
+//   AC-1h  null / number / boolean / empty-string values  → 'exact-path-primitive-leaf-values' (null/number/boolean) + 'exact-path-empty-string-value'
+//   AC-1i  nested object terminal (wholesale redact)      → 'exact-path-retain-structure' (retainStructure: true) + 'nested-object-terminal' (default wholesale)
+//   AC-1j  array terminal value (wholesale redact)        → 'array-terminal-value'
+//   AC-1k  same terminal key under different parents      → 'same-terminal-key-different-parents'
 
 export const exactPathEquivalenceCorpus: readonly ExactPathEquivalenceCorpusEntry[] = [
   {
@@ -294,5 +340,166 @@ export const exactPathEquivalenceCorpus: readonly ExactPathEquivalenceCorpusEntr
       secondary: { secret: '[REDACTED]', name: '[REDACTED]' },
     },
     expectedSerialised: SERIALISED_RETAIN_STRUCTURE_ALIAS_REPLAY_CANARY,
+  },
+  {
+    name: 'single-segment-path',
+    title: 'single-segment path — root-level key (password)',
+    exactPathEligibilityReason: 'one exact static absolute path with a single segment targeting a root-level key',
+    options: { paths: ['password'] },
+    createPayload: () => ({ password: 'secret', safe: 'keep' }),
+    expectedStructured: { password: '[REDACTED]', safe: 'keep' },
+    expectedSerialised: SERIALISED_SINGLE_SEGMENT_PATH_CANARY,
+  },
+  {
+    name: 'single-segment-absent-key',
+    title: 'single-segment path where the root-level terminal key is absent from the payload',
+    exactPathEligibilityReason: 'one exact static absolute path with a single segment; the targeted key is not present in the payload',
+    options: { paths: ['missing'] },
+    createPayload: () => ({ safe: 'keep' }),
+    expectedStructured: { safe: 'keep' },
+    expectedSerialised: SERIALISED_SINGLE_SEGMENT_ABSENT_KEY_CANARY,
+  },
+  {
+    name: 'deep-nested-path',
+    title: 'four-segment deep-nested path — a.b.c.secret',
+    exactPathEligibilityReason: 'one exact static absolute path with four segments; the targeted key is three levels deep',
+    options: { paths: ['a.b.c.secret'] },
+    createPayload: () => ({ a: { b: { c: { secret: 'hidden', safe: 'keep' } } } }),
+    expectedStructured: { a: { b: { c: { secret: '[REDACTED]', safe: 'keep' } } } },
+    expectedSerialised: SERIALISED_DEEP_NESTED_PATH_CANARY,
+  },
+  {
+    name: 'common-prefix-paths',
+    title: 'multiple paths sharing a common prefix — user.password and user.email',
+    exactPathEligibilityReason: 'two exact static absolute paths sharing the root segment; proves prefix-trie branching',
+    options: { paths: ['user.password', 'user.email'] },
+    createPayload: () => ({ user: { password: 'pw', email: 'user@example.com', safe: 'keep' } }),
+    expectedStructured: { user: { password: '[REDACTED]', email: '[REDACTED]', safe: 'keep' } },
+    expectedSerialised: SERIALISED_COMMON_PREFIX_PATHS_CANARY,
+  },
+  {
+    name: 'absent-intermediate-key',
+    title: 'exact path with absent intermediate key — user.profile.email where user.profile does not exist',
+    exactPathEligibilityReason: 'one exact static absolute path; the intermediate segment is absent from the payload so traversal terminates early',
+    options: { paths: ['user.profile.email'] },
+    createPayload: () => ({ user: { name: 'alice' } }),
+    expectedStructured: { user: { name: 'alice' } },
+    expectedSerialised: SERIALISED_ABSENT_INTERMEDIATE_KEY_CANARY,
+  },
+  {
+    name: 'null-intermediate-key',
+    title: 'exact path with null at intermediate position — user is null so user.profile.email is unreachable',
+    exactPathEligibilityReason: 'one exact static absolute path; the intermediate segment resolves to null so trie traversal terminates early',
+    options: { paths: ['user.profile.email'] },
+    createPayload: () => ({ user: null }),
+    expectedStructured: { user: null },
+    expectedSerialised: SERIALISED_NULL_INTERMEDIATE_KEY_CANARY,
+  },
+  {
+    name: 'array-terminal-value',
+    title: 'exact path targeting an array terminal value — user.items',
+    exactPathEligibilityReason: 'one exact static absolute path; the terminal value is an array, censored wholesale by default policy',
+    options: { paths: ['user.items'] },
+    createPayload: () => ({ user: { items: [1, 2, 3], name: 'alice' } }),
+    expectedStructured: { user: { items: '[REDACTED]', name: 'alice' } },
+    expectedSerialised: SERIALISED_ARRAY_TERMINAL_VALUE_CANARY,
+  },
+  {
+    name: 'same-terminal-key-different-parents',
+    title: 'two paths pointing to the same terminal key name under different parent paths — a.secret and b.secret',
+    exactPathEligibilityReason: 'two exact static absolute paths sharing only the terminal key name; proves trie handles sibling branches independently',
+    options: { paths: ['a.secret', 'b.secret'] },
+    createPayload: () => ({ a: { secret: 'x', safe: 'keep-a' }, b: { secret: 'y', safe: 'keep-b' } }),
+    expectedStructured: { a: { secret: '[REDACTED]', safe: 'keep-a' }, b: { secret: '[REDACTED]', safe: 'keep-b' } },
+    expectedSerialised: SERIALISED_SAME_TERMINAL_KEY_DIFFERENT_PARENTS_CANARY,
+  },
+  {
+    name: 'parent-and-child-paths',
+    title: 'paths where one is a prefix of another — user is terminal and parent of user.password',
+    exactPathEligibilityReason: 'two exact static absolute paths where one is a prefix of the other; the trie node for "user" is simultaneously terminal and parent; proves terminal rule short-circuits descendant traversal',
+    options: { paths: ['user', 'user.password'] },
+    createPayload: () => ({ user: { password: 'pw', name: 'alice' } }),
+    expectedStructured: { user: '[REDACTED]' },
+    expectedSerialised: SERIALISED_PARENT_AND_CHILD_PATHS_CANARY,
+  },
+  {
+    name: 'nested-object-terminal',
+    title: 'exact path targeting a nested object terminal — wholesale redact (no retainStructure)',
+    exactPathEligibilityReason: 'one exact static absolute path; the terminal value is a nested object, censored wholesale by default policy',
+    options: { paths: ['user.address'] },
+    createPayload: () => ({ user: { id: 1, address: { city: 'Springfield', postalCode: '62701' } } }),
+    expectedStructured: { user: { id: 1, address: '[REDACTED]' } },
+    expectedSerialised: SERIALISED_NESTED_OBJECT_TERMINAL_CANARY,
+  },
+  {
+    name: 'exact-path-empty-string-value',
+    title: 'exact path targeting an empty string terminal value',
+    exactPathEligibilityReason: 'one exact static absolute path; the terminal value is an empty string',
+    options: { paths: ['data.tag'] },
+    createPayload: () => ({ data: { tag: '', safe: 'keep' } }),
+    expectedStructured: { data: { tag: '[REDACTED]', safe: 'keep' } },
+    expectedSerialised: SERIALISED_EMPTY_STRING_VALUE_CANARY,
+  },
+]
+
+// ── Delegation proof corpus ───────────────────────────────────────────────────
+
+export interface DelegationProofEntry {
+  readonly name: string;
+  readonly title: string;
+  readonly unsafeReason: string;
+  readonly options: DeepRedactOptions;
+  readonly createPayload: () => unknown;
+}
+
+export const delegationProofCorpus: readonly DelegationProofEntry[] = [
+  {
+    name: 'delegate-date',
+    title: 'delegates payload containing a Date',
+    unsafeReason: 'Date is a supported-transformable runtime value',
+    options: { paths: ['user.password'] },
+    createPayload: () => ({ user: { password: 'pw' }, meta: { created: new Date('2020-01-01T00:00:00.000Z') } }),
+  },
+  {
+    name: 'delegate-map',
+    title: 'delegates payload containing a Map',
+    unsafeReason: 'Map is a supported-transformable runtime value',
+    options: { paths: ['user.password'] },
+    createPayload: () => ({ user: { password: 'pw' }, lookup: new Map([['k', 'v']]) }),
+  },
+  {
+    name: 'delegate-bigint',
+    title: 'delegates payload containing a BigInt',
+    unsafeReason: 'BigInt is a supported-transformable runtime value',
+    options: { paths: ['user.password'] },
+    createPayload: () => ({ user: { password: 'pw' }, count: 10n }),
+  },
+  {
+    name: 'delegate-error',
+    title: 'delegates payload containing an Error',
+    unsafeReason: 'Error is a supported-transformable runtime value',
+    options: { paths: ['user.password'] },
+    createPayload: () => ({ user: { password: 'pw' }, failure: new Error('boom') }),
+  },
+  {
+    name: 'delegate-set',
+    title: 'delegates payload containing a Set',
+    unsafeReason: 'Set is a supported-transformable runtime value',
+    options: { paths: ['user.password'] },
+    createPayload: () => ({ user: { password: 'pw' }, tags: new Set(['a', 'b']) }),
+  },
+  {
+    name: 'delegate-regexp',
+    title: 'delegates payload containing a RegExp',
+    unsafeReason: 'RegExp is a supported-transformable runtime value',
+    options: { paths: ['user.password'] },
+    createPayload: () => ({ user: { password: 'pw' }, pattern: /secret/i }),
+  },
+  {
+    name: 'delegate-url',
+    title: 'delegates payload containing a URL',
+    unsafeReason: 'URL is a supported-transformable runtime value',
+    options: { paths: ['user.password'] },
+    createPayload: () => ({ user: { password: 'pw' }, endpoint: new URL('https://example.com') }),
   },
 ]
