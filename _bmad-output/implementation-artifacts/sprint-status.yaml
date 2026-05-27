@@ -90,7 +90,7 @@ development_status:
   5-11-publish-platform-adoption-guidance-through-a-canonical-standardisation-guide: done
   epic-5-retrospective: optional
 
-  epic-6: in-progress
+  epic-6: done
   6-1-fix-inherited-key-rule-policy-override-under-retain-structure: done
   6-2-extend-exact-path-equivalence-corpus-to-cover-deferred-selector-scenarios: done
   6-3-harden-structured-determinism-fixture-set-and-symbol-serialisation-guard: done
