@@ -30,6 +30,14 @@ import {
 import { emitDiagnosticEvent } from '../diagnostics/diagnostics-sink.js'
 import { cloneRegExp } from '../validation/regex-safety.js'
 import {
+  createBudgetExceededError,
+  createTraversalBudget,
+  isBudgetExceededError,
+  isDepthExceeded,
+  isNodeBudgetExceeded,
+  type TraversalBudget,
+} from './traversal-budget.js'
+import {
   isSupportedTransformableObject,
   isSupportedTransformableValue,
   resolveSupportedTransformableValueKind,
@@ -99,6 +107,7 @@ interface CompletedObjectSnapshot {
 type CompletedTraversalSnapshot = CompletedArraySnapshot | CompletedObjectSnapshot
 
 interface TraversalState {
+  readonly budget: TraversalBudget;
   readonly completedIdentities: WeakMap<TrackableIdentity, CompletedTraversalRecord[]>;
   readonly completedSnapshots: WeakMap<TrackableIdentity, CompletedTraversalSnapshot>;
 }
@@ -194,6 +203,7 @@ const renderPathSegmentText = (pathSegment: ExactPathSegment): string => {
 
 const createTraversalState = (): TraversalState => {
   return {
+    budget: createTraversalBudget(),
     completedIdentities: new WeakMap<TrackableIdentity, CompletedTraversalRecord[]>(),
     completedSnapshots: new WeakMap<TrackableIdentity, CompletedTraversalSnapshot>(),
   }
@@ -228,6 +238,24 @@ const emitFailureDiagnostic = (
   )
 
   return diagnostic
+}
+
+const throwBudgetExceeded = (
+  plan: CompiledRedactorPlan,
+  context: TraversalContext,
+  kind: 'depth' | 'nodes',
+): never => {
+  const limit = kind === 'depth' ? plan.maxDepth : plan.maxNodes
+  emitDiagnosticEvent(plan.diagnostics, Object.freeze({
+    details: Object.freeze({ stage: 'traversal', kind, limit }),
+    event: 'budget.exceeded',
+    message: kind === 'depth'
+      ? `Traversal depth limit (${limit}) exceeded.`
+      : `Traversal node budget (${limit}) exceeded.`,
+    path: context.canonicalPath ?? '',
+    valueType: 'unknown',
+  }))
+  throw createBudgetExceededError(kind, limit)
 }
 
 const createUnsupportedTraversalResult = (): TraversalResult => {
@@ -596,6 +624,7 @@ const transformNestedNode = (
   try {
     return transformNode(value, plan, context, state, branchState)
   } catch (error) {
+    if (isBudgetExceededError(error)) throw error
     return createFailureTraversalResult(plan, context, {
       error,
       stage: 'traversal',
@@ -768,18 +797,26 @@ const transformTrackedIdentity = (
     }
   }
 
-  return withActiveIdentity(branchState, identity, canonicalPath, () => {
-    const result = traverse()
+  state.budget.depth += 1
+  try {
+    if (isDepthExceeded(state.budget, plan.maxDepth)) {
+      throwBudgetExceeded(plan, context, 'depth')
+    }
+    return withActiveIdentity(branchState, identity, canonicalPath, () => {
+      const result = traverse()
 
-    storeCompletedTraversal(state, identity, {
-      canonicalPath,
-      pathStable: result.pathStable,
-      ruleContextKey,
-      value: result.cacheValue,
+      storeCompletedTraversal(state, identity, {
+        canonicalPath,
+        pathStable: result.pathStable,
+        ruleContextKey,
+        value: result.cacheValue,
+      })
+
+      return result
     })
-
-    return result
-  })
+  } finally {
+    state.budget.depth -= 1
+  }
 }
 
 const transformArray = (
@@ -1362,6 +1399,7 @@ const transformSupportedRuntimeValue = (
       return result
     })
   } catch (error) {
+    if (isBudgetExceededError(error)) throw error
     return createFailureTraversalResult(plan, context, {
       error,
       stage: 'transformer',
@@ -1377,6 +1415,11 @@ const transformNode = (
   state: TraversalState,
   branchState: TraversalBranchState,
 ): TraversalResult => {
+  state.budget.nodesVisited += 1
+  if (isNodeBudgetExceeded(state.budget, plan.maxNodes)) {
+    throwBudgetExceeded(plan, context, 'nodes')
+  }
+
   const activePolicy = context.suppressDescendantRedaction
     ? undefined
     : selectActivePolicy(

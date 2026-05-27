@@ -28,6 +28,7 @@ import {
 import { canonicaliseKey } from '../matching/key-normaliser.js'
 import { normaliseParsedPath, renderSelectorSignature } from '../matching/path-normaliser.js'
 import { cloneRegExp } from '../validation/regex-safety.js'
+import { DEFAULT_MAX_DEPTH, DEFAULT_MAX_NODES } from '../runtime/traversal-budget.js'
 
 
 
@@ -97,6 +98,8 @@ export interface CompiledRedactorPlan {
   // paths exclusively, with no key, regex-key, or stringTest rules. Necessary but not
   // sufficient — final lane selection is payload-aware at call time (see fast-lane.ts).
   readonly isExactPathOnly: boolean;
+  readonly maxDepth: number;
+  readonly maxNodes: number;
   readonly regexKeyRules: CompiledRegexKeyRules;
   readonly serialise?: SerialiseOption;
   readonly substringRules: readonly CompiledSubstringRule[];
@@ -346,6 +349,8 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
     exactPathRules: compiledPathRules.exactPathRules,
     ignoredValueTypes: compileIgnoredValueTypes(options.ignoredValueTypes),
     isExactPathOnly,
+    maxDepth: options.maxDepth ?? DEFAULT_MAX_DEPTH,
+    maxNodes: options.maxNodes ?? DEFAULT_MAX_NODES,
     regexKeyRules,
     serialise: options.serialise,
     substringRules,

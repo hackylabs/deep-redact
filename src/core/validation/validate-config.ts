@@ -15,6 +15,8 @@ const rootOptionNames = new Set<keyof DeepRedactOptions>([
   'diagnostics',
   'fuzzyKeyMatch',
   'keys',
+  'maxDepth',
+  'maxNodes',
   'paths',
   'remove',
   'replaceStringByLength',
@@ -119,6 +121,18 @@ const validateBooleanOption = (
 ): void => {
   if (value !== undefined && typeof value !== 'boolean') {
     pushIssue(issues, `${path}.${optionName}`, `${optionName} must be a boolean.`)
+  }
+}
+
+const validatePositiveIntegerOption = (
+  value: unknown,
+  path: string,
+  optionName: string,
+  issues: ValidationIssue[],
+): void => {
+  if (value === undefined) return
+  if (!Number.isInteger(value) || (value as number) < 1) {
+    pushIssue(issues, `${path}.${optionName}`, `${optionName} must be a positive integer.`)
   }
 }
 
@@ -585,6 +599,8 @@ export const validateConfig = (options: unknown): ValidationReport => {
   validateKeys(options.keys, 'options.keys', issues)
   validateStringTests(options.stringTests, 'options.stringTests', issues)
   validateTransformers(options.transformers, 'options.transformers', issues)
+  validatePositiveIntegerOption(options.maxDepth, 'options', 'maxDepth', issues)
+  validatePositiveIntegerOption(options.maxNodes, 'options', 'maxNodes', issues)
   validateBooleanOption(options.remove, 'options', 'remove', issues)
   validateBooleanOption(options.retainStructure, 'options', 'retainStructure', issues)
   validateBooleanOption(options.replaceStringByLength, 'options', 'replaceStringByLength', issues)

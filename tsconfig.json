@@ -22,6 +22,7 @@
     "scripts/**/*.ts",
     "test/build.test.ts",
     "test/contract/**/*.ts",
+    "test/security/**/*.ts",
     "tsdown.config.ts",
     "vitest*.config.ts"
   ]

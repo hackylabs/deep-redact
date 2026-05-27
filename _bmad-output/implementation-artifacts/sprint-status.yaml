@@ -34,7 +34,7 @@
 # - Scrum Master typically creates the next story after the previous one is 'done'
 
 generated: 2026-04-13T09:43:13+0100
-last_updated: 2026-05-27T18:49:00+0100
+last_updated: 2026-05-27T21:00:00+0100
 project: deep-redact
 project_key: NOKEY
 tracking_system: file-system
@@ -104,4 +104,5 @@ development_status:
   7-1-implement-compiled-path-executor-for-exact-path-only-configurations: done
   7-2-prove-behavioural-equivalence-of-the-compiled-path-executor: done
   7-3-reduce-hot-path-allocation-overhead-in-the-general-traversal: done
+  7-4-enforce-traversal-safety-limits-and-validate-hostile-input-protection: done
   epic-7-retrospective: optional

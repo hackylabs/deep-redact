@@ -24,6 +24,8 @@ export interface DeepRedactOptions {
   readonly diagnostics?: DiagnosticsOptions;
   readonly fuzzyKeyMatch?: boolean;
   readonly keys?: readonly KeySelector[];
+  readonly maxDepth?: number;
+  readonly maxNodes?: number;
   readonly paths?: readonly PathEntry[];
   readonly remove?: boolean;
   readonly retainStructure?: boolean;

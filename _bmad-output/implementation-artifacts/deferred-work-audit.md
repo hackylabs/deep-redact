@@ -8,6 +8,11 @@
 - **O(n\u00b2) array copies in `descendRetain`** (`fast-lane.ts:207`) — `[...inherited.matchedPath, key]` allocates a new array on every recursive step under `retainStructure` policies. Affects deeply nested retained structures only; not the primary benchmark scenario. Could be replaced with a length-tracked index approach.
 - **Dev Notes wiring snippet references removed `isFastLaneSafePayload`** (story artefact) — The pseudocode in the Dev Notes section of story 7-1 still shows `import { buildFastLaneExecutor, isFastLaneSafePayload }`. The function was eliminated in favour of the fused executor. No code impact; update the story artefact if it will be referenced by future stories.
 
+## Deferred from: code review of 7-4-enforce-traversal-safety-limits-and-validate-hostile-input-protection (2026-05-27)
+
+- **Fast lane has no budget enforcement** (`fast-lane.ts`) — Intentional per spec scope guard. Exact-path-only hostile payloads bypass both depth and node limits; a stack overflow surfaces as an uncontrolled `RangeError` rather than `BUDGET_EXCEEDED`. Known limitation; revisit if the scope guard is ever lifted.
+- **`throwBudgetExceeded` emits diagnostic before throwing** (`src/core/runtime/redact-value.ts`) — If a buggy diagnostic handler itself throws, `BudgetExceededError` is never raised and callers see an unexpected error. Pre-existing fragility in the diagnostics design.
+
 ## Deferred from: code review of 7-2-prove-behavioural-equivalence-of-the-compiled-path-executor (2026-05-26)
 
 - ~~**Pre-existing `expect(fastResult).toBe(fastResult)` self-comparison tautology**~~ — dismissed: HEAD already has `toBe(genericResult)`; false positive from stale diff context in review tooling.

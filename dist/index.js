@@ -460,6 +460,31 @@ const normaliseParsedPath = (parsedPath) => {
 		segments: parsedPath.segments
 	});
 };
+const createTraversalBudget = () => {
+	return {
+		depth: 0,
+		nodesVisited: 0
+	};
+};
+const isDepthExceeded = (budget, maxDepth) => {
+	return budget.depth > maxDepth;
+};
+const isNodeBudgetExceeded = (budget, maxNodes) => {
+	return budget.nodesVisited > maxNodes;
+};
+var BudgetExceededError = class extends Error {
+	code = "BUDGET_EXCEEDED";
+	constructor(message) {
+		super(message);
+		this.name = "BudgetExceededError";
+	}
+};
+const createBudgetExceededError = (kind, limit) => {
+	return new BudgetExceededError(kind === "depth" ? `Traversal depth limit (${limit}) exceeded.` : `Traversal node budget (${limit}) exceeded.`);
+};
+const isBudgetExceededError = (error) => {
+	return error instanceof BudgetExceededError;
+};
 //#endregion
 //#region src/core/compiler/compile-redactor-plan.ts
 const createLookupTable = () => {
@@ -607,6 +632,8 @@ const compileRedactorPlan = (options = {}) => {
 		exactPathRules: compiledPathRules.exactPathRules,
 		ignoredValueTypes: compileIgnoredValueTypes(options.ignoredValueTypes),
 		isExactPathOnly,
+		maxDepth: options.maxDepth ?? 500,
+		maxNodes: options.maxNodes ?? 5e4,
 		regexKeyRules,
 		serialise: options.serialise,
 		substringRules,
@@ -829,6 +856,7 @@ const renderPathSegmentText = (pathSegment) => {
 };
 const createTraversalState = () => {
 	return {
+		budget: createTraversalBudget(),
 		completedIdentities: /* @__PURE__ */ new WeakMap(),
 		completedSnapshots: /* @__PURE__ */ new WeakMap()
 	};
@@ -845,6 +873,21 @@ const emitFailureDiagnostic = (plan, context, options) => {
 	});
 	emitDiagnosticEvent(plan.diagnostics, createDiagnosticEvent(plan.diagnostics, context.canonicalPath ?? "", diagnostic));
 	return diagnostic;
+};
+const throwBudgetExceeded = (plan, context, kind) => {
+	const limit = kind === "depth" ? plan.maxDepth : plan.maxNodes;
+	emitDiagnosticEvent(plan.diagnostics, Object.freeze({
+		details: Object.freeze({
+			stage: "traversal",
+			kind,
+			limit
+		}),
+		event: "budget.exceeded",
+		message: kind === "depth" ? `Traversal depth limit (${limit}) exceeded.` : `Traversal node budget (${limit}) exceeded.`,
+		path: context.canonicalPath ?? "",
+		valueType: "unknown"
+	}));
+	throw createBudgetExceededError(kind, limit);
 };
 const createUnsupportedTraversalResult = () => {
 	return {
@@ -1011,6 +1054,7 @@ const transformNestedNode = (value, plan, context, state, branchState) => {
 	try {
 		return transformNode(value, plan, context, state, branchState);
 	} catch (error) {
+		if (isBudgetExceededError(error)) throw error;
 		return createFailureTraversalResult(plan, context, {
 			error,
 			stage: "traversal",
@@ -1084,16 +1128,22 @@ const transformTrackedIdentity = (identity, plan, context, activePolicy, state, 
 		const snapshot = state.completedSnapshots.get(identity);
 		if (snapshot !== void 0) return replayCompletedTraversal(identity, snapshot, plan, activePolicy, context, ruleContextKey, state, branchState);
 	}
-	return withActiveIdentity(branchState, identity, canonicalPath, () => {
-		const result = traverse();
-		storeCompletedTraversal(state, identity, {
-			canonicalPath,
-			pathStable: result.pathStable,
-			ruleContextKey,
-			value: result.cacheValue
+	state.budget.depth += 1;
+	try {
+		if (isDepthExceeded(state.budget, plan.maxDepth)) throwBudgetExceeded(plan, context, "depth");
+		return withActiveIdentity(branchState, identity, canonicalPath, () => {
+			const result = traverse();
+			storeCompletedTraversal(state, identity, {
+				canonicalPath,
+				pathStable: result.pathStable,
+				ruleContextKey,
+				value: result.cacheValue
+			});
+			return result;
 		});
-		return result;
-	});
+	} finally {
+		state.budget.depth -= 1;
+	}
 };
 const transformArray = (value, plan, inheritedPolicy, canonicalPath, pathSegments, rootInput, suppressDescendantRedaction, state, branchState) => {
 	const cacheValue = new Array(value.length);
@@ -1433,6 +1483,7 @@ const transformSupportedRuntimeValue = (value, plan, context, activePolicy, stat
 			return result;
 		});
 	} catch (error) {
+		if (isBudgetExceededError(error)) throw error;
 		return createFailureTraversalResult(plan, context, {
 			error,
 			stage: "transformer",
@@ -1441,6 +1492,8 @@ const transformSupportedRuntimeValue = (value, plan, context, activePolicy, stat
 	}
 };
 const transformNode = (value, plan, context, state, branchState) => {
+	state.budget.nodesVisited += 1;
+	if (isNodeBudgetExceeded(state.budget, plan.maxNodes)) throwBudgetExceeded(plan, context, "nodes");
 	const activePolicy = context.suppressDescendantRedaction ? void 0 : selectActivePolicy(plan, resolveExactPathRule(plan, context.canonicalPath), plan.dynamicPathRules.length === 0 ? void 0 : resolveDynamicPathRule(plan, context.pathSegments), context.directKeyMatch, context.inheritedPolicy);
 	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) return applyConfiguredRedaction(value, activePolicy.policy, activePolicy.rulePath, !usesPathSensitivePolicy(activePolicy), plan, context);
 	const transformedResult = transformSupportedRuntimeValue(value, plan, context, activePolicy, state, branchState);
@@ -1757,6 +1810,8 @@ const rootOptionNames = new Set([
 	"diagnostics",
 	"fuzzyKeyMatch",
 	"keys",
+	"maxDepth",
+	"maxNodes",
 	"paths",
 	"remove",
 	"replaceStringByLength",
@@ -1822,6 +1877,10 @@ const validateAllowedOptions = (value, allowedOptions, path, issues) => {
 };
 const validateBooleanOption = (value, path, optionName, issues) => {
 	if (value !== void 0 && typeof value !== "boolean") pushIssue(issues, `${path}.${optionName}`, `${optionName} must be a boolean.`);
+};
+const validatePositiveIntegerOption = (value, path, optionName, issues) => {
+	if (value === void 0) return;
+	if (!Number.isInteger(value) || value < 1) pushIssue(issues, `${path}.${optionName}`, `${optionName} must be a positive integer.`);
 };
 const validateCensorOption = (value, path, issues) => {
 	if (value !== void 0 && typeof value !== "string" && typeof value !== "function") pushIssue(issues, `${path}.censor`, "censor must be a string or function.");
@@ -2051,6 +2110,8 @@ const validateConfig = (options) => {
 	validateKeys(options.keys, "options.keys", issues);
 	validateStringTests(options.stringTests, "options.stringTests", issues);
 	validateTransformers(options.transformers, "options.transformers", issues);
+	validatePositiveIntegerOption(options.maxDepth, "options", "maxDepth", issues);
+	validatePositiveIntegerOption(options.maxNodes, "options", "maxNodes", issues);
 	validateBooleanOption(options.remove, "options", "remove", issues);
 	validateBooleanOption(options.retainStructure, "options", "retainStructure", issues);
 	validateBooleanOption(options.replaceStringByLength, "options", "replaceStringByLength", issues);
