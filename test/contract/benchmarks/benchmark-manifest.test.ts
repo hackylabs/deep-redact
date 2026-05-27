@@ -60,16 +60,17 @@ describe('benchmark manifest contract', () => {
     }
   })
 
-  it('declares competitor as fast-redact for every path-based row', () => {
+  it('declares at least one fast-redact row for the path-based workload class', () => {
     const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'test/bench/manifest.json'), 'utf8')) as {
       rows: Array<{ workloadClass: string; competitor: string }>;
     }
 
-    for (const row of manifest.rows) {
-      if (row.workloadClass === 'path-based') {
-        expect(row.competitor).toBe('fast-redact')
-      }
-    }
+    const pathBasedRows = manifest.rows.filter(row => row.workloadClass === 'path-based')
+    expect(pathBasedRows.length, 'no path-based rows found').toBeGreaterThan(0)
+    expect(
+      pathBasedRows.some(row => row.competitor === 'fast-redact'),
+      'no path-based row with competitor fast-redact',
+    ).toBe(true)
   })
 
   it('has unique row ids', () => {

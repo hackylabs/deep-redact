@@ -50,7 +50,7 @@ interface TraversalContext {
   readonly canonicalPath?: string;
   readonly directKeyMatch?: DirectKeyMatchResult;
   readonly inheritedPolicy?: ActivePolicyMatch;
-  readonly pathSegments: readonly ExactPathSegment[];
+  readonly pathSegments: ExactPathSegment[];
   readonly rootInput: unknown;
   readonly suppressDescendantRedaction?: boolean;
 }
@@ -139,12 +139,11 @@ const setObjectEntry = (
   key: string,
   value: unknown,
 ): void => {
-  Object.defineProperty(target, key, {
-    configurable: true,
-    enumerable: true,
-    value,
-    writable: true,
-  })
+  if (key === '__proto__') {
+    Object.defineProperty(target, key, { configurable: true, enumerable: true, value, writable: true })
+  } else {
+    target[key] = value
+  }
 }
 
 const findMatchingRegexKey = (
@@ -454,7 +453,7 @@ const matchesSingleSegment = (
 
 const matchesDynamicRule = (
   selectorSegments: readonly PathSegment[],
-  pathSegments: readonly ExactPathSegment[],
+  pathSegments: ExactPathSegment[],
   selectorIndex = 0,
   pathIndex = 0,
 ): boolean => {
@@ -484,7 +483,7 @@ const matchesDynamicRule = (
 
 const resolveDynamicPathRule = (
   plan: CompiledRedactorPlan,
-  pathSegments: readonly ExactPathSegment[],
+  pathSegments: ExactPathSegment[],
 ): CompiledDynamicPathRule | undefined => {
   return plan.dynamicPathRules.find((rule) => matchesDynamicRule(rule.segments, pathSegments))
 }
@@ -541,7 +540,7 @@ const selectActivePolicy = (
 }
 
 const buildFunctionCensorContext = (
-  pathSegments: readonly ExactPathSegment[],
+  pathSegments: ExactPathSegment[],
   rulePath: PathSegments,
   rootInput: unknown,
 ): FunctionCensorContext => {
@@ -743,7 +742,7 @@ const transformTrackedIdentity = (
   }
 
   const completedRecords = state.completedIdentities.get(identity)
-  const ruleContextKey = buildRuleContextKey(activePolicy)
+  const ruleContextKey = activePolicy === undefined ? 'none' : buildRuleContextKey(activePolicy)
   const completedResult = completedRecords === undefined
     ? undefined
     : resolveCompletedTraversal(completedRecords, canonicalPath, ruleContextKey, identity)
@@ -788,7 +787,7 @@ const transformArray = (
   plan: CompiledRedactorPlan,
   inheritedPolicy: ActivePolicyMatch | undefined,
   canonicalPath: string | undefined,
-  pathSegments: readonly ExactPathSegment[],
+  pathSegments: ExactPathSegment[],
   rootInput: unknown,
   suppressDescendantRedaction: boolean | undefined,
   state: TraversalState,
@@ -808,60 +807,65 @@ const transformArray = (
 
     const pathSegment = createIndexPathSegment(index)
     const itemPath = appendCanonicalPathSegment(canonicalPath, pathSegment)
-    const itemContext: TraversalContext = {
-      canonicalPath: itemPath,
-      inheritedPolicy,
-      pathSegments: Object.freeze([...pathSegments, pathSegment]),
-      rootInput,
-      suppressDescendantRedaction,
-    }
-    let item: unknown
-
+    pathSegments.push(pathSegment)
     try {
-      item = value[index]
-    } catch (error) {
-      const diagnostic = emitFailureDiagnostic(plan, itemContext, {
-        error,
-        stage: 'traversal-read',
-        value: value,
-        valueType: 'getter',
-      })
+      const itemContext: TraversalContext = {
+        canonicalPath: itemPath,
+        inheritedPolicy,
+        pathSegments,
+        rootInput,
+        suppressDescendantRedaction,
+      }
+      let item: unknown
+
+      try {
+        item = value[index]
+      } catch (error) {
+        const diagnostic = emitFailureDiagnostic(plan, itemContext, {
+          error,
+          stage: 'traversal-read',
+          value: value,
+          valueType: 'getter',
+        })
+
+        snapshotItems[index] = {
+          diagnostic,
+          present: true,
+        }
+        const failureResult = createUnsupportedTraversalResult()
+
+        cacheValue[index] = failureResult.cacheValue
+        transformedValue[index] = failureResult.value
+        changed = true
+        pathStable &&= failureResult.pathStable
+        continue
+      }
 
       snapshotItems[index] = {
-        diagnostic,
         present: true,
+        value: item,
       }
-      const failureResult = createUnsupportedTraversalResult()
 
-      cacheValue[index] = failureResult.cacheValue
-      transformedValue[index] = failureResult.value
+      const itemResult = transformNestedNode(item, plan, itemContext, state, branchState)
+      pathStable &&= itemResult.pathStable
+
+      if (isRemovedValue(itemResult.value)) {
+        changed = true
+        removedIndexes.push(index)
+        continue
+      }
+
+      cacheValue[index] = itemResult.cacheValue
+      transformedValue[index] = itemResult.value
+
+      if (!itemResult.changed) {
+        continue
+      }
+
       changed = true
-      pathStable &&= failureResult.pathStable
-      continue
+    } finally {
+      pathSegments.pop()
     }
-
-    snapshotItems[index] = {
-      present: true,
-      value: item,
-    }
-
-    const itemResult = transformNestedNode(item, plan, itemContext, state, branchState)
-    pathStable &&= itemResult.pathStable
-
-    if (isRemovedValue(itemResult.value)) {
-      changed = true
-      removedIndexes.push(index)
-      continue
-    }
-
-    cacheValue[index] = itemResult.cacheValue
-    transformedValue[index] = itemResult.value
-
-    if (!itemResult.changed) {
-      continue
-    }
-
-    changed = true
   }
 
   storeCompletedSnapshot(state, value, {
@@ -910,7 +914,7 @@ const transformObject = (
   plan: CompiledRedactorPlan,
   inheritedPolicy: ActivePolicyMatch | undefined,
   canonicalPath: string | undefined,
-  pathSegments: readonly ExactPathSegment[],
+  pathSegments: ExactPathSegment[],
   rootInput: unknown,
   suppressDescendantRedaction: boolean | undefined,
   state: TraversalState,
@@ -942,60 +946,67 @@ const transformObject = (
   for (const key of propertyKeys) {
     const pathSegment = createPropertyPathSegment(key)
     const propertyPath = appendCanonicalPathSegment(canonicalPath, pathSegment)
-    const propertyContext: TraversalContext = {
-      canonicalPath: propertyPath,
-      directKeyMatch: resolveDirectKeyMatch(plan, key),
-      inheritedPolicy,
-      pathSegments: Object.freeze([...pathSegments, pathSegment]),
-      rootInput,
-      suppressDescendantRedaction,
-    }
-    let propertyValue: unknown
-
+    pathSegments.push(pathSegment)
     try {
-      propertyValue = value[key]
-    } catch (error) {
-      const diagnostic = emitFailureDiagnostic(plan, propertyContext, {
-        error,
-        stage: 'traversal-read',
-        value: value,
-        valueType: 'getter',
-      })
+      const propertyContext: TraversalContext = {
+        canonicalPath: propertyPath,
+        directKeyMatch: plan.exactKeyRules.literalMatchers.length === 0 && plan.regexKeyRules.matchers.length === 0
+          ? undefined
+          : resolveDirectKeyMatch(plan, key),
+        inheritedPolicy,
+        pathSegments,
+        rootInput,
+        suppressDescendantRedaction,
+      }
+      let propertyValue: unknown
+
+      try {
+        propertyValue = value[key]
+      } catch (error) {
+        const diagnostic = emitFailureDiagnostic(plan, propertyContext, {
+          error,
+          stage: 'traversal-read',
+          value: value,
+          valueType: 'getter',
+        })
+
+        snapshotEntries.push({
+          diagnostic,
+          key,
+        })
+        const failureResult = createUnsupportedTraversalResult()
+
+        setObjectEntry(cacheValue, key, failureResult.cacheValue)
+        setObjectEntry(transformedValue, key, failureResult.value)
+        changed = true
+        pathStable &&= failureResult.pathStable
+        continue
+      }
 
       snapshotEntries.push({
-        diagnostic,
         key,
+        value: propertyValue,
       })
-      const failureResult = createUnsupportedTraversalResult()
 
-      setObjectEntry(cacheValue, key, failureResult.cacheValue)
-      setObjectEntry(transformedValue, key, failureResult.value)
+      const propertyResult = transformNestedNode(propertyValue, plan, propertyContext, state, branchState)
+      pathStable &&= propertyResult.pathStable
+
+      if (isRemovedValue(propertyResult.value)) {
+        changed = true
+        continue
+      }
+
+      setObjectEntry(cacheValue, key, propertyResult.cacheValue)
+      setObjectEntry(transformedValue, key, propertyResult.value)
+
+      if (!propertyResult.changed) {
+        continue
+      }
+
       changed = true
-      pathStable &&= failureResult.pathStable
-      continue
+    } finally {
+      pathSegments.pop()
     }
-
-    snapshotEntries.push({
-      key,
-      value: propertyValue,
-    })
-
-    const propertyResult = transformNestedNode(propertyValue, plan, propertyContext, state, branchState)
-    pathStable &&= propertyResult.pathStable
-
-    if (isRemovedValue(propertyResult.value)) {
-      changed = true
-      continue
-    }
-
-    setObjectEntry(cacheValue, key, propertyResult.cacheValue)
-    setObjectEntry(transformedValue, key, propertyResult.value)
-
-    if (!propertyResult.changed) {
-      continue
-    }
-
-    changed = true
   }
 
   storeCompletedSnapshot(state, value, {
@@ -1016,7 +1027,7 @@ const transformCompletedArray = (
   plan: CompiledRedactorPlan,
   inheritedPolicy: ActivePolicyMatch | undefined,
   canonicalPath: string | undefined,
-  pathSegments: readonly ExactPathSegment[],
+  pathSegments: ExactPathSegment[],
   rootInput: unknown,
   suppressDescendantRedaction: boolean | undefined,
   state: TraversalState,
@@ -1050,22 +1061,27 @@ const transformCompletedArray = (
       continue
     }
 
-    const itemResult = transformNestedNode(itemSnapshot.value, plan, {
-      canonicalPath: itemPath,
-      inheritedPolicy,
-      pathSegments: Object.freeze([...pathSegments, pathSegment]),
-      rootInput,
-      suppressDescendantRedaction,
-    }, state, branchState)
-    pathStable &&= itemResult.pathStable
+    pathSegments.push(pathSegment)
+    try {
+      const itemResult = transformNestedNode(itemSnapshot.value, plan, {
+        canonicalPath: itemPath,
+        inheritedPolicy,
+        pathSegments,
+        rootInput,
+        suppressDescendantRedaction,
+      }, state, branchState)
+      pathStable &&= itemResult.pathStable
 
-    if (isRemovedValue(itemResult.value)) {
-      removedIndexes.push(index)
-      continue
+      if (isRemovedValue(itemResult.value)) {
+        removedIndexes.push(index)
+        continue
+      }
+
+      cacheValue[index] = itemResult.cacheValue
+      transformedValue[index] = itemResult.value
+    } finally {
+      pathSegments.pop()
     }
-
-    cacheValue[index] = itemResult.cacheValue
-    transformedValue[index] = itemResult.value
   }
 
   if (removedIndexes.length === 0) {
@@ -1100,7 +1116,7 @@ const transformCompletedObject = (
   plan: CompiledRedactorPlan,
   inheritedPolicy: ActivePolicyMatch | undefined,
   canonicalPath: string | undefined,
-  pathSegments: readonly ExactPathSegment[],
+  pathSegments: ExactPathSegment[],
   rootInput: unknown,
   suppressDescendantRedaction: boolean | undefined,
   state: TraversalState,
@@ -1127,22 +1143,29 @@ const transformCompletedObject = (
       continue
     }
 
-    const propertyResult = transformNestedNode(entry.value, plan, {
-      canonicalPath: propertyPath,
-      directKeyMatch: resolveDirectKeyMatch(plan, entry.key),
-      inheritedPolicy,
-      pathSegments: Object.freeze([...pathSegments, pathSegment]),
-      rootInput,
-      suppressDescendantRedaction,
-    }, state, branchState)
-    pathStable &&= propertyResult.pathStable
+    pathSegments.push(pathSegment)
+    try {
+      const propertyResult = transformNestedNode(entry.value, plan, {
+        canonicalPath: propertyPath,
+        directKeyMatch: plan.exactKeyRules.literalMatchers.length === 0 && plan.regexKeyRules.matchers.length === 0
+          ? undefined
+          : resolveDirectKeyMatch(plan, entry.key),
+        inheritedPolicy,
+        pathSegments,
+        rootInput,
+        suppressDescendantRedaction,
+      }, state, branchState)
+      pathStable &&= propertyResult.pathStable
 
-    if (isRemovedValue(propertyResult.value)) {
-      continue
+      if (isRemovedValue(propertyResult.value)) {
+        continue
+      }
+
+      setObjectEntry(cacheValue, entry.key, propertyResult.cacheValue)
+      setObjectEntry(transformedValue, entry.key, propertyResult.value)
+    } finally {
+      pathSegments.pop()
     }
-
-    setObjectEntry(cacheValue, entry.key, propertyResult.cacheValue)
-    setObjectEntry(transformedValue, entry.key, propertyResult.value)
   }
 
   return {
@@ -1212,7 +1235,7 @@ const transformResolvedNode = (
     : selectActivePolicy(
       plan,
       resolveExactPathRule(plan, context.canonicalPath),
-      resolveDynamicPathRule(plan, context.pathSegments),
+      plan.dynamicPathRules.length === 0 ? undefined : resolveDynamicPathRule(plan, context.pathSegments),
       context.directKeyMatch,
       context.inheritedPolicy,
     )
@@ -1359,7 +1382,7 @@ const transformNode = (
     : selectActivePolicy(
       plan,
       resolveExactPathRule(plan, context.canonicalPath),
-      resolveDynamicPathRule(plan, context.pathSegments),
+      plan.dynamicPathRules.length === 0 ? undefined : resolveDynamicPathRule(plan, context.pathSegments),
       context.directKeyMatch,
       context.inheritedPolicy,
     )
@@ -1436,7 +1459,7 @@ export const redactValue = (
   const result = transformNode(value, plan, {
     canonicalPath: undefined,
     inheritedPolicy: undefined,
-    pathSegments: Object.freeze([]) as readonly ExactPathSegment[],
+    pathSegments: [],
     rootInput: value,
   }, state, branchState)
 

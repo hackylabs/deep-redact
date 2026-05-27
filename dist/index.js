@@ -798,12 +798,13 @@ const hasLookupValue = (table, key) => {
 	return Object.hasOwn(table, key);
 };
 const setObjectEntry = (target, key, value) => {
-	Object.defineProperty(target, key, {
+	if (key === "__proto__") Object.defineProperty(target, key, {
 		configurable: true,
 		enumerable: true,
 		value,
 		writable: true
 	});
+	else target[key] = value;
 };
 const findMatchingRegexKey = (matchers, key) => {
 	return matchers.find((matcher) => {
@@ -1076,7 +1077,7 @@ const transformTrackedIdentity = (identity, plan, context, activePolicy, state, 
 		};
 	}
 	const completedRecords = state.completedIdentities.get(identity);
-	const ruleContextKey = buildRuleContextKey(activePolicy);
+	const ruleContextKey = activePolicy === void 0 ? "none" : buildRuleContextKey(activePolicy);
 	const completedResult = completedRecords === void 0 ? void 0 : resolveCompletedTraversal(completedRecords, canonicalPath, ruleContextKey, identity);
 	if (completedResult !== void 0) return completedResult;
 	if (completedRecords !== void 0) {
@@ -1104,48 +1105,54 @@ const transformArray = (value, plan, inheritedPolicy, canonicalPath, pathSegment
 	for (let index = 0; index < value.length; index += 1) {
 		if (!(index in value)) continue;
 		const pathSegment = createIndexPathSegment(index);
-		const itemContext = {
-			canonicalPath: appendCanonicalPathSegment(canonicalPath, pathSegment),
-			inheritedPolicy,
-			pathSegments: Object.freeze([...pathSegments, pathSegment]),
-			rootInput,
-			suppressDescendantRedaction
-		};
-		let item;
+		const itemPath = appendCanonicalPathSegment(canonicalPath, pathSegment);
+		pathSegments.push(pathSegment);
 		try {
-			item = value[index];
-		} catch (error) {
-			snapshotItems[index] = {
-				diagnostic: emitFailureDiagnostic(plan, itemContext, {
-					error,
-					stage: "traversal-read",
-					value,
-					valueType: "getter"
-				}),
-				present: true
+			const itemContext = {
+				canonicalPath: itemPath,
+				inheritedPolicy,
+				pathSegments,
+				rootInput,
+				suppressDescendantRedaction
 			};
-			const failureResult = createUnsupportedTraversalResult();
-			cacheValue[index] = failureResult.cacheValue;
-			transformedValue[index] = failureResult.value;
+			let item;
+			try {
+				item = value[index];
+			} catch (error) {
+				snapshotItems[index] = {
+					diagnostic: emitFailureDiagnostic(plan, itemContext, {
+						error,
+						stage: "traversal-read",
+						value,
+						valueType: "getter"
+					}),
+					present: true
+				};
+				const failureResult = createUnsupportedTraversalResult();
+				cacheValue[index] = failureResult.cacheValue;
+				transformedValue[index] = failureResult.value;
+				changed = true;
+				pathStable &&= failureResult.pathStable;
+				continue;
+			}
+			snapshotItems[index] = {
+				present: true,
+				value: item
+			};
+			const itemResult = transformNestedNode(item, plan, itemContext, state, branchState);
+			pathStable &&= itemResult.pathStable;
+			if (isRemovedValue(itemResult.value)) {
+				changed = true;
+				removedIndexes.push(index);
+				continue;
+			}
+			cacheValue[index] = itemResult.cacheValue;
+			transformedValue[index] = itemResult.value;
+			if (!itemResult.changed) continue;
 			changed = true;
-			pathStable &&= failureResult.pathStable;
-			continue;
+		} finally {
+			pathSegments.pop();
 		}
-		snapshotItems[index] = {
-			present: true,
-			value: item
-		};
-		const itemResult = transformNestedNode(item, plan, itemContext, state, branchState);
-		pathStable &&= itemResult.pathStable;
-		if (isRemovedValue(itemResult.value)) {
-			changed = true;
-			removedIndexes.push(index);
-			continue;
-		}
-		cacheValue[index] = itemResult.cacheValue;
-		transformedValue[index] = itemResult.value;
-		if (!itemResult.changed) continue;
-		changed = true;
 	}
 	storeCompletedSnapshot(state, value, {
 		items: snapshotItems,
@@ -1202,49 +1209,55 @@ const transformObject = (value, plan, inheritedPolicy, canonicalPath, pathSegmen
 	}
 	for (const key of propertyKeys) {
 		const pathSegment = createPropertyPathSegment(key);
-		const propertyContext = {
-			canonicalPath: appendCanonicalPathSegment(canonicalPath, pathSegment),
-			directKeyMatch: resolveDirectKeyMatch(plan, key),
-			inheritedPolicy,
-			pathSegments: Object.freeze([...pathSegments, pathSegment]),
-			rootInput,
-			suppressDescendantRedaction
-		};
-		let propertyValue;
+		const propertyPath = appendCanonicalPathSegment(canonicalPath, pathSegment);
+		pathSegments.push(pathSegment);
 		try {
-			propertyValue = value[key];
-		} catch (error) {
-			const diagnostic = emitFailureDiagnostic(plan, propertyContext, {
-				error,
-				stage: "traversal-read",
-				value,
-				valueType: "getter"
-			});
+			const propertyContext = {
+				canonicalPath: propertyPath,
+				directKeyMatch: plan.exactKeyRules.literalMatchers.length === 0 && plan.regexKeyRules.matchers.length === 0 ? void 0 : resolveDirectKeyMatch(plan, key),
+				inheritedPolicy,
+				pathSegments,
+				rootInput,
+				suppressDescendantRedaction
+			};
+			let propertyValue;
+			try {
+				propertyValue = value[key];
+			} catch (error) {
+				const diagnostic = emitFailureDiagnostic(plan, propertyContext, {
+					error,
+					stage: "traversal-read",
+					value,
+					valueType: "getter"
+				});
+				snapshotEntries.push({
+					diagnostic,
+					key
+				});
+				const failureResult = createUnsupportedTraversalResult();
+				setObjectEntry(cacheValue, key, failureResult.cacheValue);
+				setObjectEntry(transformedValue, key, failureResult.value);
+				changed = true;
+				pathStable &&= failureResult.pathStable;
+				continue;
+			}
 			snapshotEntries.push({
-				diagnostic,
-				key
+				key,
+				value: propertyValue
 			});
-			const failureResult = createUnsupportedTraversalResult();
-			setObjectEntry(cacheValue, key, failureResult.cacheValue);
-			setObjectEntry(transformedValue, key, failureResult.value);
+			const propertyResult = transformNestedNode(propertyValue, plan, propertyContext, state, branchState);
+			pathStable &&= propertyResult.pathStable;
+			if (isRemovedValue(propertyResult.value)) {
+				changed = true;
+				continue;
+			}
+			setObjectEntry(cacheValue, key, propertyResult.cacheValue);
+			setObjectEntry(transformedValue, key, propertyResult.value);
+			if (!propertyResult.changed) continue;
 			changed = true;
-			pathStable &&= failureResult.pathStable;
-			continue;
+		} finally {
+			pathSegments.pop();
 		}
-		snapshotEntries.push({
-			key,
-			value: propertyValue
-		});
-		const propertyResult = transformNestedNode(propertyValue, plan, propertyContext, state, branchState);
-		pathStable &&= propertyResult.pathStable;
-		if (isRemovedValue(propertyResult.value)) {
-			changed = true;
-			continue;
-		}
-		setObjectEntry(cacheValue, key, propertyResult.cacheValue);
-		setObjectEntry(transformedValue, key, propertyResult.value);
-		if (!propertyResult.changed) continue;
-		changed = true;
 	}
 	storeCompletedSnapshot(state, value, {
 		entries: snapshotEntries,
@@ -1275,20 +1288,25 @@ const transformCompletedArray = (snapshot, plan, inheritedPolicy, canonicalPath,
 			pathStable &&= failureResult.pathStable;
 			continue;
 		}
-		const itemResult = transformNestedNode(itemSnapshot.value, plan, {
-			canonicalPath: itemPath,
-			inheritedPolicy,
-			pathSegments: Object.freeze([...pathSegments, pathSegment]),
-			rootInput,
-			suppressDescendantRedaction
-		}, state, branchState);
-		pathStable &&= itemResult.pathStable;
-		if (isRemovedValue(itemResult.value)) {
-			removedIndexes.push(index);
-			continue;
+		pathSegments.push(pathSegment);
+		try {
+			const itemResult = transformNestedNode(itemSnapshot.value, plan, {
+				canonicalPath: itemPath,
+				inheritedPolicy,
+				pathSegments,
+				rootInput,
+				suppressDescendantRedaction
+			}, state, branchState);
+			pathStable &&= itemResult.pathStable;
+			if (isRemovedValue(itemResult.value)) {
+				removedIndexes.push(index);
+				continue;
+			}
+			cacheValue[index] = itemResult.cacheValue;
+			transformedValue[index] = itemResult.value;
+		} finally {
+			pathSegments.pop();
 		}
-		cacheValue[index] = itemResult.cacheValue;
-		transformedValue[index] = itemResult.value;
 	}
 	if (removedIndexes.length === 0) return {
 		cacheValue,
@@ -1326,18 +1344,23 @@ const transformCompletedObject = (snapshot, plan, inheritedPolicy, canonicalPath
 			pathStable &&= failureResult.pathStable;
 			continue;
 		}
-		const propertyResult = transformNestedNode(entry.value, plan, {
-			canonicalPath: propertyPath,
-			directKeyMatch: resolveDirectKeyMatch(plan, entry.key),
-			inheritedPolicy,
-			pathSegments: Object.freeze([...pathSegments, pathSegment]),
-			rootInput,
-			suppressDescendantRedaction
-		}, state, branchState);
-		pathStable &&= propertyResult.pathStable;
-		if (isRemovedValue(propertyResult.value)) continue;
-		setObjectEntry(cacheValue, entry.key, propertyResult.cacheValue);
-		setObjectEntry(transformedValue, entry.key, propertyResult.value);
+		pathSegments.push(pathSegment);
+		try {
+			const propertyResult = transformNestedNode(entry.value, plan, {
+				canonicalPath: propertyPath,
+				directKeyMatch: plan.exactKeyRules.literalMatchers.length === 0 && plan.regexKeyRules.matchers.length === 0 ? void 0 : resolveDirectKeyMatch(plan, entry.key),
+				inheritedPolicy,
+				pathSegments,
+				rootInput,
+				suppressDescendantRedaction
+			}, state, branchState);
+			pathStable &&= propertyResult.pathStable;
+			if (isRemovedValue(propertyResult.value)) continue;
+			setObjectEntry(cacheValue, entry.key, propertyResult.cacheValue);
+			setObjectEntry(transformedValue, entry.key, propertyResult.value);
+		} finally {
+			pathSegments.pop();
+		}
 	}
 	return {
 		cacheValue,
@@ -1360,7 +1383,7 @@ const replayCompletedTraversal = (value, snapshot, plan, inheritedPolicy, contex
 	return result;
 };
 const transformResolvedNode = (value, plan, context, state, branchState) => {
-	const activePolicy = context.suppressDescendantRedaction ? void 0 : selectActivePolicy(plan, resolveExactPathRule(plan, context.canonicalPath), resolveDynamicPathRule(plan, context.pathSegments), context.directKeyMatch, context.inheritedPolicy);
+	const activePolicy = context.suppressDescendantRedaction ? void 0 : selectActivePolicy(plan, resolveExactPathRule(plan, context.canonicalPath), plan.dynamicPathRules.length === 0 ? void 0 : resolveDynamicPathRule(plan, context.pathSegments), context.directKeyMatch, context.inheritedPolicy);
 	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) return applyConfiguredRedaction(value, activePolicy.policy, activePolicy.rulePath, !usesPathSensitivePolicy(activePolicy), plan, context);
 	if (!isTraversableContainer(value)) {
 		const substringResult = context.suppressDescendantRedaction ? void 0 : transformSubstringValue(value, plan, context);
@@ -1418,7 +1441,7 @@ const transformSupportedRuntimeValue = (value, plan, context, activePolicy, stat
 	}
 };
 const transformNode = (value, plan, context, state, branchState) => {
-	const activePolicy = context.suppressDescendantRedaction ? void 0 : selectActivePolicy(plan, resolveExactPathRule(plan, context.canonicalPath), resolveDynamicPathRule(plan, context.pathSegments), context.directKeyMatch, context.inheritedPolicy);
+	const activePolicy = context.suppressDescendantRedaction ? void 0 : selectActivePolicy(plan, resolveExactPathRule(plan, context.canonicalPath), plan.dynamicPathRules.length === 0 ? void 0 : resolveDynamicPathRule(plan, context.pathSegments), context.directKeyMatch, context.inheritedPolicy);
 	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) return applyConfiguredRedaction(value, activePolicy.policy, activePolicy.rulePath, !usesPathSensitivePolicy(activePolicy), plan, context);
 	const transformedResult = transformSupportedRuntimeValue(value, plan, context, activePolicy, state, branchState);
 	if (transformedResult !== void 0) return transformedResult;
@@ -1443,7 +1466,7 @@ const redactValue = (value, plan) => {
 	const result = transformNode(value, plan, {
 		canonicalPath: void 0,
 		inheritedPolicy: void 0,
-		pathSegments: Object.freeze([]),
+		pathSegments: [],
 		rootInput: value
 	}, state, branchState);
 	return isRemovedValue(result.value) ? void 0 : result.value;
