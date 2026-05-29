@@ -22,6 +22,7 @@
 #   - in-progress: Developer actively working on implementation
 #   - review: Ready for code review
 #   - done: Story completed
+#   - cancelled: Story superseded or explicitly dropped; no implementation required
 #
 # Retrospective Status:
 #   - optional: Can be completed but is not required
@@ -100,10 +101,22 @@ development_status:
   6-7-harden-standardisation-guide-generation-scripts: done
   epic-6-retrospective: optional
 
-  epic-7: in-progress
+  epic-7: done
   7-1-implement-compiled-path-executor-for-exact-path-only-configurations: done
   7-2-prove-behavioural-equivalence-of-the-compiled-path-executor: done
   7-3-reduce-hot-path-allocation-overhead-in-the-general-traversal: done
   7-4-enforce-traversal-safety-limits-and-validate-hostile-input-protection: done
-  7-5-extend-the-fast-lane-to-support-single-level-wildcard-path-segments: in-progress
+  7-5-extend-the-fast-lane-to-support-single-level-wildcard-path-segments: cancelled
   epic-7-retrospective: optional
+
+  epic-8: backlog
+  8-1-establish-rule-driven-traversal-contract-and-document-behaviour-changes: backlog
+  8-2-implement-rule-driven-exact-path-navigation-and-deprecate-the-compiled-path-executor: backlog
+  8-3-extend-rule-driven-engine-for-single-level-wildcard-paths: backlog
+  8-4-extend-rule-driven-engine-for-double-wildcard-paths-and-key-based-rules: backlog
+  8-5-integrate-substring-matching-and-finalise-rule-driven-engine: backlog
+  epic-8-retrospective: optional
+
+  epic-9: backlog
+  9-1-add-worked-examples-for-fuzzy-key-matching-case-insensitive-key-matching-and-path-segment-ignore-selectors: backlog
+  epic-9-retrospective: optional
