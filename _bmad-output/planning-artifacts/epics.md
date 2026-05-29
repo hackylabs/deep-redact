@@ -116,7 +116,7 @@ FR7: Epic 2 - enable case-insensitive key matching
 FR8: Epic 1 - provide typed API discoverability for TypeScript users
 FR9: Epic 1 - target values by key or regex property match
 FR10: Epic 1 - target values by explicit object path and regex path segment
-FR11: Epic 1 Story 1.4 (functional) + Epic 7 Story 7.5 (performance fast lane) - support single-level wildcard path segments
+FR11: Epic 1 Story 1.4 (functional) + Epic 8 Story 8.3 (performance — rule-driven single-wildcard support) - support single-level wildcard path segments
 FR12: Epic 1 - support recursive wildcard path segments
 FR13: Epic 1 - exclude keys or indexes from matching path rules
 FR14: Epic 2 - redact matched substrings and root primitive inputs
@@ -171,7 +171,16 @@ Teams can migrate existing usage, verify cross-environment support, evaluate per
 
 ### Epic 7: Runtime Performance — Pass the Benchmark Gate
 Address the open performance gate and traversal safety controls.
-**Technical Constraints covered:** Story 7.1 — compiled path executor; Story 7.2 — equivalence proof; Story 7.3 — general traversal allocation; Story 7.4 — traversal safety limits, hostile-input protection, security corpus
+**Technical Constraints covered:** Story 7.1 — compiled path executor; Story 7.2 — equivalence proof; Story 7.3 — general traversal allocation; Story 7.4 — traversal safety limits, hostile-input protection, security corpus; Story 7.5 — cancelled (superseded by Epic 8)
+**Status:** Stories 7.1–7.4 complete. Story 7.5 cancelled — the trie-extension approach is superseded by Epic 8's rule-driven traversal engine, which eliminates the need for a separate fast lane entirely. Stories 7.1–7.4 work products remain load-bearing: 7.4's safety limits are mandatory requirements for the Epic 8 engine; 7.3's allocation optimisations informed Epic 8's design principles; 7.2's equivalence corpus provides the baseline for Epic 8's equivalence proof; 7.1's compiled executor is replaced by Epic 8 Story 8.2.
+
+### Epic 8: Rule-Driven Traversal Engine
+Replace the O(N) payload-walk with a rule-driven engine that navigates directly to configured targets, achieving O(P) for exact-path-only configurations and O(P + Σ K_wildcard_levels) for single-wildcard configurations. The compiled path executor fast lane from Story 7.1 is superseded.
+**FRs covered:** FR11 (performance for single-level wildcard paths)
+
+### Epic 9: Remaining Deferred Work
+Address gaps and deferred items identified after the main epic sequence was finalised but before v4 release. Stories are added to this epic as gaps are discovered.
+**Known stories:** Story 9.1 — missing worked examples for fuzzy key matching, case-insensitive key matching, and path-segment ignore selectors (FR6, FR7, FR13)
 
 ## Epic 1: Enable Service-Wide Redaction with One Configuration
 
@@ -2150,6 +2159,8 @@ Developers can use Deep Redact on path-based workloads with performance comparab
 
 This epic closes the gate through a compiled path executor for exact-path-only configurations and targeted hot-path allocation reductions in the general traversal.
 
+**Audit note (2026-05-28):** Stories 7.1–7.4 are complete. Story 7.5 is cancelled and superseded by Epic 8. The work products from 7.1–7.4 remain load-bearing for Epic 8: 7.4's safety limits (maxDepth, maxNodes, `BudgetExceededError`) are mandatory requirements for the rule-driven engine; 7.3's allocation optimisations informed Epic 8's design principles; 7.2's equivalence corpus provides the baseline for Epic 8's equivalence story; 7.1's compiled path executor is replaced by Epic 8 Story 8.2 (rule-driven exact-path navigation with shared-ancestor copy map).
+
 ### Story 7.1: Implement Compiled Path Executor for Exact-Path-Only Configurations
 
 As a platform or performance engineer,
@@ -2344,13 +2355,15 @@ The current `isExactPathOnly` candidacy condition rejects any configuration that
 
 **Single-pass wildcard traversal**
 - **Given** the fast-lane traversal logic
-  **When** a node in the trie has a `wildcardChild`
-  **Then** for each property or array index encountered at that depth, the traversal follows the `wildcardChild` branch in addition to any matching exact child
-  **And** this check adds one null-guard per depth level with no heap allocation
-  **And** the `delegate` sentinel path is unchanged: payloads with supported-transformable runtime values, non-plain prototypes, or circular references are still escalated to the general lane
+  **When** a trie node has **no** `wildcardChild`
+  **Then** the traversal navigates directly to known child keys via the node's `propertyChildren` and `indexChildren` maps — no full key iteration occurs, and values at non-configured sibling keys are not visited during navigation
+  **And** when a container is about to be shallow-copied (because a configured descendant is being redacted), its own properties are scanned for transformable runtime values (Date, BigInt, Map, Set, Symbol, etc.) at non-configured positions; if any are found, the call is delegated — because the shallow copy would otherwise propagate untransformed values that the general traversal would have transformed
+  **When** a trie node **has** a `wildcardChild`
+  **Then** for each property or array index encountered at that depth, the traversal follows the `wildcardChild` branch in addition to any matching exact child, and this check adds one null-guard per depth level with no heap allocation
+  **And** in both cases: at positions where a rule matches and the censor is applied, transformable value types do not trigger delegation — the censor replaces the value wholesale; at non-configured, non-matched positions, transformable runtime values trigger delegation; non-plain prototypes at any traversed intermediate node trigger delegation (prototype pollution guard); circular references do not trigger delegation
 
 **Broadened fast-lane candidacy**
-- **Given** the `isExactPathOnly` compile-time flag (or its replacement, `isFastLaneEligible`)
+- **Given** the `isFastLaneEligible` compile-time flag (renamed from `isExactPathOnly`)
   **When** a configuration contains only exact path segments and/or single-level `*` path segments, with no `**` recursive wildcards, no regex path segments, no ignore rules on paths, no key rules, no substring tests, no fuzzy key matching, and case-sensitive matching enabled
   **Then** the candidacy flag is `true` and the fast lane is selected
 - **Given** a configuration that includes any `**` segment, regex path segment, key rule, substring test, fuzzy match option, or case-insensitive match option
@@ -2366,13 +2379,313 @@ The current `isExactPathOnly` candidacy condition rejects any configuration that
 **Benchmark regression**
 - **Given** the `wildcard-single-object-*` benchmark rows in the manifest
   **When** this story is complete and benchmarks are re-run
-  **Then** the recorded overhead for the wildcard workload versus `fast-redact` is materially lower than the pre-story baseline
+  **Then** the recorded overhead for the wildcard workload versus `fast-redact` is materially lower than the pre-story baseline (986.43%)
   **And** the threshold policy for `wildcard-single-object-fast-redact-node24` in `test/bench/manifest.json` is tightened to reflect the new achievable overhead
   **And** the `wildcard-single-object-v3-node24` and `wildcard-single-object-json-stringify-regex-node24` thresholds are reviewed and tightened accordingly
 
 **Scope guard**
 - **Given** this story's scope
   **When** the implementation is reviewed
-  **Then** it covers `PathTreeNode` wildcard extension, trie builder update, fast-lane traversal wildcard handling, `isFastLaneEligible` condition broadening, equivalence tests, and benchmark threshold updates only
+  **Then** it covers `PathTreeNode` wildcard extension, trie builder update, `applyExactNodes` direct-navigation helper, fast-lane traversal wildcard handling, `isFastLaneEligible` condition broadening, equivalence tests, and benchmark threshold updates only
   **And** recursive wildcard (`**`) support in the fast lane is explicitly out of scope and remains a candidate for a future story
   **And** general traversal allocation reductions remain governed by Story 7.3
+
+## Epic 8: Rule-Driven Traversal Engine
+
+Replace the current O(N) payload-walk with a rule-driven engine that navigates directly to configured targets. For path-based configurations, this achieves O(P) for exact paths and O(P + Σ K_wildcard_levels) for single-wildcard paths — compared to O(N) always for the current general traversal. The compiled path executor fast lane from Story 7.1 is superseded and deprecated.
+
+**Context:** v4 has not been publicly released. No backwards-compatibility bridge is required. The rule-driven engine replaces the general traversal as the primary runtime for path-driven configurations. A full O(N) traversal mode remains for configurations containing key-based or substring rules that inherently require visiting every node.
+
+**Key design decision:** Under the rule-driven engine, non-configured positions are not visited. Transformable runtime values (Date, BigInt, Map, Set, Error, RegExp, URL) at non-configured positions are left in the output as-is, unchanged. This differs from the current general traversal, which transforms every transformable value it encounters regardless of targeting configuration. This is an intentional design decision, not an oversight — configurations that require transformation of all transformable values can express that through key-based or wildcard-path rules, which trigger the appropriate traversal mode.
+
+### Story 8.1: Establish Rule-Driven Traversal Contract and Document Behaviour Changes
+
+As a backend engineer,
+I want the rule-driven traversal contract to be defined and the relevant behaviour changes to be explicitly documented and test-covered before implementation begins,
+so that the design decision is intentional and verifiable, not incidental.
+
+**Motivation:** The rule-driven engine inverts the outer loop relative to the current general traversal: instead of visiting every node in the payload and checking which rules match, it iterates configured rules and navigates directly to what each rule targets. This structural change produces a categorical improvement in traversal cost for path-based configurations but also changes behaviour for transformable runtime values at non-configured positions. Since v4 has not been publicly released, this is an acceptable design decision — but it must be explicitly documented and test-covered before it becomes the de facto behaviour.
+
+**Acceptance Criteria:**
+
+**Traversal contract**
+- **Given** the rule-driven traversal engine
+  **When** the contract is reviewed
+  **Then** the engine's outer loop iterates configured rules — not payload nodes — and navigates to the targeted positions using the rule's path segments
+  **And** positions not covered by any rule are not visited during navigation (only during key iteration at wildcard levels)
+  **And** the cost for an exact-path-only configuration is O(P), where P is the total number of path segments across all configured paths
+  **And** the cost for a configuration containing single-level wildcard (`*`) segments is O(P + Σ K_at_wildcard_levels), where K_at_wildcard_levels is the number of keys in each container at a wildcard depth
+
+**Non-configured position behaviour (documented behaviour change)**
+- **Given** a payload containing a transformable runtime value (Date, BigInt, Map, Set, Error, RegExp, URL) at a position not covered by any configured rule
+  **When** a path-based-only redactor processes that payload
+  **Then** the transformable value appears unchanged in the returned output — it is neither transformed, redacted, nor delegated
+  **And** this is explicitly documented as a behaviour change from the current general traversal, which transforms every transformable value it encounters regardless of targeting configuration
+  **And** this behaviour change is covered by a named contract test that asserts the non-configured Date/BigInt/etc. is returned as-is
+
+**Contract test coverage**
+- **Given** the rule-driven traversal contract test suite
+  **When** it is executed
+  **Then** it covers at minimum:
+    - an exact path that exists in the payload
+    - an exact path whose intermediate key is absent
+    - an exact path whose terminal key is absent
+    - a payload with a transformable value at a non-configured sibling position (asserts value passes through unchanged)
+    - a payload where the root container has a non-plain prototype (prototype pollution guard — delegates)
+    - a payload where an intermediate container in a configured path has a non-plain prototype (prototype pollution guard — delegates)
+    - a circular reference at a configured terminal position (censor applied, no descent)
+    - a circular reference at a non-configured position (not visited, raw reference in output)
+
+**Scope guard**
+- **Given** this story's scope
+  **When** the implementation is reviewed
+  **Then** it covers the contract document, named contract tests, and behaviour-change documentation only
+  **And** no runtime traversal implementation changes are made in this story
+  **And** exact-path navigation implementation remains deferred to Story 8.2
+
+### Story 8.2: Implement Rule-Driven Exact-Path Navigation and Deprecate the Compiled Path Executor
+
+As a backend engineer,
+I want path-based configurations with only exact path segments to use rule-driven direct navigation,
+so that exact-path redaction costs O(P) rather than O(N) and the compiled path executor fast lane from Story 7.1 is superseded by a cleaner, more general architecture.
+
+**Motivation:** The Story 7.1 compiled path executor achieved O(P) cost for exact-path-only payloads by generating per-path closures at init time. The rule-driven engine achieves the same O(P) cost through a more general mechanism: for each rule, navigate directly along its path segments using `container[segment]`. This is structurally cleaner because the same navigation primitive composes naturally with wildcard and recursive-wildcard rules in later stories without needing separate init-time closure generation. The `Map<object, shallowCopy>` identity-keyed map for shared ancestor copies means that when two paths share an ancestor container (e.g. `user.password` and `user.email`), the container is shallow-copied once and both redactions apply to the same copy.
+
+**Acceptance Criteria:**
+
+**Direct navigation**
+- **Given** a configuration containing only exact path segments
+  **When** the rule-driven engine processes a payload
+  **Then** it navigates to each configured terminal using direct property access along the path segments: `root → root[seg0] → root[seg0][seg1] → ...`
+  **And** no full-key iteration (`for...in`, `Object.keys`) occurs at any intermediate level
+  **And** the traversal cost is O(P), where P is the total number of path segments across all configured rules
+
+**Shared ancestor copies**
+- **Given** two configured paths that share a common ancestor container — e.g. `user.password` and `user.email`
+  **When** the rule-driven engine processes a payload where both paths exist and at least one is redacted
+  **Then** the shared ancestor container is shallow-copied exactly once
+  **And** both redactions are applied to the same shallow copy
+  **And** a `Map<object, shallowCopy>` identity-keyed ancestor map is used to prevent duplicate copies
+
+**Prototype pollution guard**
+- **Given** a payload where any intermediate container in a configured path has a non-plain prototype
+  **When** the rule-driven engine navigates that path
+  **Then** the engine delegates to the O(N) general traversal for that payload
+  **And** the general traversal produces the correct output including transformer resolution and failure handling
+
+**Missing and null paths**
+- **Given** a configured path whose intermediate or terminal key is absent from the payload
+  **When** the rule-driven engine navigates that path
+  **Then** the missing path is silently skipped
+  **And** the remainder of the output is unaffected
+
+**Circular references at configured terminals**
+- **Given** a configured path whose terminal value is a circular reference
+  **When** the rule-driven engine navigates that path
+  **Then** the censor is applied to the circular reference value (censor wins)
+  **And** the engine does not descend into the circular reference
+
+**Behavioural equivalence**
+- **Given** a configuration containing only exact path segments and a payload containing only plain objects, arrays, and primitive values
+  **When** the rule-driven engine processes that payload
+  **Then** the output is behaviourally identical to the output produced by the current compiled path executor and the current general traversal for the same input and configuration
+  **And** this equivalence is covered by the corpus established in Story 7.2, extended with shared-ancestor-copy cases
+
+**Fast lane deprecation**
+- **Given** the rule-driven engine is complete for exact-path-only configurations
+  **When** the implementation is reviewed
+  **Then** the compiled path executor from Story 7.1 is removed from the runtime
+  **And** the `isExactPathOnly` / `isFastLaneEligible` compile-time flag is replaced by a `pathDrivenOnly` flag that selects the rule-driven engine over the O(N) traversal
+  **And** no external-facing behaviour change occurs for any previously supported input
+
+**Benchmark gate**
+- **Given** the `path-based-single-object-node24` benchmark row
+  **When** the benchmark is run with the rule-driven engine
+  **Then** `thresholdDecision.passed` is `true`
+  **And** `overheadPct` is ≤60 (release ceiling; ≤50 is the aspirational target)
+
+**Scope guard**
+- **Given** this story's scope
+  **When** the implementation is reviewed
+  **Then** it covers exact-path navigation, shared-ancestor copy map, prototype pollution guard, missing-path handling, circular-reference terminal handling, and fast lane deprecation only
+  **And** single-level wildcard (`*`) support remains deferred to Story 8.3
+  **And** double wildcard (`**`), key-based rules, and substring rules remain deferred to Stories 8.4 and 8.5
+
+### Story 8.3: Extend Rule-Driven Engine for Single-Level Wildcard (`*`) Paths
+
+As a backend engineer,
+I want configurations containing single-level wildcard (`*`) segments to use rule-driven navigation that iterates only the keys at wildcard depths,
+so that `*.email`-style rules cost O(Σ K_at_wildcard_levels) rather than O(N) full payload traversal.
+
+**Motivation:** A single-level wildcard at depth D means "iterate all keys of the container at depth D and apply the rule's sub-path to each." For a container with K keys, this costs O(K) at that depth — compared to O(N) across the full payload. For real-world payloads where wildcard containers are shallow or contain fewer keys than the full payload node count, this is a significant improvement. The `Map<object, shallowCopy>` ancestor map from Story 8.2 composes naturally: when an exact rule and a wildcard rule share an ancestor container, the copy is still made exactly once.
+
+**Acceptance Criteria:**
+
+**Wildcard navigation**
+- **Given** a configuration containing one or more `*` segments
+  **When** the rule-driven engine processes a payload
+  **Then** for each `*` segment at depth D, the engine iterates `Object.keys(container_at_D)` and follows the remaining rule path for each key
+  **And** exact-path segments before and after the `*` still use direct property access (no iteration at non-wildcard levels)
+  **And** the traversal cost is O(P_exact + Σ K_at_wildcard_levels), not O(N)
+
+**Shared ancestor copies with wildcards**
+- **Given** a `*` rule and an exact rule that share a common ancestor container
+  **When** both produce redactions in the same payload
+  **Then** the shared ancestor container is shallow-copied exactly once using the `Map<object, shallowCopy>` identity map
+  **And** all redactions at or below that ancestor are applied to the same copy
+
+**Prototype pollution guard**
+- **Given** any container at a wildcard depth or at an exact intermediate depth has a non-plain prototype
+  **When** the rule-driven engine processes that level
+  **Then** the engine delegates to the O(N) general traversal for that payload
+
+**Behavioural equivalence**
+- **Given** a configuration containing a mix of exact and `*` path segments and a payload containing only plain objects, arrays, and primitive values
+  **When** the rule-driven engine processes that payload
+  **Then** the output is behaviourally identical to the output produced by the current general traversal for the same input and configuration
+  **And** this equivalence is covered by automated tests that run both engines against the same fixtures and assert output equality
+
+**Benchmark regression**
+- **Given** the `wildcard-single-object-*` benchmark rows in the manifest
+  **When** this story is complete and benchmarks are re-run
+  **Then** the recorded overhead for the wildcard workload versus `fast-redact` is materially lower than the pre-Story-7.5 baseline (986.43%)
+  **And** benchmark threshold policies are tightened to reflect the new achievable overhead
+
+**Scope guard**
+- **Given** this story's scope
+  **When** the implementation is reviewed
+  **Then** it covers `*` segment key iteration, shared-ancestor copy map extension for wildcards, prototype pollution guard at wildcard depths, and benchmark threshold updates only
+  **And** double wildcard (`**`) support remains deferred to Story 8.4
+  **And** key-based rules and substring rules remain deferred to Stories 8.4 and 8.5
+
+### Story 8.4: Extend Rule-Driven Engine for Double Wildcard (`**`) Paths and Key-Based Rules
+
+As a backend engineer,
+I want double wildcard (`**`) paths and key-based rules to integrate with the rule-driven engine through a clearly defined traversal mode boundary,
+so that all targeting modes are supported and configurations are classified into the correct traversal mode at compile time.
+
+**Motivation:** Double wildcards (`**`) require recursive descent from an anchor point — inherently O(N) for the subtree below the `**` segment. Key-based rules (exact key, regex key, fuzzy/case-insensitive key) require visiting every node in the payload to check for key matches — also O(N). Rather than treating these as failures of the rule-driven approach, the engine recognises them as signals to route that configuration to the O(N) traversal mode. The rule-driven engine handles path-only exact and single-wildcard configurations; configurations containing `**` or key rules compile a `pathDrivenOnly: false` flag that routes all payloads to the O(N) traversal.
+
+**Acceptance Criteria:**
+
+**Traversal mode selection**
+- **Given** a configuration containing only exact paths and/or `*` segments, with no `**`, no key rules, no substring tests, no fuzzy key matching, and case-sensitive matching enabled
+  **When** the plan is compiled
+  **Then** `pathDrivenOnly: true` is set and the rule-driven engine is used for all qualifying payloads
+
+- **Given** a configuration containing any `**` segment, key-based rule, regex key rule, fuzzy key match option, or case-insensitive key match option
+  **When** the plan is compiled
+  **Then** `pathDrivenOnly: false` is set and the O(N) traversal is used for all payloads under that configuration
+
+**Double wildcard traversal**
+- **Given** a configuration containing a `**` segment and `pathDrivenOnly: false`
+  **When** the O(N) traversal processes a payload
+  **Then** `**` matches resolve through recursive descent, consistent with the semantics established by Epic 1 Story 1.4
+  **And** output is behaviourally identical to the current general traversal for the same input and configuration
+
+**Key-based rule integration**
+- **Given** a configuration containing key-based rules alongside path-based rules and `pathDrivenOnly: false`
+  **When** the O(N) traversal runs
+  **Then** both path-based and key-based rules are applied in one traversal pass
+  **And** output is behaviourally identical to the current general traversal for the same input and configuration
+
+**Scope guard**
+- **Given** this story's scope
+  **When** the implementation is reviewed
+  **Then** it covers the `pathDrivenOnly` compile-time flag, `**` traversal mode routing, key-based rule integration in O(N) mode, and equivalence tests only
+  **And** substring matching integration remains deferred to Story 8.5
+
+### Story 8.5: Integrate Substring Matching and Finalise Rule-Driven Engine
+
+As a backend engineer,
+I want substring matching to integrate cleanly with the rule-driven engine and the traversal mode boundary to be explicitly documented and enforced,
+so that the rule-driven engine is feature-complete across all supported targeting modes.
+
+**Motivation:** Substring matching requires visiting every string value in the payload to check for pattern matches — it is inherently O(N). Like key-based rules, configurations containing substring tests compile `pathDrivenOnly: false` and route to the O(N) traversal. This story completes the traversal mode classification, documents the boundary, and validates the complete engine against the full equivalence corpus.
+
+**Acceptance Criteria:**
+
+**Substring traversal mode**
+- **Given** a configuration containing `stringTests`
+  **When** the plan is compiled
+  **Then** `pathDrivenOnly: false` is set and the O(N) traversal is used for all payloads under that configuration
+
+**Traversal mode boundary documentation**
+- **Given** the finalised rule-driven engine
+  **When** its traversal mode selection contract is reviewed
+  **Then** the following boundary is explicitly documented:
+    - `pathDrivenOnly: true` — configuration contains only exact paths and/or `*` segments, with no `**`, no key rules, no `stringTests`, no `fuzzyKeyMatch: true`, and `caseSensitiveKeyMatch: true` or unset
+    - `pathDrivenOnly: false` — all other cases; the O(N) general traversal is used
+
+**Final equivalence verification**
+- **Given** the complete rule-driven engine
+  **When** the equivalence corpus from Story 7.2 and the contract tests from Story 8.1 are run
+  **Then** all tests pass without modification
+  **And** no output behaviour change is introduced for any previously passing configuration in the O(N) traversal mode
+
+**Safety limit integration**
+- **Given** the rule-driven engine in both `pathDrivenOnly: true` and `pathDrivenOnly: false` modes
+  **When** any payload exceeds the configured `maxDepth` or `maxNodes` limits from Story 7.4
+  **Then** `BudgetExceededError` is thrown with code `'BUDGET_EXCEEDED'`, consistent with the contract established by Story 7.4
+  **And** safety limits apply in both traversal modes
+
+**Scope guard**
+- **Given** this story's scope
+  **When** the implementation is reviewed
+  **Then** it covers substring test traversal mode routing, traversal mode boundary documentation, final equivalence verification, and safety limit integration confirmation only
+  **And** no new targeting modes or output behaviour changes are introduced in this story
+
+## Epic 9: Remaining Deferred Work
+
+Address gaps and deferred items identified after the main epic sequence was finalised but before v4 release. This epic is a running collector for pre-release gaps that do not fit cleanly into a completed or in-progress epic.
+
+### Story 9.1: Add Worked Examples for Fuzzy Key Matching, Case-Insensitive Key Matching, and Path-Segment Ignore Selectors
+
+Implements: FR6, FR7, FR13
+
+As a backend engineer,
+I want verified worked examples for fuzzy key matching, case-insensitive key matching, and path-segment ignore selectors,
+so that these three implemented and tested features are documented with the same rigour as the rest of the Deep Redact feature surface.
+
+**Background:** All three features are fully implemented in source and covered by unit and contract tests, but none appear in the `docs/examples/` worked-example system. Story 5.7's required coverage matrix does not list them, so the gap was not caught by that story. This story closes that gap with three separate manifest rows, example source files, fixture directories, and doc files — one per feature.
+
+**Acceptance Criteria:**
+
+**Fuzzy key matching example**
+- **Given** the canonical example manifest at `docs/examples/manifest.json`
+  **When** Story 9.1 is complete
+  **Then** a row with `id: "fuzzy-key-matching"`, `category: "targeting"` is present in the manifest
+  **And** the `sourceFile` at `docs/examples/examples/fuzzy-key-matching.ts` demonstrates a redactor configured with `fuzzyKeyMatch: true` and a literal key rule
+  **And** the fixture at `docs/examples/fixtures/fuzzy-key-matching/` contains an input payload where a payload key contains the configured literal as a substring (not an exact match) and an `expected.json` asserting the matched value is redacted
+  **And** the doc file at `docs/examples/fuzzy-key-matching.md` is generated from or validated against the same fixture and source
+  **And** example validation runs the source against its fixture and asserts the structured output matches `expected.json`
+
+**Case-insensitive key matching example**
+- **Given** the canonical example manifest at `docs/examples/manifest.json`
+  **When** Story 9.1 is complete
+  **Then** a row with `id: "case-insensitive-key-matching"`, `category: "targeting"` is present in the manifest
+  **And** the `sourceFile` at `docs/examples/examples/case-insensitive-key-matching.ts` demonstrates a redactor configured with `caseSensitiveKeyMatch: false` and a literal key rule
+  **And** the fixture at `docs/examples/fixtures/case-insensitive-key-matching/` contains an input payload where the payload key differs in case from the configured key and an `expected.json` asserting the matched value is redacted
+  **And** the doc file at `docs/examples/case-insensitive-key-matching.md` is generated from or validated against the same fixture and source
+  **And** example validation runs the source against its fixture and asserts the structured output matches `expected.json`
+
+**Path-segment ignore selector example**
+- **Given** the canonical example manifest at `docs/examples/manifest.json`
+  **When** Story 9.1 is complete
+  **Then** a row with `id: "path-segment-ignore"`, `category: "targeting"` is present in the manifest
+  **And** the `sourceFile` at `docs/examples/examples/path-segment-ignore.ts` demonstrates a redactor configured with a structured path selector containing an `{ ignore: '<key>' }` segment (e.g. `['users', { ignore: 'admin' }, 'email']`)
+  **And** the fixture at `docs/examples/fixtures/path-segment-ignore/` contains an input payload with sibling branches where the ignored branch value is NOT redacted and a non-ignored sibling IS redacted, and an `expected.json` asserting this difference
+  **And** the doc file at `docs/examples/path-segment-ignore.md` is generated from or validated against the same fixture and source
+  **And** example validation runs the source against its fixture and asserts the structured output matches `expected.json`
+
+**Manifest validation**
+- **Given** the three new manifest rows
+  **When** the example validation harness from Story 5.6 runs
+  **Then** all three new rows pass schema validation, fixture resolution, example execution, and expected-result comparison
+  **And** no existing manifest row is broken by the additions
+
+**Scope guard**
+- **Given** this story's scope
+  **When** the implementation is reviewed
+  **Then** it covers the three new manifest rows, source files, fixture directories, expected output files, and doc files only
+  **And** no changes to the example validation harness, manifest schema, or existing examples are required
