@@ -13,6 +13,11 @@
 - **Fast lane has no budget enforcement** (`fast-lane.ts`) — Intentional per spec scope guard. Exact-path-only hostile payloads bypass both depth and node limits; a stack overflow surfaces as an uncontrolled `RangeError` rather than `BUDGET_EXCEEDED`. Known limitation; revisit if the scope guard is ever lifted.
 - **`throwBudgetExceeded` emits diagnostic before throwing** (`src/core/runtime/redact-value.ts`) — If a buggy diagnostic handler itself throws, `BudgetExceededError` is never raised and callers see an unexpected error. Pre-existing fragility in the diagnostics design.
 
+## Deferred from: code review of 8-1-establish-rule-driven-traversal-contract-and-document-behaviour-changes (2026-05-30)
+
+- **Preserved cycles risk downstream `JSON.stringify` throws** (`docs/architecture/rule-driven-traversal.md:86-88`) — The rule-driven target contract preserves raw circular references by identity at non-configured positions (cycle intact). A common consumer next step, `JSON.stringify(output)`, will then throw where the old general traversal had neutralised the cycle with a marker. Intentional v4 pre-release behaviour change; surface it in Story 8.2's design/migration notes rather than here (this story is contract-only).
+- **Non-plain-prototype delegation silently leaves a configured terminal unredacted, undocumented** (`docs/architecture/rule-driven-traversal.md`) — Pinned by two active invariant tests: a non-plain root/intermediate container delegates and the configured `secret` / `a.b` is NOT redacted (prototype-pollution guard). Correct, intended behaviour, but the new contract doc does not describe the delegation path. Candidate for a future prototype-handling contract doc; outside Story 8.1's ACs.
+
 ## Deferred from: code review of 7-2-prove-behavioural-equivalence-of-the-compiled-path-executor (2026-05-26)
 
 - ~~**Pre-existing `expect(fastResult).toBe(fastResult)` self-comparison tautology**~~ — dismissed: HEAD already has `toBe(genericResult)`; false positive from stale diff context in review tooling.
