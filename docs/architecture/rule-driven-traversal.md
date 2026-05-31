@@ -99,19 +99,19 @@ The engine navigates to that terminal and applies the censor before any descent,
 so the cycle is never followed and the configured terminal is redacted as
 specified.
 
-### Serialise Mode Is An Interim Exception
+### Serialised Output
 
-Because a non-configured circular reference is now preserved by identity in the
-**structured** output, a caller running with `serialise: true` will have
-`JSON.stringify` invoked over that live cycle and it will **throw** —
-where the general traversal previously neutralised the cycle into a marker and
-serialised cleanly. This is a real, known interim regression for the
-`pathDrivenOnly` + `serialise: true` combination, accepted as a release-sequencing
-dependency: re-neutralisation (circular circuit-breaking and transformer markers) is
-planned for a forthcoming serialise-only output adapter. No re-neutralisation step
-is added to the redaction traversal itself. Until that adapter ships, this
-consequence must be surfaced explicitly (PR description / release notes) rather than
-absorbed as a silent behaviour change.
+Callers using `serialise: true` or a custom `serialise` function receive fully safe,
+non-throwing serialised output regardless of which traversal mode ran. The serialise
+output adapter (see [`docs/architecture/serialise-output.md`](./serialise-output.md))
+runs over the already-redacted result and builds a safe inert graph before passing it
+to `JSON.stringify` or the caller's `serialise` function. Circular references are
+neutralised into markers, transformer markers are applied to all supported runtime
+types, and `[UNSUPPORTED]` is substituted for any per-value transformation failure —
+all inside per-value `try/catch` guards, so the serialised output never throws.
+
+The interim `serialise: true` regression from Story 8.2 (raw cycles causing a throw)
+is resolved by this adapter.
 
 ### Diagnostic Event Ordering
 
@@ -130,13 +130,13 @@ The rule-driven model's contract is that the configuration declares what is
 sensitive; values nobody configured are, by definition, outside that
 declaration.
 
-A configuration that genuinely needs **every** transformable value processed can
-express that intent explicitly. Key-based rules (`keys`), substring rules, and
-recursive-wildcard (`**`) rules route to the `O(N)` traversal mode, which visits
-the matched breadth of the payload and therefore reaches and transforms the
-runtime values within it. Single-level `*` rules are **not** an escape hatch:
-they stay in the rule-driven engine and reach only the members of the
-specifically targeted container, not the whole payload. Choosing exact paths
+Callers who need every transformable value processed into a stable serialisable form
+should use `serialise: true`; the serialise adapter handles all supported runtime
+types (Date, BigInt, Map, Set, Error, RegExp, URL) and neutralises circular
+references regardless of which traversal mode ran. Key-based rules (`keys`),
+substring rules, and recursive-wildcard (`**`) rules route to the `O(N)` traversal
+mode, which visits the matched breadth of the payload. Single-level `*` rules are
+**not** an escape hatch: they stay in the rule-driven engine. Choosing exact paths
 (optionally with single-level `*`) is choosing the targeted model; choosing
 key, substring, or `**` rules is choosing the breadth-visiting `O(N)` model.
 

@@ -276,16 +276,17 @@ describe('console adapter contract', () => {
       'visible',
     )
 
+    // Under serialise: false, transformer dispatch is deferred to the serialise adapter and
+    // never runs during traversal — so failingDate is returned raw and no failure diagnostic fires.
     expect(spies.error).toHaveBeenCalledWith(
       {
         password: '[REDACTED]',
       },
-      '[UNSUPPORTED]',
+      failingDate,
       'visible',
     )
     expect(redactor).toHaveBeenCalledTimes(3)
-    expect(diagnostics).toHaveLength(1)
-    expect(JSON.stringify(diagnostics[0])).not.toMatch(/hunter2|password=hunter2|\[REDACTED\]/i)
+    expect(diagnostics).toHaveLength(0)
   })
 
   it('uses the private Node fallback for redaction failure diagnostics while the adapter is active', async () => {
@@ -313,17 +314,11 @@ describe('console adapter contract', () => {
 
     adapted.log(failingDate)
 
-    expect(spies.log).toHaveBeenCalledWith('[UNSUPPORTED]')
+    // Under serialise: false, transformer dispatch never runs — failingDate is returned raw.
+    expect(spies.log).toHaveBeenCalledWith(failingDate)
     expect(spies.error).not.toHaveBeenCalled()
     expect(redactor).toHaveBeenCalledTimes(1)
-    expect(fallbackSpy).toHaveBeenCalledTimes(1)
-    expect(fallbackSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
-      event: 'redaction.failure',
-      message: 'Nested value could not be redacted safely and was replaced with [UNSUPPORTED].',
-      path: '',
-      valueType: 'Date',
-    }))
-    expect(JSON.stringify(fallbackSpy.mock.calls[0]?.[0])).not.toMatch(/secret|hunter2|token=|password=/i)
+    expect(fallbackSpy).not.toHaveBeenCalled()
   })
 
   it('blocks diagnostics sinks that synchronously re-enter the adapted surface while redacting', async () => {
@@ -369,12 +364,13 @@ describe('console adapter contract', () => {
 
     adapted.log(failingDate)
 
-    expect(spies.log).toHaveBeenCalledWith('[UNSUPPORTED]')
+    // Under serialise: false, transformer dispatch never runs — failingDate is returned raw,
+    // no failure diagnostic fires, and the diagnostics sink re-entry guard is never triggered.
+    expect(spies.log).toHaveBeenCalledWith(failingDate)
     expect(spies.error).not.toHaveBeenCalled()
     expect(redactor).toHaveBeenCalledTimes(1)
-    expect(redactionEvents).toHaveLength(1)
-    expect(guardEvents).toHaveLength(1)
-    expectSanitisedDiagnostic(guardEvents[0]!, 'error')
+    expect(redactionEvents).toHaveLength(0)
+    expect(guardEvents).toHaveLength(0)
   })
 
   it('blocks target-driven re-entry once per synchronous chain while the outer call completes', async () => {

@@ -3,6 +3,7 @@ import { deepRedact } from '@hackylabs/deep-redact'
 const redactor = deepRedact({
   keys: ['datetime'],
   ignoredValueTypes: { Date: true },
+  serialise: true,
 })
 
 export const runExample = (input: unknown): unknown => {

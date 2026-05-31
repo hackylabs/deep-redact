@@ -38,10 +38,7 @@ import {
   type TraversalBudget,
 } from './traversal-budget.js'
 import {
-  isSupportedTransformableObject,
   isSupportedTransformableValue,
-  resolveSupportedTransformableValueKind,
-  resolveTransformedValue,
 } from '../../transformers/resolve-transformer.js'
 
 type TraversableContainer = Record<string, unknown> | unknown[]
@@ -110,6 +107,7 @@ interface TraversalState {
   readonly budget: TraversalBudget;
   readonly completedIdentities: WeakMap<TrackableIdentity, CompletedTraversalRecord[]>;
   readonly completedSnapshots: WeakMap<TrackableIdentity, CompletedTraversalSnapshot>;
+  readonly cycleRegistry: WeakMap<TrackableIdentity, string> | undefined;
 }
 
 interface TraversalBranchState {
@@ -201,11 +199,12 @@ const renderPathSegmentText = (pathSegment: ExactPathSegment): string => {
   return pathSegment.kind === 'index' ? String(pathSegment.value) : pathSegment.value
 }
 
-const createTraversalState = (): TraversalState => {
+const createTraversalState = (cycleRegistry?: WeakMap<TrackableIdentity, string>): TraversalState => {
   return {
     budget: createTraversalBudget(),
     completedIdentities: new WeakMap<TrackableIdentity, CompletedTraversalRecord[]>(),
     completedSnapshots: new WeakMap<TrackableIdentity, CompletedTraversalSnapshot>(),
+    cycleRegistry,
   }
 }
 
@@ -336,16 +335,6 @@ const usesPathSensitivePolicy = (
     || typeof activePolicy?.policy.censor === 'function'
 }
 
-const createCircularMarker = (
-  originalPath: string,
-  path: string,
-): Record<string, string> => {
-  return {
-    _transformer: 'circular',
-    path,
-    value: originalPath,
-  }
-}
 
 const resolveCompletedTraversal = (
   records: readonly CompletedTraversalRecord[],
@@ -731,22 +720,6 @@ const transformSubstringValue = (
   return undefined
 }
 
-const syncCompletedSnapshot = (
-  state: TraversalState,
-  identity: TrackableIdentity,
-  value: unknown,
-): void => {
-  if (!isTraversableContainer(value)) {
-    return
-  }
-
-  const snapshot = state.completedSnapshots.get(value)
-
-  if (snapshot !== undefined) {
-    state.completedSnapshots.set(identity, snapshot)
-  }
-}
-
 const transformTrackedIdentity = (
   identity: TrackableIdentity,
   plan: CompiledRedactorPlan,
@@ -759,14 +732,17 @@ const transformTrackedIdentity = (
   const canonicalPath = context.canonicalPath ?? ''
   const originalPath = branchState.activePaths.get(identity)
 
+  // Cycle detected during traversal — return the raw identity; the serialise adapter
+  // handles circular-marker emission when serialise: true is configured.
   if (originalPath !== undefined) {
-    const circularMarker = createCircularMarker(originalPath ?? '', canonicalPath)
-
+    // Record the mapping so the adapter can detect cycle back-references that point
+    // to the original identity rather than the in-progress result object.
+    state.cycleRegistry?.set(identity, originalPath)
     return {
-      cacheValue: circularMarker,
-      changed: true,
-      pathStable: false,
-      value: circularMarker,
+      cacheValue: identity,
+      changed: false,
+      pathStable: true,
+      value: identity,
     }
   }
 
@@ -805,11 +781,14 @@ const transformTrackedIdentity = (
     return withActiveIdentity(branchState, identity, canonicalPath, () => {
       const result = traverse()
 
+      // Store the actual output value rather than cacheValue when nothing changed,
+      // so that cache hits for aliased identities return the same reference and don't
+      // inadvertently expose back-references to unredacted source objects.
       storeCompletedTraversal(state, identity, {
         canonicalPath,
         pathStable: result.pathStable,
         ruleContextKey,
-        value: result.cacheValue,
+        value: result.changed ? result.cacheValue : result.value,
       })
 
       return result
@@ -865,10 +844,7 @@ const transformArray = (
           valueType: 'getter',
         })
 
-        snapshotItems[index] = {
-          diagnostic,
-          present: true,
-        }
+        snapshotItems[index] = { diagnostic, present: true }
         const failureResult = createUnsupportedTraversalResult()
 
         cacheValue[index] = failureResult.cacheValue
@@ -878,10 +854,7 @@ const transformArray = (
         continue
       }
 
-      snapshotItems[index] = {
-        present: true,
-        value: item,
-      }
+      snapshotItems[index] = { present: true, value: item }
 
       const itemResult = transformNestedNode(item, plan, itemContext, state, branchState)
       pathStable &&= itemResult.pathStable
@@ -905,10 +878,7 @@ const transformArray = (
     }
   }
 
-  storeCompletedSnapshot(state, value, {
-    items: snapshotItems,
-    kind: 'array',
-  })
+  storeCompletedSnapshot(state, value, { items: snapshotItems, kind: 'array' })
 
   if (!changed) {
     return {
@@ -1007,10 +977,7 @@ const transformObject = (
           valueType: 'getter',
         })
 
-        snapshotEntries.push({
-          diagnostic,
-          key,
-        })
+        snapshotEntries.push({ diagnostic, key })
         const failureResult = createUnsupportedTraversalResult()
 
         setObjectEntry(cacheValue, key, failureResult.cacheValue)
@@ -1020,10 +987,7 @@ const transformObject = (
         continue
       }
 
-      snapshotEntries.push({
-        key,
-        value: propertyValue,
-      })
+      snapshotEntries.push({ key, value: propertyValue })
 
       const propertyResult = transformNestedNode(propertyValue, plan, propertyContext, state, branchState)
       pathStable &&= propertyResult.pathStable
@@ -1046,10 +1010,7 @@ const transformObject = (
     }
   }
 
-  storeCompletedSnapshot(state, value, {
-    entries: snapshotEntries,
-    kind: 'object',
-  })
+  storeCompletedSnapshot(state, value, { entries: snapshotEntries, kind: 'object' })
 
   return {
     cacheValue,
@@ -1260,154 +1221,6 @@ const replayCompletedTraversal = (
   return result
 }
 
-const transformResolvedNode = (
-  value: unknown,
-  plan: CompiledRedactorPlan,
-  context: TraversalContext,
-  state: TraversalState,
-  branchState: TraversalBranchState,
-): TraversalResult => {
-  const activePolicy = context.suppressDescendantRedaction
-    ? undefined
-    : selectActivePolicy(
-      plan,
-      resolveExactPathRule(plan, context.canonicalPath),
-      plan.dynamicPathRules.length === 0 ? undefined : resolveDynamicPathRule(plan, context.pathSegments),
-      context.directKeyMatch,
-      context.inheritedPolicy,
-    )
-
-  if (activePolicy !== undefined && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) {
-    return applyConfiguredRedaction(
-      value,
-      activePolicy.policy,
-      activePolicy.rulePath,
-      !usesPathSensitivePolicy(activePolicy),
-      plan,
-      context,
-    )
-  }
-
-  if (!isTraversableContainer(value)) {
-    const substringResult = context.suppressDescendantRedaction
-      ? undefined
-      : transformSubstringValue(value, plan, context)
-
-    if (substringResult !== undefined) {
-      return substringResult
-    }
-
-    return {
-      cacheValue: value,
-      changed: false,
-      pathStable: true,
-      value,
-    }
-  }
-
-  const inheritedPolicy = activePolicy
-
-  return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
-    return Array.isArray(value)
-      ? transformArray(
-        value,
-        plan,
-        inheritedPolicy,
-        context.canonicalPath,
-        context.pathSegments,
-        context.rootInput,
-        context.suppressDescendantRedaction,
-        state,
-        branchState,
-      )
-      : transformObject(
-        value,
-        plan,
-        inheritedPolicy,
-        context.canonicalPath,
-        context.pathSegments,
-        context.rootInput,
-        context.suppressDescendantRedaction,
-        state,
-        branchState,
-      )
-  })
-}
-
-const transformSupportedRuntimeValue = (
-  value: unknown,
-  plan: CompiledRedactorPlan,
-  context: TraversalContext,
-  activePolicy: ActivePolicyMatch | undefined,
-  state: TraversalState,
-  branchState: TraversalBranchState,
-): TraversalResult | undefined => {
-  const supportedValueKind = resolveSupportedTransformableValueKind(value)
-
-  if (supportedValueKind === undefined) {
-    return undefined
-  }
-
-  try {
-    const transformedValue = resolveTransformedValue(value, plan.transformers)
-
-    if (transformedValue === undefined) {
-      return undefined
-    }
-
-    const traverseResolvedValue = (
-      suppressDescendantRedaction = false,
-    ): TraversalResult => {
-      const result = transformResolvedNode(transformedValue, plan, {
-        ...context,
-        suppressDescendantRedaction,
-      }, state, branchState)
-
-      return {
-        cacheValue: result.cacheValue,
-        changed: true,
-        pathStable: result.pathStable,
-        value: result.value,
-      }
-    }
-
-    const ignoreDescendantRedaction = plan.ignoredValueTypes[supportedValueKind]
-
-    if (ignoreDescendantRedaction) {
-      if (!isSupportedTransformableObject(value)) {
-        return traverseResolvedValue(true)
-      }
-
-      return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
-        const result = traverseResolvedValue(true)
-
-        syncCompletedSnapshot(state, value, transformedValue)
-
-        return result
-      })
-    }
-
-    if (!isSupportedTransformableObject(value)) {
-      return traverseResolvedValue()
-    }
-
-    return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
-      const result = traverseResolvedValue()
-
-      syncCompletedSnapshot(state, value, transformedValue)
-
-      return result
-    })
-  } catch (error) {
-    if (isBudgetExceededError(error)) throw error
-    return createFailureTraversalResult(plan, context, {
-      error,
-      stage: 'transformer',
-      value,
-    })
-  }
-}
-
 const transformNode = (
   value: unknown,
   plan: CompiledRedactorPlan,
@@ -1439,12 +1252,6 @@ const transformNode = (
       plan,
       context,
     )
-  }
-
-  const transformedResult = transformSupportedRuntimeValue(value, plan, context, activePolicy, state, branchState)
-
-  if (transformedResult !== undefined) {
-    return transformedResult
   }
 
   if (!isTraversableContainer(value)) {
@@ -1496,8 +1303,9 @@ const transformNode = (
 export const redactValue = (
   value: unknown,
   plan: CompiledRedactorPlan,
+  cycleRegistry?: WeakMap<object, string>,
 ): unknown => {
-  const state = createTraversalState()
+  const state = createTraversalState(cycleRegistry)
   const branchState = createTraversalBranchState()
   const result = transformNode(value, plan, {
     canonicalPath: undefined,

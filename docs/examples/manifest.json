@@ -111,8 +111,8 @@
       "docTarget": "docs/examples/ignored-value-types.md",
       "sourceFile": "docs/examples/examples/ignored-value-types.ts",
       "fixtureDir": "docs/examples/fixtures/ignored-value-types",
-      "assertionMode": "structured-output",
-      "expectedResultFile": "expected.json"
+      "assertionMode": "serialised-output",
+      "expectedResultFile": "expected.txt"
     },
     {
       "id": "custom-transformer",

@@ -9,6 +9,9 @@ export interface StructuredDeterminismRun<Result = unknown> {
   readonly assertExpected?: (result: unknown) => void;
   readonly payload: unknown;
   readonly expected: Result;
+  // The safe graph passed to a custom serialise function (adapter output); falls back to
+  // `expected` if absent, for cases where the serialise: false and adapter outputs differ.
+  readonly adapterExpected?: unknown;
   readonly originalPayload?: unknown;
   readonly assertResult?: (result: unknown) => void;
   readonly serialisedExpected?: string;
@@ -721,7 +724,8 @@ const matchedAfterUnmatchedAliasVariantFixture = createAliasReplayFixture(
 
 const cyclicAliasReplayFixture: StructuredDeterminismFixture = {
   createRun: () => {
-    const expected = {
+    const payload = createCyclicAliasFixture()
+    const adapterExpected = {
       left: {
         safe: 'visible',
         self: createCircularMarker('left.self', 'left'),
@@ -733,9 +737,12 @@ const cyclicAliasReplayFixture: StructuredDeterminismFixture = {
     }
 
     return {
-      expected,
-      payload: createCyclicAliasFixture(),
-      serialisedExpected: createSerialisedExpected(expected),
+      // Under serialise: false the traversal returns the original payload unchanged (no tokens to
+      // redact), so expected IS the payload. toStrictEqual handles circular references.
+      expected: payload,
+      adapterExpected,
+      payload,
+      serialisedExpected: createSerialisedExpected(adapterExpected),
     }
   },
   name: 'cyclic-alias-replay',
@@ -746,7 +753,12 @@ const repeatedInvocationFixture: StructuredDeterminismFixture = {
   createRun: () => {
     const payload = createRepeatedInvocationFixture()
     const records = payload.records as Array<Record<string, unknown>>
-    const expected = {
+    // Under serialise: false the traversal returns the raw cycle back-reference. Construct an
+    // expected object that references the original records array at the parent position.
+    const expectedRecord: Record<string, unknown> = { safe: 'visible', token: '[REDACTED]' }
+    expectedRecord.parent = records
+    const expected = { records: [expectedRecord] }
+    const adapterExpected = {
       records: [{
         safe: 'visible',
         token: '[REDACTED]',
@@ -761,8 +773,9 @@ const repeatedInvocationFixture: StructuredDeterminismFixture = {
         expect(records[0]!.parent).toBe(records)
       },
       expected,
+      adapterExpected,
       payload,
-      serialisedExpected: createSerialisedExpected(expected),
+      serialisedExpected: createSerialisedExpected(adapterExpected),
     }
   },
   name: 'repeated-invocations',

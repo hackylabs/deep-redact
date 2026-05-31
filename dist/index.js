@@ -698,9 +698,6 @@ const resolveSupportedTransformableValueKind = (value) => {
 	if (typeof value === "bigint") return "bigint";
 	return resolveSupportedConstructorName(value);
 };
-const isSupportedTransformableObject = (value) => {
-	return resolveSupportedConstructorName(value) !== void 0;
-};
 const isSupportedTransformableValue = (value) => {
 	return resolveSupportedTransformableValueKind(value) !== void 0;
 };
@@ -854,11 +851,12 @@ const findMatchingLiteralKey = (literalMatchers, requiresCanonicalKey, key) => {
 const renderPathSegmentText = (pathSegment) => {
 	return pathSegment.kind === "index" ? String(pathSegment.value) : pathSegment.value;
 };
-const createTraversalState = () => {
+const createTraversalState = (cycleRegistry) => {
 	return {
 		budget: createTraversalBudget(),
 		completedIdentities: /* @__PURE__ */ new WeakMap(),
-		completedSnapshots: /* @__PURE__ */ new WeakMap()
+		completedSnapshots: /* @__PURE__ */ new WeakMap(),
+		cycleRegistry
 	};
 };
 const createTraversalBranchState = () => {
@@ -918,13 +916,6 @@ const buildRuleContextKey = (activePolicy) => {
 };
 const usesPathSensitivePolicy = (activePolicy) => {
 	return activePolicy?.source === "exact-path" || activePolicy?.source === "dynamic-path" || typeof activePolicy?.policy.censor === "function";
-};
-const createCircularMarker = (originalPath, path) => {
-	return {
-		_transformer: "circular",
-		path,
-		value: originalPath
-	};
 };
 const resolveCompletedTraversal = (records, canonicalPath, ruleContextKey, value) => {
 	const reusableRecord = records.find((record) => {
@@ -1103,21 +1094,16 @@ const transformSubstringValue = (value, plan, context) => {
 		if (result !== void 0) return result;
 	}
 };
-const syncCompletedSnapshot = (state, identity, value) => {
-	if (!isTraversableContainer(value)) return;
-	const snapshot = state.completedSnapshots.get(value);
-	if (snapshot !== void 0) state.completedSnapshots.set(identity, snapshot);
-};
 const transformTrackedIdentity = (identity, plan, context, activePolicy, state, branchState, traverse) => {
 	const canonicalPath = context.canonicalPath ?? "";
 	const originalPath = branchState.activePaths.get(identity);
 	if (originalPath !== void 0) {
-		const circularMarker = createCircularMarker(originalPath ?? "", canonicalPath);
+		state.cycleRegistry?.set(identity, originalPath);
 		return {
-			cacheValue: circularMarker,
-			changed: true,
-			pathStable: false,
-			value: circularMarker
+			cacheValue: identity,
+			changed: false,
+			pathStable: true,
+			value: identity
 		};
 	}
 	const completedRecords = state.completedIdentities.get(identity);
@@ -1137,7 +1123,7 @@ const transformTrackedIdentity = (identity, plan, context, activePolicy, state, 
 				canonicalPath,
 				pathStable: result.pathStable,
 				ruleContextKey,
-				value: result.cacheValue
+				value: result.changed ? result.cacheValue : result.value
 			});
 			return result;
 		});
@@ -1432,72 +1418,11 @@ const replayCompletedTraversal = (value, snapshot, plan, inheritedPolicy, contex
 	});
 	return result;
 };
-const transformResolvedNode = (value, plan, context, state, branchState) => {
-	const activePolicy = context.suppressDescendantRedaction ? void 0 : selectActivePolicy(plan, resolveExactPathRule(plan, context.canonicalPath), plan.dynamicPathRules.length === 0 ? void 0 : resolveDynamicPathRule(plan, context.pathSegments), context.directKeyMatch, context.inheritedPolicy);
-	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) return applyConfiguredRedaction(value, activePolicy.policy, activePolicy.rulePath, !usesPathSensitivePolicy(activePolicy), plan, context);
-	if (!isTraversableContainer(value)) {
-		const substringResult = context.suppressDescendantRedaction ? void 0 : transformSubstringValue(value, plan, context);
-		if (substringResult !== void 0) return substringResult;
-		return {
-			cacheValue: value,
-			changed: false,
-			pathStable: true,
-			value
-		};
-	}
-	const inheritedPolicy = activePolicy;
-	return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
-		return Array.isArray(value) ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, context.suppressDescendantRedaction, state, branchState) : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, context.suppressDescendantRedaction, state, branchState);
-	});
-};
-const transformSupportedRuntimeValue = (value, plan, context, activePolicy, state, branchState) => {
-	const supportedValueKind = resolveSupportedTransformableValueKind(value);
-	if (supportedValueKind === void 0) return;
-	try {
-		const transformedValue = resolveTransformedValue(value, plan.transformers);
-		if (transformedValue === void 0) return;
-		const traverseResolvedValue = (suppressDescendantRedaction = false) => {
-			const result = transformResolvedNode(transformedValue, plan, {
-				...context,
-				suppressDescendantRedaction
-			}, state, branchState);
-			return {
-				cacheValue: result.cacheValue,
-				changed: true,
-				pathStable: result.pathStable,
-				value: result.value
-			};
-		};
-		if (plan.ignoredValueTypes[supportedValueKind]) {
-			if (!isSupportedTransformableObject(value)) return traverseResolvedValue(true);
-			return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
-				const result = traverseResolvedValue(true);
-				syncCompletedSnapshot(state, value, transformedValue);
-				return result;
-			});
-		}
-		if (!isSupportedTransformableObject(value)) return traverseResolvedValue();
-		return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
-			const result = traverseResolvedValue();
-			syncCompletedSnapshot(state, value, transformedValue);
-			return result;
-		});
-	} catch (error) {
-		if (isBudgetExceededError(error)) throw error;
-		return createFailureTraversalResult(plan, context, {
-			error,
-			stage: "transformer",
-			value
-		});
-	}
-};
 const transformNode = (value, plan, context, state, branchState) => {
 	state.budget.nodesVisited += 1;
 	if (isNodeBudgetExceeded(state.budget, plan.maxNodes)) throwBudgetExceeded(plan, context, "nodes");
 	const activePolicy = context.suppressDescendantRedaction ? void 0 : selectActivePolicy(plan, resolveExactPathRule(plan, context.canonicalPath), plan.dynamicPathRules.length === 0 ? void 0 : resolveDynamicPathRule(plan, context.pathSegments), context.directKeyMatch, context.inheritedPolicy);
 	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) return applyConfiguredRedaction(value, activePolicy.policy, activePolicy.rulePath, !usesPathSensitivePolicy(activePolicy), plan, context);
-	const transformedResult = transformSupportedRuntimeValue(value, plan, context, activePolicy, state, branchState);
-	if (transformedResult !== void 0) return transformedResult;
 	if (!isTraversableContainer(value)) {
 		const substringResult = context.suppressDescendantRedaction ? void 0 : transformSubstringValue(value, plan, context);
 		if (substringResult !== void 0) return substringResult;
@@ -1513,8 +1438,8 @@ const transformNode = (value, plan, context, state, branchState) => {
 		return Array.isArray(value) ? transformArray(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, context.suppressDescendantRedaction, state, branchState) : transformObject(value, plan, inheritedPolicy, context.canonicalPath, context.pathSegments, context.rootInput, context.suppressDescendantRedaction, state, branchState);
 	});
 };
-const redactValue = (value, plan) => {
-	const state = createTraversalState();
+const redactValue = (value, plan, cycleRegistry) => {
+	const state = createTraversalState(cycleRegistry);
 	const branchState = createTraversalBranchState();
 	const result = transformNode(value, plan, {
 		canonicalPath: void 0,
@@ -2244,17 +2169,98 @@ const validateConfig = (options) => {
 	return createValidationReport(issues);
 };
 //#endregion
-//#region src/core/create-redactor.ts
-const applySerialisation = (value, serialise) => {
-	if (serialise === true) return JSON.stringify(value);
-	if (typeof serialise === "function") return serialise(value);
-	return value;
+//#region src/core/replacement/serialise-output.ts
+const bareIdentifierPattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+const buildObjectChildPath = (parentPath, key) => {
+	if (!bareIdentifierPattern.test(key)) return `${parentPath ?? ""}["${key.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"]`;
+	return parentPath === void 0 ? key : `${parentPath}.${key}`;
 };
+const buildArrayChildPath = (parentPath, index) => {
+	return parentPath === void 0 ? String(index) : `${parentPath}.${index}`;
+};
+const isStrictDescendantPath = (ancestor, path) => {
+	if (path === ancestor) return false;
+	if (ancestor === "") return true;
+	return path.startsWith(`${ancestor}.`) || path.startsWith(`${ancestor}[`);
+};
+const buildSafeGraph = (value, transformers, seen, identityPaths, currentPath, cycleRegistry) => {
+	if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean" || typeof value === "undefined") return value;
+	const supportedKind = resolveSupportedTransformableValueKind(value);
+	if (supportedKind !== void 0) {
+		const runtimeIdentity = supportedKind !== "bigint" ? value : void 0;
+		if (runtimeIdentity !== void 0) {
+			if (seen.has(runtimeIdentity)) return {
+				_transformer: "circular",
+				path: currentPath ?? "",
+				value: identityPaths.get(runtimeIdentity) ?? ""
+			};
+			const currentPathStr = currentPath ?? "";
+			identityPaths.set(runtimeIdentity, currentPathStr);
+			seen.add(runtimeIdentity);
+		}
+		try {
+			const transformed = resolveTransformedValue(value, transformers);
+			if (transformed === void 0) return "[UNSUPPORTED]";
+			return buildSafeGraph(transformed, transformers, seen, identityPaths, currentPath, cycleRegistry);
+		} catch {
+			return "[UNSUPPORTED]";
+		} finally {
+			runtimeIdentity !== void 0 && seen.delete(runtimeIdentity);
+		}
+	}
+	const identity = value;
+	if (seen.has(identity)) return {
+		_transformer: "circular",
+		path: currentPath ?? "",
+		value: identityPaths.get(identity) ?? ""
+	};
+	if (cycleRegistry?.has(identity)) {
+		const registryPath = cycleRegistry.get(identity);
+		if (isStrictDescendantPath(registryPath, currentPath ?? "")) return {
+			_transformer: "circular",
+			path: currentPath ?? "",
+			value: registryPath
+		};
+	}
+	const currentPathStr = currentPath ?? "";
+	identityPaths.set(identity, currentPathStr);
+	seen.add(identity);
+	try {
+		if (Array.isArray(value)) {
+			const result = new Array(value.length);
+			for (let index = 0; index < value.length; index += 1) {
+				if (!(index in value)) continue;
+				result[index] = buildSafeGraph(value[index], transformers, seen, identityPaths, buildArrayChildPath(currentPath, index), cycleRegistry);
+			}
+			return result;
+		}
+		if (isPlainObject$1(value)) {
+			const result = {};
+			for (const key of Object.keys(value)) result[key] = buildSafeGraph(value[key], transformers, seen, identityPaths, buildObjectChildPath(currentPath, key), cycleRegistry);
+			return result;
+		}
+		return value;
+	} finally {
+		seen.delete(identity);
+	}
+};
+const serialiseOutput = (value, transformers, serialise, cycleRegistry) => {
+	if (!serialise) return value;
+	const safeGraph = buildSafeGraph(value, transformers, /* @__PURE__ */ new WeakSet(), /* @__PURE__ */ new WeakMap(), void 0, cycleRegistry);
+	if (serialise === true) return JSON.stringify(safeGraph);
+	return serialise(safeGraph);
+};
+//#endregion
+//#region src/core/create-redactor.ts
 const createCallableRedactor = (plan) => {
-	const generalTraversal = (value) => redactValue(value, plan);
-	const executor = plan.pathDrivenOnly ? buildPathDrivenExecutor(plan, generalTraversal) : generalTraversal;
+	const generalTraversal = (value, cycleRegistry) => redactValue(value, plan, cycleRegistry);
+	const executor = plan.pathDrivenOnly ? buildPathDrivenExecutor(plan, (v) => generalTraversal(v)) : (v) => generalTraversal(v);
 	return function redact(value) {
-		return applySerialisation(executor(value), plan.serialise);
+		if (plan.serialise) {
+			const cycleRegistry = /* @__PURE__ */ new WeakMap();
+			return serialiseOutput(plan.pathDrivenOnly ? buildPathDrivenExecutor(plan, (v) => generalTraversal(v, cycleRegistry))(value) : generalTraversal(value, cycleRegistry), plan.transformers, plan.serialise, cycleRegistry);
+		}
+		return executor(value);
 	};
 };
 const createRedactor$1 = (options) => {

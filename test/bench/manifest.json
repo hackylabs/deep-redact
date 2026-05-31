@@ -37,6 +37,21 @@
       }
     },
     {
+      "id": "path-based-single-object-serialised-fast-redact-node24",
+      "fixtureDir": "test/bench/fixtures/path-based-single-object-serialised",
+      "workloadClass": "path-based",
+      "competitor": "fast-redact",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id path-based-single-object-serialised-fast-redact-node24",
+      "outputArtefact": "path-based-single-object-serialised-fast-redact-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": -100,
+        "maxOverheadPct": 1000,
+        "runScope": ["protected-branch", "release-candidate"]
+      }
+    },
+    {
       "id": "wildcard-single-object-fast-redact-node24",
       "fixtureDir": "test/bench/fixtures/wildcard-single-object",
       "workloadClass": "wildcard",
@@ -62,8 +77,8 @@
       "outputArtefact": "wildcard-single-object-v3-node24.json",
       "thresholdPolicy": {
         "comparatorMetric": "median",
-        "minOverheadPct": 0,
-        "maxOverheadPct": 200,
+        "minOverheadPct": -50,
+        "maxOverheadPct": 0,
         "runScope": ["protected-branch", "release-candidate"]
       }
     },
