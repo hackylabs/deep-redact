@@ -4088,6 +4088,12 @@ describe('Serialised-output safety matrix — serialise: true (AC 5)', () => {
     ['nested in an array', (v: unknown) => [v]],
     ['as a Map value', (v: unknown) => new Map([['key', v]])],
     ['as a Set member', (v: unknown) => new Set([v])],
+    ['as a circular back-edge', (v: unknown) => {
+      const o: Record<string, unknown> = { value: v }
+      o.self = o
+
+      return o
+    }],
   ] as const
 
   it.each(safetyTypes.flatMap(([typeName, makeValue]) =>
@@ -4101,6 +4107,75 @@ describe('Serialised-output safety matrix — serialise: true (AC 5)', () => {
     expect(typeof firstResult).toBe('string')
     expect(() => JSON.parse(firstResult as string)).not.toThrow()
     expect(firstResult).toBe(secondResult)
+  })
+
+  it('does not leak a redacted ancestor through a circular back-edge', () => {
+    // Regression (code review 2026-05-31): a cycle pointing back at an object redacted on its
+    // primary path must not re-serialise the raw, unredacted original. Previously this threw
+    // under the general traversal and silently leaked the secret under the path-driven engine;
+    // the serialise path now always populates the cycle registry.
+    const redact = deepRedact({ paths: ['parent.secret'], serialise: true })
+    const parent: Record<string, unknown> = { secret: 'hide-me', child: {} }
+    ;(parent.child as Record<string, unknown>).back = parent
+
+    const output = redact({ parent }) as string
+
+    expect(typeof output).toBe('string')
+    expect(() => JSON.parse(output)).not.toThrow()
+    expect(output).not.toContain('hide-me')
+    expect(output).toContain('[REDACTED]')
+    expect(output).toContain('"_transformer":"circular"')
+  })
+})
+
+describe('serialise: true never throws and never leaks non-plain objects (AC 6 / FR26)', () => {
+  it('replaces a non-plain class instance with [UNSUPPORTED] rather than leaking its fields', () => {
+    class Account {
+      public secret = 'leak-me'
+    }
+    const redact = deepRedact({ serialise: true })
+    const output = redact({ token: 't', account: new Account() }) as string
+
+    expect(typeof output).toBe('string')
+    expect(() => JSON.parse(output)).not.toThrow()
+    expect(output).not.toContain('leak-me')
+    expect(output).toContain('[UNSUPPORTED]')
+  })
+
+  it('does not throw when a plain object carries a throwing toJSON', () => {
+    const redact = deepRedact({ serialise: true })
+    const payload = { danger: { toJSON(): never { throw new Error('boom') } }, safe: 'ok' }
+    let output: unknown
+
+    expect(() => { output = redact(payload) }).not.toThrow()
+    expect(typeof output).toBe('string')
+    expect(() => JSON.parse(output as string)).not.toThrow()
+    expect(output as string).toContain('"safe":"ok"')
+  })
+
+  it('does not throw when a non-plain object carries a throwing toJSON', () => {
+    class Bomb {
+      public toJSON(): never {
+        throw new Error('boom')
+      }
+    }
+    const redact = deepRedact({ serialise: true })
+    let output: unknown
+
+    expect(() => { output = redact({ danger: new Bomb(), safe: 'ok' }) }).not.toThrow()
+    expect(output as string).toContain('[UNSUPPORTED]')
+    expect(output as string).toContain('"safe":"ok"')
+  })
+
+  it('does not throw when a non-plain object carries a throwing enumerable getter', () => {
+    const danger = Object.create({}) as Record<string, unknown>
+    Object.defineProperty(danger, 'boom', { enumerable: true, get() { throw new Error('g') } })
+    const redact = deepRedact({ serialise: true })
+    let output: unknown
+
+    expect(() => { output = redact({ danger, safe: 'ok' }) }).not.toThrow()
+    expect(output as string).toContain('[UNSUPPORTED]')
+    expect(output as string).toContain('"safe":"ok"')
   })
 })
 

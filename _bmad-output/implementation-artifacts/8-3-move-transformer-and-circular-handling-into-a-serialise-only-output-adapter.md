@@ -1,6 +1,6 @@
 # Story 8.3: Move Transformer and Circular-Reference Handling into a Serialise-Only Output Adapter
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -106,6 +106,8 @@ The adapter uses the **hybrid mechanism**: walk the already-redacted result, bui
     **Then** the path-based benchmark fixture uses `serialise: true` so deep-redact produces string output matching fast-redact's primary usage
     **And** a new path-based serialised benchmark row is added to the manifest if none exists comparing deep-redact (serialise: true) to fast-redact or to the v3 serialised baseline, with the same `≤60%` overhead ceiling
     **And** `pnpm verify:benchmarks` passes for all threshold-gated rows
+
+    > **AC11 amendment (code review 2026-05-31, approved by Ben):** the `≤60%` ceiling is not achievable for a fast-redact string-output comparison — deep-redact builds a full safe graph then serialises, where fast-redact emits a string directly. The repo's existing `wildcard-single-object-fast-redact-node24` row already runs far above 60% (≈986% at a 2500% ceiling). The new `path-based-single-object-serialised-fast-redact-node24` row is therefore gated at a documented `maxOverheadPct: 1000` (measured ≈362%), not `≤60%`. This is an accepted product decision, not a perf regression. The `wildcard-single-object-v3-node24` threshold was also changed alongside this story (from `0%–200%` to `-50%–0%`); on review this is **kept**, not reverted — deep-redact v4 genuinely outperforms v3 on that workload (measured -11.82% overhead), so the old "v4 slower" range no longer fits and `verify:benchmarks` only passes with the negative-overhead range. It is strictly out of scope for Story 8.3 (a benchmark re-baseline that belonged with the rule-driven perf work) but is correct and now verified green for all four gate-scoped rows.
 
 **Stories 8.5 / 8.6 equivalence baseline**
 
@@ -413,3 +415,46 @@ claude-sonnet-4-6 (story creation workflow)
 - docs/examples/manifest.json (MODIFIED)
 - docs/examples/ignored-value-types.md (REGENERATED)
 - docs/examples/custom-transformer.md (REGENERATED)
+
+## Review Findings
+
+_Code review 2026-05-31 (adversarial: Blind Hunter + Edge Case Hunter + Acceptance Auditor). CRITICAL findings #1 and #2 reproduced empirically against the built `dist/index.cjs`._
+
+> **Resolution (2026-05-31, approved by Ben):** all two decision items and six patches below are **fixed** (checkboxes ticked). Decisions: (1) non-plain objects → `[UNSUPPORTED]` unless a user `fallback` transformer handles them; (2) AC11 ceiling amended to accept the fast-redact-comparison reality. Fixes verified: full `pnpm run test` is **591/591 green** (was 578; +13 new tests) and `pnpm verify:benchmarks` passes all four gate-scoped rows. The CRITICAL leak and no-throw fixes are reproduced fixed against the rebuilt `dist`. See "Review Fixes Applied" at the end of this file.
+
+**Decision needed**
+
+- [x] [Review][Decision] Non-plain object representation under `serialise: true` — class instances / objects that are neither plain nor a supported transformable are passed through raw at `serialise-output.ts:158` (`return value`). This both (a) emits their enumerable fields unredacted (e.g. `{x, a:new C()}` → `{"a":{"secret":"leak-me"}}`) and (b) throws when they carry a throwing `toJSON`/getter (see Patch #1). The no-throw guard (Patch #1) is mandatory regardless, but the *representation* contract is a product decision: emit `[UNSUPPORTED]`, deep-serialise the own-enumerable shape, or document raw passthrough as intended.
+- [x] [Review][Decision] AC11 serialised overhead ceiling — AC11 requires ≤60% but the new `path-based-single-object-serialised-fast-redact-node24` row measures ~362% overhead and is gated at `maxOverheadPct: 1000` (`test/bench/manifest.json`). The repo's existing fast-redact rows already run far above 60% (e.g. wildcard at ~986% with a 2500% ceiling), so the AC's 60% target may be unachievable for a fast-redact comparison. Decide: accept a documented higher ceiling (and amend AC11), or treat 362% as a perf regression to fix before sign-off.
+
+**Patch**
+
+- [x] [Review][Patch] CRITICAL — No-throw guarantee (FR26) defeated under `serialise: true` [src/core/replacement/serialise-output.ts:158,185] — a non-plain object with a throwing `toJSON` (plain or class) or a throwing enumerable getter falls through `buildSafeGraph` to `return value`, survives into the safe graph, and detonates at the unguarded `JSON.stringify(safeGraph)` (line 185) / `serialise(safeGraph)` (line 188). Empirically: `redact({secret:'x', payload:{toJSON(){throw}}})` THROWS `boom`; class variant THROWS; non-plain throwing getter THROWS `g`. Breaks AC5/AC6/FR26. Fix: wrap the phase-2 emit in try/catch and/or convert surviving non-plain/non-transformable objects (and guard the plain-object key read at :145-152) to `[UNSUPPORTED]`.
+- [x] [Review][Patch] CRITICAL — Redacted secret leaks via circular back-edge under `serialise: true` [src/core/replacement/serialise-output.ts:99-113; src/core/runtime/redact-value.ts:737-747] — when a cycle/back-edge points at an object that was redacted on its primary path, the adapter descends into the *raw original* (emitting its unredacted contents) before the circular marker fires one level too deep. Empirically: `paths:['parent.secret']`, `parent.child.back=parent` → output contains `"secret":"hide-me"`. This is a **regression**: the parent commit threw `Converting circular structure to JSON` (loud, no leak); this commit turns it into a silent data leak. The `isStrictDescendantPath`/`cycleRegistry` guard is insufficient — the marker must be emitted at the back-edge node itself so the raw redacted object is never re-serialised.
+- [x] [Review][Patch] Benchmark scope — out-of-scope `wildcard-single-object-v3-node24` threshold change [test/bench/manifest.json] — the story changed this unrelated row's gate from `0%–200%` to `-50%–0%`. On review this is **kept** (not reverted): deep-redact v4 genuinely outperforms v3 here (measured -11.82% overhead), so the old "v4 slower" range cannot pass; `verify:benchmarks` only goes green with the negative-overhead range. It is out of scope for 8.3 (belonged with the rule-driven perf work) but correct. Artefacts + `docs/benchmarks/results.md` regenerated via `pnpm bench:produce`; all four gate-scoped rows pass `verify:benchmarks`.
+- [x] [Review][Patch] AC5 safety matrix incomplete [test/contract/api/create-redactor.test.ts:4066-4105] — 40 of the required 48 cells (missing the "circular back-edge" 6th position) and no "output contains no raw source value" assertion. The missing assertion is exactly what would have caught the CRITICAL leak above.
+- [x] [Review][Patch] AC6 isolation incomplete [test/contract/api/create-redactor.test.ts:4107-4145] — no throwing-`toJSON` test, and adapter-time getter isolation is not exercised (the tested getter is neutralised by the traversal before the adapter runs). Adding the throwing-`toJSON` test will fail until Patch #1 lands.
+- [x] [Review][Patch] LOW — `isSupportedTransformableObject` is now an unused export in `src/` [src/transformers/resolve-transformer.ts] — remove or confirm intentional.
+
+**Deferred (pre-existing / minor)**
+
+- [x] [Review][Defer] Cross-branch alias leaks an unconfigured-path value under exact-path config [src/core/replacement/serialise-output.ts] — deferred, pre-existing exact-path first-wins semantics (same under `serialise: false`); not introduced by 8.3.
+- [x] [Review][Defer] Root array/Set/Map self-cycle marker `path` semantics inconsistency (M2) [src/core/replacement/serialise-output.ts] — deferred, minor correctness; output remains valid JSON.
+- [x] [Review][Defer] Plain-object getters read twice under `serialise: true` (phase-1 traversal + phase-2 graph build) [src/core/replacement/serialise-output.ts:145] — deferred, side-effecting getters observe double evaluation.
+- [x] [Review][Defer] `serialise: true` returns `undefined` (not a string) for a root `undefined`/symbol/function — deferred, minor contract wrinkle matching `JSON.stringify` semantics.
+
+**Dismissed (no action):** Blind Hunter "dead code" claim (false positive — `completedSnapshots`/`replayCompletedTraversal` are live); `completedSnapshots` retention vs Task 2 text (correct call — Task 2's premise was wrong; only the task checkboxes are inaccurate); `storeCompletedTraversal` value/cacheValue change (correct, necessary collateral); cycleRegistry "design deviation" (subsumed by the leak Patch).
+
+### Review Fixes Applied (2026-05-31)
+
+All decision items and patches above resolved. Changes:
+
+- **Patch #1 — no-throw + non-plain `[UNSUPPORTED]`** (`src/core/replacement/serialise-output.ts`): `buildSafeGraph` now (a) returns `[UNSUPPORTED]` for `function`/`symbol` values (also avoids a `WeakSet.add(symbol)` throw), and (b) for a non-plain, non-transformable object first offers it to the user's `fallback` transformers (guarded by `try/catch`), substituting `[UNSUPPORTED]` if none apply or one throws — instead of `return value`. A throwing `toJSON`/getter can no longer reach `JSON.stringify`, and instance fields no longer leak.
+- **Patch #2 — circular back-edge leak** (`src/core/create-redactor.ts`): under `serialise: true` the redactor now always runs the **general traversal** (not the path-driven fast lane), so `cycleRegistry` is fully populated. The path-driven engine never visits non-configured subtrees, so a cycle there was invisible to it and the raw unredacted ancestor reached the adapter. The adapter walks the whole graph regardless, so there is no complexity regression. Reproduced fixed: `paths:['parent.secret']` + `parent.child.back=parent` now emits a circular marker at the back-edge with no `hide-me` leak.
+- **Patch #3 — benchmarks**: `wildcard-v3` gate kept at `-50%–0%` (necessary; v4 outperforms v3). Artefacts + `docs/benchmarks/results.md` regenerated; `verify:benchmarks` green for all four gate rows. AC11 amended in-place (≤60% → documented fast-redact ceiling).
+- **Patch #4 — AC5 matrix**: added the 6th "circular back-edge" position (now 48 cells) and a dedicated leak-regression test asserting the redacted ancestor is not leaked through a back-edge.
+- **Patch #5 — AC6 isolation**: added a new describe with throwing-`toJSON` (plain + class), throwing-getter-on-non-plain, and class-instance-`[UNSUPPORTED]` tests, exercising adapter-time isolation.
+- **Patch #6**: removed the now-unused `isSupportedTransformableObject` export.
+- **Deferred** review items recorded in `deferred-work-audit.md` under the 8-3 code-review heading (cross-branch alias leak, root-cycle path-format cosmetics, double getter read, `undefined`-root serialisation; plus a note that per-constructor transformers for arbitrary types are not dispatched).
+
+Verification: `pnpm run test` → **17 files / 591 tests pass**; `pnpm verify:benchmarks` → **4/4 gate rows pass**.

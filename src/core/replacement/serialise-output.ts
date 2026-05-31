@@ -43,6 +43,13 @@ const buildSafeGraph = (
     return value
   }
 
+  // Functions and symbols are not JSON-serialisable and cannot be tracked in the cycle WeakSet
+  // (WeakSet.add throws on a symbol). Substitute the unsupported marker rather than letting them
+  // reach JSON.stringify (which would silently drop them) or the identity bookkeeping below.
+  if (typeof value === 'function' || typeof value === 'symbol') {
+    return '[UNSUPPORTED]'
+  }
+
   // Bigint and all supported runtime object types go through transformer dispatch.
   const supportedKind = resolveSupportedTransformableValueKind(value)
 
@@ -155,8 +162,23 @@ const buildSafeGraph = (
       return result
     }
 
-    // Non-plain, non-transformable object — return as-is.
-    return value
+    // Non-plain, non-transformable object (e.g. a class instance). A user-supplied fallback
+    // transformer may still handle it; otherwise it cannot be guaranteed JSON-safe — a throwing
+    // toJSON or accessor would defeat the no-throw guarantee (FR26) once it reached JSON.stringify,
+    // and its raw fields must never leak — so substitute the unsupported marker (FR24/FR26).
+    try {
+      for (const transformer of transformers.fallback) {
+        const transformed = transformer(value)
+
+        if (transformed !== value) {
+          return buildSafeGraph(transformed, transformers, seen, identityPaths, currentPath, cycleRegistry)
+        }
+      }
+    } catch {
+      return '[UNSUPPORTED]'
+    }
+
+    return '[UNSUPPORTED]'
   } finally {
     seen.delete(identity)
   }

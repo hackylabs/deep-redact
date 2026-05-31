@@ -2185,6 +2185,7 @@ const isStrictDescendantPath = (ancestor, path) => {
 };
 const buildSafeGraph = (value, transformers, seen, identityPaths, currentPath, cycleRegistry) => {
 	if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean" || typeof value === "undefined") return value;
+	if (typeof value === "function" || typeof value === "symbol") return "[UNSUPPORTED]";
 	const supportedKind = resolveSupportedTransformableValueKind(value);
 	if (supportedKind !== void 0) {
 		const runtimeIdentity = supportedKind !== "bigint" ? value : void 0;
@@ -2239,7 +2240,15 @@ const buildSafeGraph = (value, transformers, seen, identityPaths, currentPath, c
 			for (const key of Object.keys(value)) result[key] = buildSafeGraph(value[key], transformers, seen, identityPaths, buildObjectChildPath(currentPath, key), cycleRegistry);
 			return result;
 		}
-		return value;
+		try {
+			for (const transformer of transformers.fallback) {
+				const transformed = transformer(value);
+				if (transformed !== value) return buildSafeGraph(transformed, transformers, seen, identityPaths, currentPath, cycleRegistry);
+			}
+		} catch {
+			return "[UNSUPPORTED]";
+		}
+		return "[UNSUPPORTED]";
 	} finally {
 		seen.delete(identity);
 	}
@@ -2258,7 +2267,7 @@ const createCallableRedactor = (plan) => {
 	return function redact(value) {
 		if (plan.serialise) {
 			const cycleRegistry = /* @__PURE__ */ new WeakMap();
-			return serialiseOutput(plan.pathDrivenOnly ? buildPathDrivenExecutor(plan, (v) => generalTraversal(v, cycleRegistry))(value) : generalTraversal(value, cycleRegistry), plan.transformers, plan.serialise, cycleRegistry);
+			return serialiseOutput(generalTraversal(value, cycleRegistry), plan.transformers, plan.serialise, cycleRegistry);
 		}
 		return executor(value);
 	};

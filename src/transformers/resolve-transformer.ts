@@ -56,12 +56,6 @@ export const resolveSupportedTransformableValueKind = (
   return resolveSupportedConstructorName(value)
 }
 
-export const isSupportedTransformableObject = (
-  value: unknown,
-): value is object => {
-  return resolveSupportedConstructorName(value) !== undefined
-}
-
 export const isSupportedTransformableValue = (
   value: unknown,
 ): boolean => {

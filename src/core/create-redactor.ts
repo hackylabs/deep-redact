@@ -23,10 +23,15 @@ const createCallableRedactor = (plan: CompiledRedactorPlan): Redactor => {
 
   return function redact(value: unknown): unknown {
     if (plan.serialise) {
+      // The serialise adapter walks the whole redacted graph (O(N)) regardless of plan shape, so
+      // the path-driven fast lane offers no benefit here. More importantly, only the general
+      // traversal populates `cycleRegistry`: the path-driven engine never visits non-configured
+      // subtrees, so a circular back-edge into a redacted ancestor would otherwise reach the
+      // adapter as a raw, unredacted object and leak (the redacted copy and the original alias
+      // are distinct identities the adapter cannot relate). Always use the general traversal under
+      // `serialise: true` so every cycle is registered and neutralised in the serialised output.
       const cycleRegistry = new WeakMap<object, string>()
-      const result = plan.pathDrivenOnly
-        ? buildPathDrivenExecutor(plan, (v) => generalTraversal(v, cycleRegistry))(value)
-        : generalTraversal(value, cycleRegistry)
+      const result = generalTraversal(value, cycleRegistry)
 
       return serialiseOutput(result, plan.transformers, plan.serialise, cycleRegistry)
     }
