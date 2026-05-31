@@ -116,7 +116,7 @@ FR7: Epic 2 - enable case-insensitive key matching
 FR8: Epic 1 - provide typed API discoverability for TypeScript users
 FR9: Epic 1 - target values by key or regex property match
 FR10: Epic 1 - target values by explicit object path and regex path segment
-FR11: Epic 1 Story 1.4 (functional) + Epic 8 Story 8.3 (performance — rule-driven single-wildcard support) - support single-level wildcard path segments
+FR11: Epic 1 Story 1.4 (functional) + Epic 8 Story 8.4 (performance — rule-driven single-wildcard support) - support single-level wildcard path segments
 FR12: Epic 1 - support recursive wildcard path segments
 FR13: Epic 1 - exclude keys or indexes from matching path rules
 FR14: Epic 2 - redact matched substrings and root primitive inputs
@@ -2396,7 +2396,12 @@ Replace the current O(N) payload-walk with a rule-driven engine that navigates d
 
 **Context:** v4 has not been publicly released. No backwards-compatibility bridge is required. The rule-driven engine replaces the general traversal as the primary runtime for path-driven configurations. A full O(N) traversal mode remains for configurations containing key-based or substring rules that inherently require visiting every node.
 
-**Key design decision:** Under the rule-driven engine, non-configured positions are not visited. Transformable runtime values (Date, BigInt, Map, Set, Error, RegExp, URL) at non-configured positions are left in the output as-is, unchanged. This differs from the current general traversal, which transforms every transformable value it encounters regardless of targeting configuration. This is an intentional design decision, not an oversight — configurations that require transformation of all transformable values can express that through key-based or wildcard-path rules, which trigger the appropriate traversal mode.
+**Key design decision (revised — see Story 8.3):** Transformation of runtime values and neutralisation of circular references are owned by the **serialise output adapter** and occur **only when `serialise: true`**. They are no longer performed inline during redaction traversal. Consequently:
+
+- **`serialise: false` (structured output, default):** the redaction output preserves runtime values (Date, BigInt, Map, Set, Error, RegExp, URL) and circular references exactly as they appear in the input at every position the configuration did not redact — they are neither transformed nor neutralised. The output is faithful to the input's runtime shape; the library never throws during redaction (FR26), and structured output is safe to serialise when the input is itself serialisable.
+- **`serialise: true`:** the serialise adapter walks the redacted result, transforms every supported runtime value into its canonical marker, neutralises circular references, isolates failures as `[UNSUPPORTED]`, and emits a serialisable string that does not throw on supported inputs (FR23/FR24/FR25/FR26).
+
+Transformation is therefore a property of the **output stage**, not of which traversal mode ran or which rules matched. This supersedes the earlier framing in which transformation was an effect of visiting every node, and in which "configurations that need all transformable values transformed" had to route to the O(N) traversal. The escape hatch for transformation is `serialise: true`, not key/substring/`**` rules. Non-configured positions are still not visited during navigation; the difference is that nothing about navigation determines transformation any more.
 
 ### Story 8.1: Establish Rule-Driven Traversal Contract and Document Behaviour Changes
 
@@ -2508,10 +2513,101 @@ so that exact-path redaction costs O(P) rather than O(N) and the compiled path e
 - **Given** this story's scope
   **When** the implementation is reviewed
   **Then** it covers exact-path navigation, shared-ancestor copy map, prototype pollution guard, missing-path handling, circular-reference terminal handling, and fast lane deprecation only
-  **And** single-level wildcard (`*`) support remains deferred to Story 8.3
-  **And** double wildcard (`**`), key-based rules, and substring rules remain deferred to Stories 8.4 and 8.5
+  **And** single-level wildcard (`*`) support remains deferred to Story 8.4
+  **And** double wildcard (`**`), key-based rules, and substring rules remain deferred to Stories 8.5 and 8.6
+  **And** serialise-only transformer and circular-reference handling is introduced in Story 8.3 (the redaction traversal continues to transform inline until Story 8.3 extracts it, so this story's delegation to the O(N) traversal is unaffected)
 
-### Story 8.3: Extend Rule-Driven Engine for Single-Level Wildcard (`*`) Paths
+### Story 8.3: Move Transformer and Circular-Reference Handling into a Serialise-Only Output Adapter
+
+As a backend engineer,
+I want all runtime-value transformation and circular-reference neutralisation to be owned by a serialise-only output adapter that runs exclusively when `serialise: true`,
+so that the redaction traversal stays fast and faithful, structured output (`serialise: false`) preserves runtime values as-is, and serialised output (`serialise: true`) is guaranteed safe, serialisable, and non-throwing.
+
+**Motivation:** Epic 8 moves redaction off the O(N) payload-walk; as a consequence, transformation can no longer be a side effect of "visiting every node". This story makes transformation an explicit **output-stage** concern. It lifts the existing transformer dispatch and `WeakMap`/`WeakSet` cycle-tracking out of the redaction traversal (`redact-value.ts`) into a serialise-only adapter that runs over the already-redacted result. The adapter uses the **hybrid** mechanism: reuse the existing canonical `{_transformer:...}` markers, circular back-edge semantics, and `[UNSUPPORTED]` graceful degradation to build a **safe, inert plain graph**, then emit a string via plain native `JSON.stringify` (no replacer) or the caller's `serialise` function. Pure `JSON.stringify(redacted, replacer)` was rejected: `toJSON`/getters run outside any per-value `try/catch`, defeating `[UNSUPPORTED]` isolation (FR24/FR25/FR27) and the no-throw guarantee (FR26); values inside `Map`/`Set` are invisible to a replacer (they serialise to `{}`); and a replacer would re-derive — and risk diverging from — the marker contract. Keeping transformation in one module preserves a single source of truth (FR23). **Sequencing:** this story lands immediately after Story 8.2 and before Story 8.4. Removing the fast lane (8.2) leaves runtime values raw, so `serialise: true` is otherwise undefined/throwing until this adapter exists; and because it extracts inline transformation from the shared traversal, it must precede the stories (8.5/8.6) that pin equivalence to that traversal. It is orthogonal to navigation — it consumes the redacted result regardless of which lane produced it.
+
+**Acceptance Criteria:**
+
+**Serialise-only invocation gate**
+- **Given** a redactor configured with `serialise: false` (or unset)
+  **When** it processes any payload
+  **Then** the redaction output preserves runtime values and circular references exactly as they appear in the input at every non-redacted position — no transformer markers are emitted and no cycle is neutralised
+  **And** the serialise output adapter and the transformer dispatch are **not invoked** — covered by an explicit test that spies on the transformer/serialise stage and asserts zero calls under `serialise: false`, and that each FR23 type (circular, BigInt, Date, Error, Map, RegExp, Set, URL) at a non-redacted position is returned by identity (e.g. a `Date` is `toBe` the input `Date`)
+- **Given** a redactor configured with `serialise: true` or a `serialise` function
+  **When** it processes any payload
+  **Then** the serialise output adapter runs over the redacted result and produces the serialised output
+
+**Inline-transform extraction (single source of truth)**
+- **Given** the redaction traversal (`redact-value.ts`)
+  **When** this story is complete
+  **Then** inline emission of transformer markers and circular markers is removed from the redaction traversal; the traversal returns raw runtime values
+  **And** the structural cycle-guard that prevents unbounded recursion during traversal (a safety limit, sibling to `BudgetExceededError`) remains in the traversal — only marker *emission* moves to the serialise adapter
+  **And** transformer dispatch and identity tracking live in exactly one place (the serialise adapter), reused rather than duplicated
+
+**Hybrid serialiser mechanism**
+- **Given** the serialise output adapter
+  **When** it serialises a redacted result
+  **Then** it builds a safe inert plain graph (transformer markers applied, cycles neutralised, `[UNSUPPORTED]` substituted for failures) using the existing `WeakMap`/`WeakSet` identity tracking and canonical marker shapes
+  **And** it emits the final string via plain native `JSON.stringify` with **no** replacer, or via the caller's `serialise` function
+  **And** no `JSON.stringify` replacer is used to perform transformation
+
+**Serialised-output safety matrix (no-throw, FR23/FR26)**
+- **Given** `serialise: true` and a payload containing each supported runtime type — circular reference, `BigInt`, `Date`, `Error`, `Map`, `RegExp`, `Set`, `URL` — at each of these positions: root, nested in an object, nested in an array, as a `Map` value, as a `Set` member, and as a circular back-edge
+  **When** the redactor serialises that payload
+  **Then** for every (type × position) cell the output is a string, the call does not throw, the string is `JSON.parse`-able, it contains no raw source value, and it is byte-identical across repeated runs (FR19)
+  **And** this matrix is covered by explicit automated tests, closing the current coverage gap in which `Date`, `Error`, `RegExp`, `Set`, and `URL` are exercised only under `serialise: false`
+
+**Per-value `[UNSUPPORTED]` isolation under serialise (FR24/FR25/FR27)**
+- **Given** `serialise: true` and a payload containing a value whose transformation fails (e.g. a throwing getter, a throwing `toJSON`, or a throwing custom transformer) at a nested position
+  **When** the redactor serialises that payload
+  **Then** only that value is replaced with `[UNSUPPORTED]`, the rest of the output is intact and correctly serialised, the call does not throw, and no source detail from the failed value leaks into the output (Security NFR)
+
+**User-supplied `serialise` function sub-contract**
+- **Given** a caller supplies a `serialise` function
+  **When** the contract is documented
+  **Then** it states that a whole-output `serialise` function owns final emission and a throw within it is the caller's documented responsibility (analogous to the `serialise: false` raw-output contract), while transformer-level failures inside the adapter still degrade to `[UNSUPPORTED]`
+
+**Structured-output behaviour change (`serialise: false`)**
+- **Given** the pre-extraction general traversal transformed runtime values inline even under `serialise: false`
+  **When** this story changes that
+  **Then** it is recorded as an explicit, documented public behaviour change: under `serialise: false`, transformable runtime values (Date, BigInt, Map, Set, Error, RegExp, URL) and circular references are returned raw rather than as markers
+  **And** a migration note is published
+
+**Output contract documentation**
+- **Given** the new output stage
+  **When** documentation is reviewed
+  **Then** a hand-authored normative contract for serialise output exists (sibling to `docs/architecture/rule-driven-traversal.md`), defining the `serialise: false` raw contract, the `serialise: true` safe-string guarantee, transformer marker shapes, circular neutralisation, `[UNSUPPORTED]` semantics, and the user-`serialise`-function sub-contract
+  **And** the "escape hatch" wording in `rule-driven-traversal.md` is corrected: transformation is obtained via `serialise: true`, not by routing to the O(N) traversal via key/substring/`**` rules
+
+**Golden-fixture reconciliation (Stories 4.2 / 4.3)**
+- **Given** the serialised determinism fixtures (Story 4.2) and the exact-path equivalence `serialise: true` goldens (Story 4.3)
+  **When** this story is complete
+  **Then** either the serialised goldens are byte-identical through the extraction and an assertion pins that, or any regeneration is an explicit, reviewed change recorded in this story — never a silent diff
+
+**Default-safety product decision (recorded)**
+- **Given** the default is `serialise: false`
+  **When** this story is marked done
+  **Then** the default contract is recorded explicitly: the library never throws during redaction (FR26); `serialise: false` returns faithful structured output that is safe to serialise when the input is itself serialisable; guaranteed `JSON`-safe, non-throwing serialised output is delivered by `serialise: true`; and this is documented prominently rather than left implicit
+
+**Benchmark methodology**
+- **Given** the `fast-redact` comparison benchmarks
+  **When** they are run for this engine
+  **Then** deep-redact is benchmarked with `serialise: true` (string output) against `fast-redact` in its default string-producing configuration on a JSON-safe payload, so the comparison is like-for-like (serialised string vs serialised string) and matches the primary `fast-redact`/Pino usage
+  **And** the serialised-output overhead is measured against the same `25–50%` aspirational target and `60%` release ceiling as the other path-based benchmark workloads
+  **And** the serialised-output safety matrix above is an independent correctness gate that holds regardless of the overhead threshold
+
+**Story 8.5 / 8.6 equivalence re-baseline**
+- **Given** Stories 8.5 (`**` + key rules) and 8.6 (substring + finalisation) assert behavioural equivalence to the general traversal
+  **When** this story lands first
+  **Then** those stories' equivalence baselines are written against the post-extraction traversal (transformables raw; transformation at serialise time), not the pre-extraction inline-transform behaviour
+
+**Scope guard**
+- **Given** this story's scope
+  **When** the implementation is reviewed
+  **Then** it covers the serialise-only adapter, extraction of inline transformation from the redaction traversal, the hybrid mechanism, the serialised-output safety matrix, `[UNSUPPORTED]` isolation under serialise, the output contract doc, golden-fixture reconciliation, and the documented default decision only
+  **And** navigation work (`*`, `**`, key rules, substring) remains owned by Stories 8.4–8.6
+  **And** transformer output marker shapes (Epic 3) are reused unchanged, not redesigned
+
+### Story 8.4: Extend Rule-Driven Engine for Single-Level Wildcard (`*`) Paths
 
 As a backend engineer,
 I want configurations containing single-level wildcard (`*`) segments to use rule-driven navigation that iterates only the keys at wildcard depths,
@@ -2555,10 +2651,10 @@ so that `*.email`-style rules cost O(Σ K_at_wildcard_levels) rather than O(N) f
 - **Given** this story's scope
   **When** the implementation is reviewed
   **Then** it covers `*` segment key iteration, shared-ancestor copy map extension for wildcards, prototype pollution guard at wildcard depths, and benchmark threshold updates only
-  **And** double wildcard (`**`) support remains deferred to Story 8.4
-  **And** key-based rules and substring rules remain deferred to Stories 8.4 and 8.5
+  **And** double wildcard (`**`) support remains deferred to Story 8.5
+  **And** key-based rules and substring rules remain deferred to Stories 8.5 and 8.6
 
-### Story 8.4: Extend Rule-Driven Engine for Double Wildcard (`**`) Paths and Key-Based Rules
+### Story 8.5: Extend Rule-Driven Engine for Double Wildcard (`**`) Paths and Key-Based Rules
 
 As a backend engineer,
 I want double wildcard (`**`) paths and key-based rules to integrate with the rule-driven engine through a clearly defined traversal mode boundary,
@@ -2581,21 +2677,21 @@ so that all targeting modes are supported and configurations are classified into
 - **Given** a configuration containing a `**` segment and `pathDrivenOnly: false`
   **When** the O(N) traversal processes a payload
   **Then** `**` matches resolve through recursive descent, consistent with the semantics established by Epic 1 Story 1.4
-  **And** output is behaviourally identical to the current general traversal for the same input and configuration
+  **And** the O(N) traversal output is behaviourally identical to the post-Story-8.3 general traversal (transformable runtime values left raw; transformation and circular neutralisation occur only at serialise time under `serialise: true`) for the same input and configuration
 
 **Key-based rule integration**
 - **Given** a configuration containing key-based rules alongside path-based rules and `pathDrivenOnly: false`
   **When** the O(N) traversal runs
   **Then** both path-based and key-based rules are applied in one traversal pass
-  **And** output is behaviourally identical to the current general traversal for the same input and configuration
+  **And** the O(N) traversal output is behaviourally identical to the post-Story-8.3 general traversal (transformable runtime values left raw; transformation and circular neutralisation occur only at serialise time under `serialise: true`) for the same input and configuration
 
 **Scope guard**
 - **Given** this story's scope
   **When** the implementation is reviewed
   **Then** it covers the `pathDrivenOnly` compile-time flag, `**` traversal mode routing, key-based rule integration in O(N) mode, and equivalence tests only
-  **And** substring matching integration remains deferred to Story 8.5
+  **And** substring matching integration remains deferred to Story 8.6
 
-### Story 8.5: Integrate Substring Matching and Finalise Rule-Driven Engine
+### Story 8.6: Integrate Substring Matching and Finalise Rule-Driven Engine
 
 As a backend engineer,
 I want substring matching to integrate cleanly with the rule-driven engine and the traversal mode boundary to be explicitly documented and enforced,
@@ -2616,12 +2712,13 @@ so that the rule-driven engine is feature-complete across all supported targetin
   **Then** the following boundary is explicitly documented:
     - `pathDrivenOnly: true` — configuration contains only exact paths and/or `*` segments, with no `**`, no key rules, no `stringTests`, no `fuzzyKeyMatch: true`, and `caseSensitiveKeyMatch: true` or unset
     - `pathDrivenOnly: false` — all other cases; the O(N) general traversal is used
+  **And** the serialise output contract (Story 8.3) is cross-referenced: transformation and circular neutralisation are an output-stage concern gated on `serialise: true`, independent of which traversal mode ran
 
 **Final equivalence verification**
 - **Given** the complete rule-driven engine
   **When** the equivalence corpus from Story 7.2 and the contract tests from Story 8.1 are run
-  **Then** all tests pass without modification
-  **And** no output behaviour change is introduced for any previously passing configuration in the O(N) traversal mode
+  **Then** all tests pass, with any `serialise: true` goldens reconciled per Story 8.3 and any `serialise: false` structured expectations updated for the raw-transformable behaviour change introduced in Story 8.3
+  **And** no output behaviour change is introduced by *this* story beyond those already established by Stories 8.2 and 8.3
 
 **Safety limit integration**
 - **Given** the rule-driven engine in both `pathDrivenOnly: true` and `pathDrivenOnly: false` modes

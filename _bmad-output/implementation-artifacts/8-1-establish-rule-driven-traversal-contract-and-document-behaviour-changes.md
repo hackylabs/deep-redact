@@ -14,7 +14,7 @@ so that the design decision is intentional and verifiable, not incidental.
 
 Epic 8 replaces the O(N) payload-walk with a **rule-driven engine** that navigates directly to configured targets: O(P) for exact paths (P = total path segments across all rules), O(P + Σ K_at_wildcard_levels) for single-wildcard paths. The Story 7.1 compiled path executor (the current fast lane, `src/core/runtime/fast-lane.ts`) is superseded and will be removed in Story 8.2.
 
-**This is the first story of Epic 8 and is deliberately implementation-free.** It establishes the *contract* (a normative doc), pins it down with *named contract tests*, and *documents the behaviour change* that the rule-driven engine introduces — all **before** any runtime engine is written. The runtime engine arrives in Stories 8.2 (exact-path navigation), 8.3 (`*`), 8.4 (`**` + key rules), and 8.5 (substring + finalisation).
+**This is the first story of Epic 8 and is deliberately implementation-free.** It establishes the *contract* (a normative doc), pins it down with *named contract tests*, and *documents the behaviour change* that the rule-driven engine introduces — all **before** any runtime engine is written. The runtime engine arrives in Stories 8.2 (exact-path navigation), 8.4 (`*`), 8.5 (`**` + key rules), and 8.6 (substring + finalisation); Story 8.3 moves transformer/circular handling into a serialise-only output adapter.
 
 **The behaviour change — and why it matters for this story:**
 
@@ -28,7 +28,7 @@ Because v4 has not been publicly released, this is an acceptable, intentional de
 
 The 8 enumerated contract-test cases split into two groups against the **current** engine:
 
-- **Invariant cases (6) — green now, locked baseline.** Cases that the current fast lane *and* the future rule-driven engine produce identically: exact path exists, intermediate-key-absent, terminal-key-absent, non-plain root prototype (delegates), non-plain intermediate prototype (delegates), circular reference at a configured terminal (censor wins, no descent). These assert the observable output of public `deepRedact(...)` and **pass today**. They become the regression baseline that Stories 8.2–8.5 must preserve.
+- **Invariant cases (6) — green now, locked baseline.** Cases that the current fast lane *and* the future rule-driven engine produce identically: exact path exists, intermediate-key-absent, terminal-key-absent, non-plain root prototype (delegates), non-plain intermediate prototype (delegates), circular reference at a configured terminal (censor wins, no descent). These assert the observable output of public `deepRedact(...)` and **pass today**. They become the regression baseline that Stories 8.2–8.6 must preserve.
 - **Behaviour-change cases (2) — pending, activated by 8.2.** Cases whose *current* output differs from the *target* rule-driven contract: (a) a transformable value at a non-configured sibling position (today: transformed via delegation; target: passes through unchanged), and (b) a circular reference at a non-configured position (today: fast lane recurses → stack overflow → delegates → general traversal emits a circular marker; target: never visited → raw reference preserved in output). These are written as **skipped tests carrying the full target assertion**, each named to state the contract and tagged with `// Activated by Story 8.2` so the contract is recorded in test form without a runtime change in this story.
 
 This split — green invariants vs. skipped behaviour-change tests — is the deliverable. Do **not** make the behaviour-change tests pass by editing runtime code; that work belongs to Story 8.2.
@@ -82,7 +82,7 @@ This split — green invariants vs. skipped behaviour-change tests — is the de
    **When** it is reviewed
    **Then** it touches only: the new contract document, the new contract test file, and (if needed) a docs index/reference — **no changes to any file under `src/`**
    **And** `src/core/runtime/fast-lane.ts`, `src/core/runtime/redact-value.ts`, `src/core/create-redactor.ts`, and `src/core/compiler/compile-redactor-plan.ts` are unchanged
-   **And** exact-path navigation implementation remains deferred to Story 8.2; `*` to 8.3; `**`/key rules to 8.4; substring to 8.5
+   **And** exact-path navigation implementation remains deferred to Story 8.2; `*` to 8.4; `**`/key rules to 8.5; substring to 8.6 (the serialise-only output adapter is Story 8.3)
 
 **Suite integrity**
 
@@ -99,7 +99,7 @@ This split — green invariants vs. skipped behaviour-change tests — is the de
   - [x] Match the tone of the existing normative contracts ([docs/architecture/precedence.md](docs/architecture/precedence.md), [docs/architecture/one-way-redaction.md](docs/architecture/one-way-redaction.md)): formal, declarative, `##`/`###` headings, invariants stated plainly, worked examples where useful. British English ("behaviour", "initialise", "artefact").
   - [x] Section: **Traversal contract** — outer loop iterates rules not nodes; navigation via path segments; non-configured positions not visited; cost model O(P) and O(P + Σ K_at_wildcard_levels); supersedes the Story 7.1 compiled path executor (removed in 8.2).
   - [x] Section: **Documented behaviour change** — non-configured transformable values pass through unchanged (list `Date`, `BigInt`, `Map`, `Set`, `Error`, `RegExp`, `URL`); contrast with current general traversal; the circular-reference-at-non-configured-position consequence (raw reference, not circular marker); escape hatch (use key/wildcard rules to force O(N) transformation).
-  - [x] Section: **Traversal mode boundary (forward reference)** — note that `pathDrivenOnly` will gate rule-driven vs O(N) (finalised in Stories 8.4/8.5); this story documents the contract, not the flag.
+  - [x] Section: **Traversal mode boundary (forward reference)** — note that `pathDrivenOnly` will gate rule-driven vs O(N) (finalised in Stories 8.5/8.6); this story documents the contract, not the flag.
 
 - [x] **Task 2 — Create the contract test file with the 6 invariant (green) cases** (AC: 3, 6)
   - [x] Create `test/contract/api/rule-driven-traversal-contract.test.ts`. It is auto-included by the `test:contract` glob (`test/contract/**/*.test.ts`) — no `package.json`, `vitest.config.ts`, or `tsconfig.json` change is needed.
@@ -126,7 +126,7 @@ This split — green invariants vs. skipped behaviour-change tests — is the de
 ### What this story is — and is NOT
 
 - **IS:** a normative contract document + named contract tests + behaviour-change documentation. Zero `src/` changes.
-- **IS NOT:** the rule-driven engine. No navigation code, no `pathDrivenOnly` flag, no fast-lane removal. Those are Stories 8.2–8.5. Resist any urge to "just make the skipped tests pass" — flipping that behaviour is Story 8.2's defining deliverable and its benchmark/equivalence gates depend on doing it there.
+- **IS NOT:** the rule-driven engine. No navigation code, no `pathDrivenOnly` flag, no fast-lane removal. Those are Stories 8.2–8.6. Resist any urge to "just make the skipped tests pass" — flipping that behaviour is Story 8.2's defining deliverable and its benchmark/equivalence gates depend on doing it there.
 
 ### Current engine wiring (for accurate documentation and baseline assertions)
 
@@ -215,7 +215,7 @@ claude-opus-4-8 (Opus 4.8, 1M context)
   (no generated-file header, no generation script, no `verify-generated-files.ts`
   entry) — kept deliberately outside the generated-docs lockstep set.
 - 6 invariant (green) contract cases pass against the current engine and form the
-  regression baseline for Stories 8.2–8.5.
+  regression baseline for Stories 8.2–8.6.
 - 2 behaviour-change cases each carry: an **active** test pinning today's
   observable behaviour, plus a **skipped** (`it.skip`, `// Activated by Story 8.2`)
   test carrying the complete target rule-driven assertion. The intentional flip is

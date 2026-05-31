@@ -112,9 +112,10 @@ development_status:
   epic-8: in-progress
   8-1-establish-rule-driven-traversal-contract-and-document-behaviour-changes: done
   8-2-implement-rule-driven-exact-path-navigation-and-deprecate-the-compiled-path-executor: ready-for-dev
-  8-3-extend-rule-driven-engine-for-single-level-wildcard-paths: backlog
-  8-4-extend-rule-driven-engine-for-double-wildcard-paths-and-key-based-rules: backlog
-  8-5-integrate-substring-matching-and-finalise-rule-driven-engine: backlog
+  8-3-move-transformer-and-circular-handling-into-a-serialise-only-output-adapter: backlog
+  8-4-extend-rule-driven-engine-for-single-level-wildcard-paths: backlog
+  8-5-extend-rule-driven-engine-for-double-wildcard-paths-and-key-based-rules: backlog
+  8-6-integrate-substring-matching-and-finalise-rule-driven-engine: backlog
   epic-8-retrospective: optional
 
   epic-9: backlog

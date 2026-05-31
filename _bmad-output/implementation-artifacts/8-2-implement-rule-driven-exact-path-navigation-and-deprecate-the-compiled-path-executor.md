@@ -12,7 +12,7 @@ so that exact-path redaction costs O(P) rather than O(N) and the compiled path e
 
 ## Context
 
-Epic 8 replaces the O(N) payload-walk with a **rule-driven engine** that iterates configured rules and navigates directly to what each targets, instead of visiting every node and asking "which rule matches?". **This story is the first runtime implementation of that engine** — exact-path-only configurations. Stories 8.3 (`*`), 8.4 (`**` + key rules), and 8.5 (substring + finalisation) extend the same primitive.
+Epic 8 replaces the O(N) payload-walk with a **rule-driven engine** that iterates configured rules and navigates directly to what each targets, instead of visiting every node and asking "which rule matches?". **This story is the first runtime implementation of that engine** — exact-path-only configurations. Stories 8.4 (`*`), 8.5 (`**` + key rules), and 8.6 (substring + finalisation) extend the same primitive; Story 8.3 moves transformer and circular-reference handling into a serialise-only output adapter.
 
 **What ships in 8.2:**
 1. A new rule-driven engine that, for exact-path-only configs, navigates `root → root[seg0] → root[seg0][seg1] → …` to each terminal — **no `for...in` / `Object.keys` at any level**.
@@ -111,7 +111,7 @@ The rule-driven engine **never visits non-configured positions**. Therefore a tr
 10. **Given** this story's scope
     **When** the implementation is reviewed
     **Then** it covers exact-path navigation, the shared-ancestor copy map, the prototype-pollution delegation guard, missing-path handling, circular-terminal handling, fast-lane removal, the flag rename, contract activation, equivalence, and the benchmark gate **only**
-    **And** single-level wildcard (`*`) support remains deferred to Story 8.3; `**`, key-based, and substring rules remain deferred to Stories 8.4/8.5
+    **And** single-level wildcard (`*`) support remains deferred to Story 8.4; `**`, key-based, and substring rules remain deferred to Stories 8.5/8.6; serialise-only transformer/circular handling is introduced in Story 8.3
     **And** no change is made to transformer output shape (Epic 3-owned), the censor/replacement model, or the precedence contract
 
 ## Tasks / Subtasks
@@ -161,7 +161,7 @@ The rule-driven engine **never visits non-configured positions**. Therefore a tr
 ### What this story IS — and is NOT
 
 - **IS:** the first rule-driven runtime engine (exact paths), the shared-ancestor copy map, removal of the Story 7.1 fast lane, the `isExactPathOnly → pathDrivenOnly` rename, activation of the two behaviour-change contract tests, equivalence-corpus extension, and the benchmark gate.
-- **IS NOT:** wildcards. **No `*` (8.3), no `**` or key rules (8.4), no substring (8.5).** A config containing any of those keeps `pathDrivenOnly === false` and continues to use the unchanged O(N) `redactValue`. Do not touch transformer output shape (Epic 3), the censor/replacement model, or `precedence.md`/`one-way-redaction.md` (both **generated** — never hand-edit; regenerate via their scripts only if their *inputs* change, which they should not here).
+- **IS NOT:** wildcards. **No `*` (8.4), no `**` or key rules (8.5), no substring (8.6).** A config containing any of those keeps `pathDrivenOnly === false` and continues to use the unchanged O(N) `redactValue`. Do not touch transformer output shape (Epic 3), the censor/replacement model, or `precedence.md`/`one-way-redaction.md` (both **generated** — never hand-edit; regenerate via their scripts only if their *inputs* change, which they should not here).
 
 ### The behaviour flip, stated precisely (the heart of this story)
 
@@ -174,7 +174,7 @@ The rule-driven engine **never visits non-configured positions**. Therefore a tr
 
 The first two rows are exactly the two `it.skip` tests Story 8.1 wrote. Activating them (Task 4) is the contract proof.
 
-> **Downstream caveat (flagged by Story 8.1 review, design-accepted):** preserving raw circular references by identity means a caller's subsequent `JSON.stringify(output)` will now throw on a cycle the old engine had neutralised. This is the intentional pre-release contract; do not add a re-neutralisation step.
+> **Downstream caveat (flagged by Story 8.1 review):** preserving raw circular references by identity means a caller's subsequent `JSON.stringify(output)` will throw on a cycle under **`serialise: false`** (structured output), where the old engine had neutralised it. This is the intentional contract for structured output. Re-neutralisation — circular circuit-breaking plus transformer markers — is reintroduced for **`serialise: true`** by the serialise-only output adapter in **Story 8.3**; do not add a re-neutralisation step to the redaction traversal itself in this story.
 
 ### Current engine wiring (the exact code you are replacing)
 
