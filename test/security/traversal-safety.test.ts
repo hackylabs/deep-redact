@@ -33,7 +33,7 @@ const buildCircularAtDepth = (depth: number): Record<string, unknown> => {
   return root
 }
 
-// keys rule forces general traversal (not fast lane), where budget enforcement lives
+// keys rule forces general traversal (not the rule-driven engine), where budget enforcement lives
 const redact = deepRedact({ keys: ['secret'] })
 
 describe('traversal safety — depth limit', () => {

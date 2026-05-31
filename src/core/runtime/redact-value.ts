@@ -118,7 +118,7 @@ interface TraversalBranchState {
 
 const unsupportedValue = '[UNSUPPORTED]'
 
-const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+export const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return false
   }
@@ -128,7 +128,7 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return prototype === Object.prototype || prototype === null
 }
 
-const isTraversableContainer = (value: unknown): value is TraversableContainer => {
+export const isTraversableContainer = (value: unknown): value is TraversableContainer => {
   return Array.isArray(value) || isPlainObject(value)
 }
 
@@ -143,7 +143,7 @@ const hasLookupValue = <T>(
   return Object.hasOwn(table, key)
 }
 
-const setObjectEntry = (
+export const setObjectEntry = (
   target: Record<string, unknown>,
   key: string,
   value: unknown,

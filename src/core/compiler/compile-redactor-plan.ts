@@ -94,10 +94,15 @@ export interface CompiledRedactorPlan {
   readonly exactPathRules: Readonly<Record<string, CompiledExactPathRule>>;
   readonly exactKeyRules: CompiledExactKeyRules;
   readonly ignoredValueTypes: CompiledIgnoredValueTypesPlan;
-  // Candidacy flag for the compiled fast-lane executor: the config targets exact string
+  // Selects the rule-driven exact-path navigation engine: the config targets exact string
   // paths exclusively, with no key, regex-key, or stringTest rules. Necessary but not
-  // sufficient — final lane selection is payload-aware at call time (see fast-lane.ts).
-  readonly isExactPathOnly: boolean;
+  // sufficient — final navigation is payload-aware at call time (a non-plain prototype on a
+  // configured path delegates to the general traversal; see navigate-exact-paths.ts).
+  // NOTE: the architecture defines `pathDrivenOnly` as exact paths AND/OR single-level `*`,
+  // but the current predicate is narrower (exact-only; no `*` segment support). When single-
+  // level `*` support is added, this predicate must be WIDENED to include it, not merely
+  // consumed as-is.
+  readonly pathDrivenOnly: boolean;
   readonly maxDepth: number;
   readonly maxNodes: number;
   readonly regexKeyRules: CompiledRegexKeyRules;
@@ -329,11 +334,11 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
   const regexKeyRules = compileRegexKeyRules(options.keys ?? [], defaults)
   const substringRules = compileSubstringRules(options.stringTests ?? [], defaults)
 
-  // The config is a fast-lane candidate only when redaction is driven purely by exact
+  // The config selects the rule-driven engine only when redaction is driven purely by exact
   // string paths: no dynamic path segments, no key/regex-key rules, no stringTests, and
   // none of the key-matching mode flags (fuzzyKeyMatch, caseSensitiveKeyMatch: false) that
   // would alter matching behaviour if key rules were present.
-  const isExactPathOnly = compiledPathRules.dynamicPathRules.length === 0
+  const pathDrivenOnly = compiledPathRules.dynamicPathRules.length === 0
     && Object.keys(compiledPathRules.exactPathRules).length > 0
     && exactKeyRules.literalMatchers.length === 0
     && regexKeyRules.matchers.length === 0
@@ -348,7 +353,7 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
     exactKeyRules,
     exactPathRules: compiledPathRules.exactPathRules,
     ignoredValueTypes: compileIgnoredValueTypes(options.ignoredValueTypes),
-    isExactPathOnly,
+    pathDrivenOnly,
     maxDepth: options.maxDepth ?? DEFAULT_MAX_DEPTH,
     maxNodes: options.maxNodes ?? DEFAULT_MAX_NODES,
     regexKeyRules,

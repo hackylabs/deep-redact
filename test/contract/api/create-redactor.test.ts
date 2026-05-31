@@ -18,7 +18,7 @@ import {
   type StructuredDeterminismFixtureSet,
   type StructuredDeterminismRun,
 } from '../../fixtures/structured-determinism/index.js'
-import { buildFastLaneExecutor } from '../../../src/core/runtime/fast-lane.js'
+import { buildPathDrivenExecutor } from '../../../src/core/runtime/navigate-exact-paths.js'
 import { redactValue } from '../../../src/core/runtime/redact-value.js'
 import {
   createLaneForcedRedactor,
@@ -3658,13 +3658,15 @@ describe('Nested runtime failures degrade locally to [UNSUPPORTED] with structur
 
     expect(censor).toHaveBeenCalledTimes(2)
     expect(events).toHaveLength(2)
-    expectFailureEvent(events[0]!, {
+    // The rule-driven engine navigates configured rules directly, so diagnostic order follows
+    // rule-configuration order rather than payload order; assert content order-independently.
+    expectFailureEvent(events.find((event) => event.path === 'aliases.1')!, {
       errorName: 'StoryTransformerError',
       path: 'aliases.1',
       stage: 'censor',
       valueType: 'string',
     })
-    expectFailureEvent(events[1]!, {
+    expectFailureEvent(events.find((event) => event.path === 'profile.secret')!, {
       errorName: 'StoryTransformerError',
       path: 'profile.secret',
       stage: 'censor',
@@ -3714,15 +3716,17 @@ describe('Nested runtime failures degrade locally to [UNSUPPORTED] with structur
     })
   })
 
-  it('keeps the parent object present when a nested getter throws during traversal even without a diagnostics sink', () => {
+  it('leaves a non-configured sibling with a throwing getter untouched and by identity (rule-driven contract)', () => {
+    let getterInvoked = false
     const nested: Record<string, unknown> = {
       safe: 'visible',
     }
-    let result: unknown
+    let result: Record<string, unknown> | undefined
 
     Object.defineProperty(nested, 'secret', {
       enumerable: true,
       get() {
+        getterInvoked = true
         throw createStoryError('token=secret')
       },
     })
@@ -3737,17 +3741,15 @@ describe('Nested runtime failures degrade locally to [UNSUPPORTED] with structur
           token: 'secret',
         },
         nested,
-      })
+      }) as Record<string, unknown>
     }).not.toThrow()
-    expect(result).toEqual({
-      account: {
-        token: '[REDACTED]',
-      },
-      nested: {
-        safe: 'visible',
-        secret: '[UNSUPPORTED]',
-      },
-    })
+
+    // The configured terminal is redacted; `nested` is a non-configured position, so the
+    // engine never visits it — its throwing getter is never invoked and it is carried into
+    // the output by reference unchanged.
+    expect((result!.account as Record<string, unknown>).token).toBe('[REDACTED]')
+    expect(result!.nested).toBe(nested)
+    expect(getterInvoked).toBe(false)
   })
 
   it('emits one structured diagnostic per failing path when a failed identity is revisited', () => {
@@ -3800,7 +3802,7 @@ describe('Nested runtime failures degrade locally to [UNSUPPORTED] with structur
     })
   })
 
-  it('degrades a hostile nested object without rethrowing when diagnostics cannot inspect its type safely', () => {
+  it('leaves a non-configured hostile proxy untouched and by identity without emitting diagnostics (rule-driven contract)', () => {
     const { events, sink } = createDiagnosticSink()
     const hostile = new Proxy<Record<string, unknown>>({}, {
       get(target, property, receiver) {
@@ -3820,7 +3822,7 @@ describe('Nested runtime failures degrade locally to [UNSUPPORTED] with structur
         throw createStoryError('password=secret')
       },
     })
-    let result: unknown
+    let result: Record<string, unknown> | undefined
 
     const redact = deepRedact({
       diagnostics: { sink },
@@ -3833,22 +3835,15 @@ describe('Nested runtime failures degrade locally to [UNSUPPORTED] with structur
           token: 'secret',
         },
         hostile,
-      })
+      }) as Record<string, unknown>
     }).not.toThrow()
-    expect(result).toEqual({
-      account: {
-        token: '[REDACTED]',
-      },
-      hostile: '[UNSUPPORTED]',
-    })
 
-    expect(events).toHaveLength(1)
-    expectFailureEvent(events[0]!, {
-      errorName: 'StoryTransformerError',
-      path: 'hostile',
-      stage: 'traversal-read',
-      valueType: 'object',
-    })
+    // `hostile` is a non-configured position: the engine never inspects it (no constructor /
+    // ownKeys trap is ever triggered), so it is carried into the output by reference and no
+    // diagnostic is emitted. Asserting by identity avoids deep-reading the hostile proxy.
+    expect((result!.account as Record<string, unknown>).token).toBe('[REDACTED]')
+    expect(result!.hostile).toBe(hostile)
+    expect(events).toHaveLength(0)
   })
 
   it('degrades each failing node independently and emits one structured event per path in a single call', () => {
@@ -4801,47 +4796,59 @@ describe('Exact-path fast-lane and generic traversal equivalence', () => {
   })
 })
 
-describe('Compiled path executor vs. general traversal equivalence', () => {
+describe('Rule-driven engine vs. general traversal equivalence', () => {
   const failOnDelegation = (): never => {
-    throw new Error('fast lane unexpectedly delegated to the general traversal')
+    throw new Error('rule-driven engine unexpectedly delegated to the general traversal')
   }
 
   it.each(exactPathEquivalenceCorpus)(
-    'compiled executor and general traversal produce identical output for: $title',
+    'rule-driven engine and general traversal produce identical output for: $title',
     (entry) => {
       const plan = compileRedactorPlan(entry.options)
-      expect(plan.isExactPathOnly).toBe(true)
+      expect(plan.pathDrivenOnly).toBe(true)
 
       const payload = entry.createPayload()
 
       const general = redactValue(payload, plan)
 
-      const fast = buildFastLaneExecutor(plan, failOnDelegation)(entry.createPayload())
+      const pathDriven = buildPathDrivenExecutor(plan, failOnDelegation)(entry.createPayload())
 
-      expect(fast).toStrictEqual(general)
-      expect(fast).toStrictEqual(entry.expectedStructured)
-      expect(JSON.stringify(fast)).toBe(entry.expectedSerialised)
+      expect(pathDriven).toStrictEqual(general)
+      expect(pathDriven).toStrictEqual(entry.expectedStructured)
+      expect(JSON.stringify(pathDriven)).toBe(entry.expectedSerialised)
       expect(JSON.stringify(general)).toBe(entry.expectedSerialised)
     },
   )
 
-  describe('delegation proof — unsafe payloads produce identical output via wired redactor', () => {
+  describe('non-configured transformable / circular positions — preserved by identity (rule-driven contract)', () => {
+    // The rule-driven engine never visits non-configured positions, so a transformable runtime
+    // value sitting where no rule targets is carried into the output unchanged (by reference),
+    // and the general traversal — which transforms every transformable it meets — diverges. This
+    // is the intentional, pre-release v4 behaviour change pinned by the rule-driven contract.
     it.each(delegationProofCorpus)(
-      'wired redactor delegates and matches general traversal: $title',
+      'leaves the non-configured transformable unchanged while redacting the configured terminal: $title',
       (entry) => {
         const plan = compileRedactorPlan(entry.options)
-        const payload = entry.createPayload()
+        const payload = entry.createPayload() as Record<string, unknown>
 
-        const wiredResult = createRedactor(entry.options)(payload)
-        const generalResult = redactValue(payload, plan)
+        // Capture the live reference at the non-configured position before redaction.
+        const nonConfiguredKey = Object.keys(payload).find((key) => key !== 'user')!
+        const original = payload[nonConfiguredKey]
 
-        expect(wiredResult).toStrictEqual(generalResult)
+        const wiredResult = createRedactor(entry.options)(payload) as Record<string, unknown>
+        const generalResult = redactValue(entry.createPayload(), plan)
+
+        // The configured terminal is still redacted …
+        expect((wiredResult.user as Record<string, unknown>).password).toBe('[REDACTED]')
+        // … the non-configured value is preserved by identity (never transformed) …
+        expect(wiredResult[nonConfiguredKey]).toBe(original)
+        // … and this diverges from the general traversal, which transforms it.
+        expect(wiredResult).not.toStrictEqual(generalResult)
       },
     )
 
-    it('wired redactor matches general traversal for circular-reference payload', () => {
+    it('preserves a non-configured circular reference by identity rather than emitting a marker', () => {
       const options = { paths: ['user.password'] }
-      const plan = compileRedactorPlan(options)
 
       const buildPayload = (): Record<string, unknown> => {
         const payload: Record<string, unknown> = { user: { password: 'pw', name: 'alice' } }
@@ -4849,12 +4856,15 @@ describe('Compiled path executor vs. general traversal equivalence', () => {
         return payload
       }
 
-      expect(createRedactor(options)(buildPayload())).toStrictEqual(
-        redactValue(buildPayload(), plan),
-      )
+      const payload = buildPayload()
+      const output = createRedactor(options)(payload) as Record<string, unknown>
+
+      expect((output.user as Record<string, unknown>).password).toBe('[REDACTED]')
+      // The non-configured `self` cycle is never visited, so it is carried over by reference.
+      expect(output.self).toBe(payload)
     })
 
-    it('wired redactor matches general traversal for payload with throwing getter', () => {
+    it('delegates to the general traversal for a payload with a throwing getter on a touched ancestor', () => {
       const options = { paths: ['user.password'] }
       const plan = compileRedactorPlan(options)
 
@@ -4865,6 +4875,8 @@ describe('Compiled path executor vs. general traversal equivalence', () => {
         },
       })
 
+      // Shallow-copying the root spreads `danger`, which throws; the engine catches and
+      // delegates, so the output matches the general traversal exactly.
       expect(createRedactor(options)(buildPayload())).toStrictEqual(
         redactValue(buildPayload(), plan),
       )

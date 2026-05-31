@@ -24,8 +24,8 @@ keys of the container at that level so it can descend into each. Enumeration at
 a `*` level is the only point at which positions outside a rule's literal path
 are touched, and even then only the keys of the specifically targeted container
 are read. (Recursive wildcard `**` is not part of this rule-driven navigation;
-its handling is finalised in Story 8.4, and until then a configuration
-containing `**` routes to the `O(N)` traversal mode described below.)
+its handling is not yet implemented in the rule-driven engine, and until then a
+configuration containing `**` routes to the `O(N)` traversal mode described below.)
 
 ### Cost Model
 
@@ -44,14 +44,14 @@ The traversal cost is a function of the configuration, not of the payload size:
 This replaces the previous `O(N)` model, in which cost scaled with the total
 number of nodes `N` in the payload regardless of how few were configured.
 
-### Relationship To The Story 7.1 Compiled Path Executor
+### Relationship To The Prior Compiled Path Executor
 
-The rule-driven engine **supersedes** the compiled path executor introduced in
-Story 7.1 (the "fast lane"). That executor was a faster lane layered on top of
-the general node-walking traversal: it still visited every plain object and
-array and fell back to the general traversal whenever it met a value it could
-not handle. The rule-driven engine removes that node walk entirely, so the
-compiled path executor has no remaining role and is removed in Story 8.2.
+The rule-driven engine **supersedes** the compiled path executor (the "fast lane")
+that preceded it. That executor was a faster lane layered on top of the general
+node-walking traversal: it still visited every plain object and array and fell back
+to the general traversal whenever it met a value it could not handle. The
+rule-driven engine removes that node walk entirely, so the compiled path executor
+has no remaining role and has been removed.
 
 ## Documented Behaviour Change
 
@@ -99,10 +99,33 @@ The engine navigates to that terminal and applies the censor before any descent,
 so the cycle is never followed and the configured terminal is redacted as
 specified.
 
+### Serialise Mode Is An Interim Exception
+
+Because a non-configured circular reference is now preserved by identity in the
+**structured** output, a caller running with `serialise: true` will have
+`JSON.stringify` invoked over that live cycle and it will **throw** —
+where the general traversal previously neutralised the cycle into a marker and
+serialised cleanly. This is a real, known interim regression for the
+`pathDrivenOnly` + `serialise: true` combination, accepted as a release-sequencing
+dependency: re-neutralisation (circular circuit-breaking and transformer markers) is
+planned for a forthcoming serialise-only output adapter. No re-neutralisation step
+is added to the redaction traversal itself. Until that adapter ships, this
+consequence must be surfaced explicitly (PR description / release notes) rather than
+absorbed as a silent behaviour change.
+
+### Diagnostic Event Ordering
+
+The rule-driven engine navigates configured rules directly rather than walking
+the payload, so structured diagnostic events (e.g. censor / traversal failures)
+are emitted in **rule-configuration order**, not payload-key order. The event
+**content** — canonical path, stage, value type — is identical to the general
+traversal; only the relative ordering between events originating at distinct
+configured positions can differ. Consumers must not depend on diagnostic
+ordering reflecting the shape of the payload.
+
 ### Why This Is Acceptable, And The Escape Hatch
 
-This is an intentional design decision for v4, taken before public release
-(see [epics §Epic 8 "Key design decision"](../../_bmad-output/planning-artifacts/epics.md)).
+This is an intentional design decision for v4, taken before public release.
 The rule-driven model's contract is that the configuration declares what is
 sensitive; values nobody configured are, by definition, outside that
 declaration.

@@ -29,6 +29,10 @@
 - **Decision (2026-05-31):** **Deferred.** Story 8.2 ships the documented behaviour change as currently specified — it does **not** add a serialiser fix or a safety traversal, and its Dev Notes carry the caveat forward. Revisit before public release to choose between the cheap serialiser fix (A only) and the holistic WeakMap traversal (A + B, via correct-course). If the holistic route is chosen, measure the real overhead of the WeakMap pass against the ≤60 % gate before committing.
 - **Source refs:** `_bmad-output/implementation-artifacts/8-2-implement-rule-driven-exact-path-navigation-and-deprecate-the-compiled-path-executor.md` (Dev Notes "Downstream caveat"); `docs/architecture/rule-driven-traversal.md`; `_bmad-output/planning-artifacts/epics.md §Epic 8`; `src/core/create-redactor.ts:12-36`; `src/core/compiler/compile-redactor-plan.ts:336-342`.
 
+## Deferred from: code review of 8-2-implement-rule-driven-exact-path-navigation-and-deprecate-the-compiled-path-executor (2026-05-31)
+
+- **`resolveRetainTerminal` first-wins alias behaviour** — When two configured paths resolve to the same container object identity at runtime (payload aliasing), `resolveRetainTerminal` returns the first rule's result and silently discards the second rule's policy. The long-term fix is to identify conflicting configuration patterns (this case plus others where runtime aliasing could produce silent divergence) and throw at `createRedactor` initialisation time rather than silently dropping rules. Runtime must remain error-free except for `BudgetExceededError`. Until this is implemented, callers with two different `retainStructure` rules targeting an aliased container will see only the first rule applied with no warning.
+
 ## Deferred from: code review of 7-2-prove-behavioural-equivalence-of-the-compiled-path-executor (2026-05-26)
 
 - ~~**Pre-existing `expect(fastResult).toBe(fastResult)` self-comparison tautology**~~ — dismissed: HEAD already has `toBe(genericResult)`; false positive from stale diff context in review tooling.

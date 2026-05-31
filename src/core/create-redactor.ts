@@ -5,7 +5,7 @@ import type {
 } from '../types/public.js'
 import { compileRedactorPlan, type CompiledRedactorPlan } from './compiler/compile-redactor-plan.js'
 import { redactValue } from './runtime/redact-value.js'
-import { buildFastLaneExecutor } from './runtime/fast-lane.js'
+import { buildPathDrivenExecutor } from './runtime/navigate-exact-paths.js'
 import { validateConfig } from './validation/validate-config.js'
 import { assertValidConfig } from './validation/validation-report.js'
 
@@ -24,12 +24,12 @@ const applySerialisation = (value: unknown, serialise?: SerialiseOption): unknow
 const createCallableRedactor = (plan: CompiledRedactorPlan): Redactor => {
   const generalTraversal = (value: unknown): unknown => redactValue(value, plan)
 
-  // For exact-path-only plans the compiled fast lane handles each call in a single pass,
-  // redacting configured paths and verifying payload safety together; anything it cannot prove
-  // behaviourally identical (transformable values, circular references, non-plain prototypes,
-  // throwing accessors) is delegated to the general traversal via this fallback.
-  const executor = plan.isExactPathOnly
-    ? buildFastLaneExecutor(plan, generalTraversal)
+  // For exact-path-only plans the rule-driven engine navigates directly to each configured
+  // terminal via a trie-guided single traversal, never visiting non-configured positions; a
+  // non-plain prototype on a configured path (or a throwing accessor) delegates the whole call
+  // to the general traversal via this fallback.
+  const executor = plan.pathDrivenOnly
+    ? buildPathDrivenExecutor(plan, generalTraversal)
     : generalTraversal
 
   return function redact(value: unknown): unknown {

@@ -10,10 +10,9 @@ import { deepRedact } from '../../../src/index.js'
  *  - Invariant cases (active, green): observable behaviour that both the current
  *    engine and the future rule-driven engine produce identically. These form
  *    the regression baseline Stories 8.2–8.5 must preserve.
- *  - Behaviour-change cases (one active baseline + one skipped target each):
- *    positions where the current engine and the rule-driven contract diverge.
- *    The active test pins today's observable output; the skipped test carries
- *    the full target assertion and is activated by Story 8.2.
+ *  - Behaviour-change cases: positions where the previous engine and the
+ *    rule-driven contract diverge. These are active from the rule-driven
+ *    engine's introduction.
  *
  * All cases use the public deepRedact(...) API only, so they pin observable
  * behaviour rather than internal lane wiring.
@@ -87,38 +86,37 @@ describe('Rule-driven traversal contract', () => {
     })
   })
 
-  describe('Behaviour-change cases', () => {
+  describe('Behaviour-change cases (rule-driven contract)', () => {
     describe('a transformable value at a non-configured sibling position', () => {
       const createPayload = () => ({
         user: { password: 'x' },
         when: new Date('2020-01-01T00:00:00.000Z'),
       })
 
-      it('currently transforms a non-configured Date via delegation (current observable behaviour)', () => {
+      it('leaves a non-configured Date unchanged in the output (rule-driven contract)', () => {
         const payload = createPayload()
         const redact = deepRedact({ paths: ['user.password'] })
 
         const output = redact(payload) as { user: { password: string }; when: unknown }
 
-        // Today the stray Date forces the whole call to delegate to the general
-        // traversal, which transforms every transformable value it meets. Assert
-        // shape-agnostically: it is simply no longer a live Date instance.
-        expect(output.when).not.toBeInstanceOf(Date)
-        expect(output.user.password).toBe('[REDACTED]')
-      })
-
-      // Activated by Story 8.2
-      it.skip('leaves a non-configured Date unchanged in the output (rule-driven contract)', () => {
-        const payload = createPayload()
-        const redact = deepRedact({ paths: ['user.password'] })
-
-        const output = redact(payload) as { user: { password: string }; when: unknown }
-
-        // Target: the non-configured position is never visited, so the live Date
-        // instance is copied by reference into the output unchanged.
+        // The non-configured position is never visited, so the live Date instance
+        // is copied by reference into the output unchanged.
         expect(output.when).toBeInstanceOf(Date)
         expect(output.when).toBe(payload.when)
         expect(output.user.password).toBe('[REDACTED]')
+      })
+    })
+
+    describe('a BigInt root value with exact-path rules configured', () => {
+      it('returns a BigInt root unchanged (rule-driven contract — non-object root cannot be targeted by path rules)', () => {
+        const redact = deepRedact({ paths: ['a.b'] })
+
+        // Under the rule-driven contract, non-object roots have no addressable properties and
+        // are returned as-is. This differs from the old fast-lane behaviour (which delegated
+        // BigInt to the general traversal and produced a transformer marker). The new contract
+        // is intentional: Story 8.3 will handle BigInt transformation for serialise:true via
+        // the serialise-only output adapter.
+        expect(redact(42n)).toBe(42n)
       })
     })
 
@@ -129,31 +127,14 @@ describe('Rule-driven traversal contract', () => {
         return { user: { password: 'x' }, loop }
       }
 
-      it('currently completes and replaces a non-configured circular reference with a marker (current observable behaviour)', () => {
-        const payload = createPayload()
-        const redact = deepRedact({ paths: ['user.password'] })
-
-        let output: { user: { password: string }; loop: unknown } | undefined
-        expect(() => {
-          output = redact(payload) as { user: { password: string }; loop: unknown }
-        }).not.toThrow()
-
-        // Today the fast lane recurses into `loop`, overflows, is caught, and
-        // delegates; the general traversal replaces the circular position with a
-        // circular marker — so the output's `loop` is NOT the raw reference.
-        expect(output!.user.password).toBe('[REDACTED]')
-        expect(output!.loop).not.toBe(payload.loop)
-      })
-
-      // Activated by Story 8.2
-      it.skip('preserves a non-configured circular reference by identity in the output (rule-driven contract)', () => {
+      it('preserves a non-configured circular reference by identity in the output (rule-driven contract)', () => {
         const payload = createPayload()
         const redact = deepRedact({ paths: ['user.password'] })
 
         const output = redact(payload) as { user: { password: string }; loop: unknown }
 
-        // Target: the non-configured `loop` is never visited, so it is copied by
-        // reference into the new root — same object identity, cycle intact.
+        // The non-configured `loop` is never visited, so it is copied by reference
+        // into the new root — same object identity, cycle intact.
         expect(output.loop).toBe(payload.loop)
         expect(output.user.password).toBe('[REDACTED]')
       })

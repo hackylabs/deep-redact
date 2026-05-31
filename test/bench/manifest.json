@@ -5,21 +5,6 @@
   },
   "rows": [
     {
-      "id": "path-based-single-object-node24",
-      "fixtureDir": "test/bench/fixtures/path-based-single-object",
-      "workloadClass": "path-based",
-      "competitor": "fast-redact",
-      "runtime": "node24",
-      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id path-based-single-object-node24",
-      "outputArtefact": "path-based-single-object-node24.json",
-      "thresholdPolicy": {
-        "comparatorMetric": "median",
-        "minOverheadPct": 0,
-        "maxOverheadPct": 150,
-        "runScope": ["protected-branch", "release-candidate"]
-      }
-    },
-    {
       "id": "path-based-single-object-v3-node24",
       "fixtureDir": "test/bench/fixtures/path-based-single-object",
       "workloadClass": "path-based",

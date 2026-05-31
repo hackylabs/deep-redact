@@ -6,6 +6,7 @@ import {
 } from '../../../src/core/compiler/compile-redactor-plan.js'
 import { renderSelectorSignature } from '../../../src/core/matching/path-normaliser.js'
 import { redactValue } from '../../../src/core/runtime/redact-value.js'
+import { buildPathDrivenExecutor } from '../../../src/core/runtime/navigate-exact-paths.js'
 import type { DeepRedactOptions, FunctionCensorContext } from '../../../src/index.js'
 import type { PathSegment } from '../../../src/core/matching/path-parser.js'
 
@@ -46,10 +47,17 @@ export const createLaneForcedRedactorFromPlan = (
   plan: CompiledRedactorPlan,
   lane: 'fast' | 'generic',
 ): (value: unknown) => unknown => {
+  // 'fast' exercises the rule-driven engine (trie-guided exact-path navigation) with the
+  // general traversal as its delegation fallback; 'generic' converts the exact rules to
+  // dynamic rules and runs the O(N) general traversal. The serialise step mirrors
+  // create-redactor's applySerialisation so byte-for-byte equality is comparable across lanes.
   const activePlan = lane === 'generic' ? createGenericisedPlan(plan) : plan
+  const executor = lane === 'fast'
+    ? buildPathDrivenExecutor(plan, (value: unknown) => redactValue(value, plan))
+    : (value: unknown): unknown => redactValue(value, activePlan)
 
   return (value: unknown): unknown => {
-    const structured = redactValue(value, activePlan)
+    const structured = executor(value)
     if (activePlan.serialise === true) return JSON.stringify(structured)
     if (typeof activePlan.serialise === 'function') return activePlan.serialise(structured)
     return structured
@@ -439,6 +447,15 @@ export const exactPathEquivalenceCorpus: readonly ExactPathEquivalenceCorpusEntr
     createPayload: () => ({ data: { tag: '', safe: 'keep' } }),
     expectedStructured: { data: { tag: '[REDACTED]', safe: 'keep' } },
     expectedSerialised: SERIALISED_EMPTY_STRING_VALUE_CANARY,
+  },
+  {
+    name: 'shared-ancestor-copy',
+    title: 'two paths under a single shared ancestor — user.password and user.email (AC 2)',
+    exactPathEligibilityReason: 'two exact static absolute paths sharing the ancestor segment "user"; the shared container is shallow-copied exactly once and both redactions land on that single copy',
+    options: { paths: ['user.password', 'user.email'] },
+    createPayload: () => ({ user: { password: 'secret1', email: 'a@b.com', safe: 'keep' } }),
+    expectedStructured: { user: { password: '[REDACTED]', email: '[REDACTED]', safe: 'keep' } },
+    expectedSerialised: '{"user":{"password":"[REDACTED]","email":"[REDACTED]","safe":"keep"}}',
   },
 ]
 

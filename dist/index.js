@@ -623,7 +623,7 @@ const compileRedactorPlan = (options = {}) => {
 	const exactKeyRules = compileExactKeyRules(options.keys ?? [], defaults, keyDefaults);
 	const regexKeyRules = compileRegexKeyRules(options.keys ?? [], defaults);
 	const substringRules = compileSubstringRules(options.stringTests ?? [], defaults);
-	const isExactPathOnly = compiledPathRules.dynamicPathRules.length === 0 && Object.keys(compiledPathRules.exactPathRules).length > 0 && exactKeyRules.literalMatchers.length === 0 && regexKeyRules.matchers.length === 0 && substringRules.length === 0 && !options.fuzzyKeyMatch && options.caseSensitiveKeyMatch !== false;
+	const pathDrivenOnly = compiledPathRules.dynamicPathRules.length === 0 && Object.keys(compiledPathRules.exactPathRules).length > 0 && exactKeyRules.literalMatchers.length === 0 && regexKeyRules.matchers.length === 0 && substringRules.length === 0 && !options.fuzzyKeyMatch && options.caseSensitiveKeyMatch !== false;
 	return Object.freeze({
 		diagnostics: compileDiagnostics(options.diagnostics),
 		defaults,
@@ -631,7 +631,7 @@ const compileRedactorPlan = (options = {}) => {
 		exactKeyRules,
 		exactPathRules: compiledPathRules.exactPathRules,
 		ignoredValueTypes: compileIgnoredValueTypes(options.ignoredValueTypes),
-		isExactPathOnly,
+		pathDrivenOnly,
 		maxDepth: options.maxDepth ?? 500,
 		maxNodes: options.maxNodes ?? 5e4,
 		regexKeyRules,
@@ -810,13 +810,13 @@ const emitDiagnosticEvent = (plan, event) => {
 //#endregion
 //#region src/core/runtime/redact-value.ts
 const unsupportedValue$1 = "[UNSUPPORTED]";
-const isPlainObject$2 = (value) => {
+const isPlainObject$1 = (value) => {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
 	const prototype = Object.getPrototypeOf(value);
 	return prototype === Object.prototype || prototype === null;
 };
 const isTraversableContainer = (value) => {
-	return Array.isArray(value) || isPlainObject$2(value);
+	return Array.isArray(value) || isPlainObject$1(value);
 };
 const canRetainStructure = (value) => {
 	return isTraversableContainer(value) || isSupportedTransformableValue(value);
@@ -1525,18 +1525,13 @@ const redactValue = (value, plan) => {
 	return isRemovedValue(result.value) ? void 0 : result.value;
 };
 //#endregion
-//#region src/core/runtime/fast-lane.ts
+//#region src/core/runtime/navigate-exact-paths.ts
 const unsupportedValue = "[UNSUPPORTED]";
 const noContext = Object.freeze({
 	matchedPath: Object.freeze([]),
 	rootInput: void 0,
 	rulePath: Object.freeze([])
 });
-const isPlainObject$1 = (value) => {
-	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-	const prototype = Object.getPrototypeOf(value);
-	return prototype === Object.prototype || prototype === null;
-};
 const shallowCopyContainer = (container) => {
 	if (Array.isArray(container)) {
 		const copy = new Array(container.length);
@@ -1640,94 +1635,211 @@ const resolveChildInherited = (node, inherited, kind, key) => {
 	return descendRetain(inherited, buildSegment(kind, key), key);
 };
 const emptyLevel = {};
-const delegate = Symbol("deep-redact.fast-lane.delegate");
+const delegate = Symbol("deep-redact.rule-driven.delegate");
 const requiresDelegation = (value) => {
 	return typeof value === "bigint" || value !== null && typeof value === "object";
 };
-const applyNodes = (container, level, inherited, plan, rootInput) => {
-	let copy;
-	if (Array.isArray(container)) {
-		const items = container;
-		let removedIndices;
-		for (let index = 0; index < items.length; index += 1) {
-			if (!(index in items)) continue;
-			const value = items[index];
-			const node = level.indexChildren?.get(index);
+const redactRetained = (container, level, inherited, plan, rootInput, budget) => {
+	budget.depth += 1;
+	if (isDepthExceeded(budget, plan.maxDepth)) throw createBudgetExceededError("depth", plan.maxDepth);
+	try {
+		let copy;
+		if (Array.isArray(container)) {
+			const items = container;
+			let removedIndices;
+			for (let index = 0; index < items.length; index += 1) {
+				if (!(index in items)) continue;
+				budget.nodesVisited += 1;
+				if (isNodeBudgetExceeded(budget, plan.maxNodes)) throw createBudgetExceededError("nodes", plan.maxNodes);
+				const value = items[index];
+				const node = level.indexChildren?.get(index);
+				if (node?.rule !== void 0 && !node.rule.policy.retainStructure) {
+					const redacted = applyTerminalRule(value, node.rule, plan, rootInput);
+					copy ??= shallowCopyContainer(container);
+					if (isRemovedValue(redacted)) (removedIndices ??= []).push(index);
+					else copy[index] = redacted;
+					continue;
+				}
+				if (Array.isArray(value) || isPlainObject$1(value)) {
+					const childInherited = resolveChildInherited(node, inherited, "index", index);
+					const child = redactRetained(value, node ?? emptyLevel, childInherited, plan, rootInput, budget);
+					if (child === delegate) return delegate;
+					if (child !== value) (copy ??= shallowCopyContainer(container))[index] = child;
+					continue;
+				}
+				if (node?.rule !== void 0 || inherited !== void 0) {
+					if (requiresDelegation(value)) return delegate;
+					const redacted = node?.rule === void 0 ? applyInheritedLeaf(value, inherited, buildSegment("index", index), index, plan, rootInput) : applyTerminalRule(value, node.rule, plan, rootInput);
+					copy ??= shallowCopyContainer(container);
+					if (isRemovedValue(redacted)) (removedIndices ??= []).push(index);
+					else copy[index] = redacted;
+				}
+			}
+			if (copy === void 0) return container;
+			if (removedIndices !== void 0) {
+				const compacted = copy;
+				let removedCount = 0;
+				for (const removedIndex of removedIndices) {
+					compacted.splice(removedIndex - removedCount, 1);
+					removedCount += 1;
+				}
+			}
+			return copy;
+		}
+		for (const key in container) {
+			const value = container[key];
+			const node = level.propertyChildren?.get(key);
 			if (node?.rule !== void 0 && !node.rule.policy.retainStructure) {
 				const redacted = applyTerminalRule(value, node.rule, plan, rootInput);
 				copy ??= shallowCopyContainer(container);
-				if (isRemovedValue(redacted)) (removedIndices ??= []).push(index);
-				else copy[index] = redacted;
+				if (isRemovedValue(redacted)) delete copy[key];
+				else setObjectEntry(copy, key, redacted);
 				continue;
 			}
+			budget.nodesVisited += 1;
+			if (isNodeBudgetExceeded(budget, plan.maxNodes)) throw createBudgetExceededError("nodes", plan.maxNodes);
 			if (Array.isArray(value) || isPlainObject$1(value)) {
-				const childInherited = resolveChildInherited(node, inherited, "index", index);
-				const child = applyNodes(value, node ?? emptyLevel, childInherited, plan, rootInput);
+				const childInherited = resolveChildInherited(node, inherited, "property", key);
+				const child = redactRetained(value, node ?? emptyLevel, childInherited, plan, rootInput, budget);
 				if (child === delegate) return delegate;
-				if (child !== value) (copy ??= shallowCopyContainer(container))[index] = child;
+				if (child !== value) setObjectEntry(copy ??= shallowCopyContainer(container), key, child);
 				continue;
 			}
 			if (node?.rule !== void 0 || inherited !== void 0) {
 				if (requiresDelegation(value)) return delegate;
-				const redacted = node?.rule === void 0 ? applyInheritedLeaf(value, inherited, buildSegment("index", index), index, plan, rootInput) : applyTerminalRule(value, node.rule, plan, rootInput);
+				const redacted = node?.rule === void 0 ? applyInheritedLeaf(value, inherited, buildSegment("property", key), key, plan, rootInput) : applyTerminalRule(value, node.rule, plan, rootInput);
 				copy ??= shallowCopyContainer(container);
-				if (isRemovedValue(redacted)) (removedIndices ??= []).push(index);
-				else copy[index] = redacted;
-				continue;
-			}
-			if (requiresDelegation(value)) return delegate;
-		}
-		if (copy === void 0) return container;
-		if (removedIndices !== void 0) {
-			const compacted = copy;
-			let removedCount = 0;
-			for (const removedIndex of removedIndices) {
-				compacted.splice(removedIndex - removedCount, 1);
-				removedCount += 1;
+				if (isRemovedValue(redacted)) delete copy[key];
+				else setObjectEntry(copy, key, redacted);
 			}
 		}
-		return copy;
+		return copy ?? container;
+	} finally {
+		budget.depth -= 1;
 	}
-	for (const key in container) {
-		const value = container[key];
-		const node = level.propertyChildren?.get(key);
-		if (node?.rule !== void 0 && !node.rule.policy.retainStructure) {
-			const redacted = applyTerminalRule(value, node.rule, plan, rootInput);
-			copy ??= shallowCopyContainer(container);
-			if (isRemovedValue(redacted)) delete copy[key];
-			else copy[key] = redacted;
-			continue;
-		}
-		if (Array.isArray(value) || isPlainObject$1(value)) {
-			const childInherited = resolveChildInherited(node, inherited, "property", key);
-			const child = applyNodes(value, node ?? emptyLevel, childInherited, plan, rootInput);
-			if (child === delegate) return delegate;
-			if (child !== value) (copy ??= shallowCopyContainer(container))[key] = child;
-			continue;
-		}
-		if (node?.rule !== void 0 || inherited !== void 0) {
-			if (requiresDelegation(value)) return delegate;
-			const redacted = node?.rule === void 0 ? applyInheritedLeaf(value, inherited, buildSegment("property", key), key, plan, rootInput) : applyTerminalRule(value, node.rule, plan, rootInput);
-			copy ??= shallowCopyContainer(container);
-			if (isRemovedValue(redacted)) delete copy[key];
-			else copy[key] = redacted;
-			continue;
-		}
-		if (requiresDelegation(value)) return delegate;
-	}
-	return copy ?? container;
 };
-const buildFastLaneExecutor = (plan, fallback) => {
+const isDescendable = (value) => {
+	return Array.isArray(value) || isPlainObject$1(value);
+};
+const resolveRetainTerminal = (value, childNode, plan, rootInput, ancestorCopies, budget) => {
+	if (isDescendable(value)) {
+		const existing = ancestorCopies.get(value);
+		if (existing !== void 0) return existing;
+		const descended = redactRetained(value, childNode, enterRetain(childNode.rule), plan, rootInput, budget);
+		if (descended === delegate) return delegate;
+		if (descended !== value) ancestorCopies.set(value, descended);
+		return descended;
+	}
+	if (requiresDelegation(value)) return delegate;
+	return applyTerminalRule(value, childNode.rule, plan, rootInput);
+};
+const navigateNode = (container, level, plan, rootInput, ancestorCopies, compactedArrayCopies, budget) => {
+	let copy = ancestorCopies.get(container);
+	let removedIndices;
+	if (level.indexChildren !== void 0) for (const [index, childNode] of level.indexChildren) {
+		if (!(index in container)) continue;
+		const value = container[index];
+		if (childNode.rule !== void 0 && !childNode.rule.policy.retainStructure) {
+			const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput);
+			if (copy === void 0) {
+				copy = shallowCopyContainer(container);
+				ancestorCopies.set(container, copy);
+			}
+			if (isRemovedValue(redacted)) (removedIndices ??= []).push(index);
+			else copy[index] = redacted;
+			continue;
+		}
+		if (childNode.rule !== void 0) {
+			const retained = resolveRetainTerminal(value, childNode, plan, rootInput, ancestorCopies, budget);
+			if (retained === delegate) return delegate;
+			if (retained !== value) {
+				if (copy === void 0) {
+					copy = shallowCopyContainer(container);
+					ancestorCopies.set(container, copy);
+				}
+				if (isRemovedValue(retained)) (removedIndices ??= []).push(index);
+				else copy[index] = retained;
+			}
+			continue;
+		}
+		if (isDescendable(value)) {
+			const child = navigateNode(value, childNode, plan, rootInput, ancestorCopies, compactedArrayCopies, budget);
+			if (child === delegate) return delegate;
+			if (child !== value) {
+				if (copy === void 0) {
+					copy = shallowCopyContainer(container);
+					ancestorCopies.set(container, copy);
+				}
+				copy[index] = child;
+			}
+			continue;
+		}
+		if (value !== null && typeof value === "object") return delegate;
+	}
+	if (level.propertyChildren !== void 0) for (const [key, childNode] of level.propertyChildren) {
+		if (!(key in container)) continue;
+		const value = container[key];
+		if (childNode.rule !== void 0 && !childNode.rule.policy.retainStructure) {
+			const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput);
+			if (copy === void 0) {
+				copy = shallowCopyContainer(container);
+				ancestorCopies.set(container, copy);
+			}
+			if (isRemovedValue(redacted)) delete copy[key];
+			else setObjectEntry(copy, key, redacted);
+			continue;
+		}
+		if (childNode.rule !== void 0) {
+			const retained = resolveRetainTerminal(value, childNode, plan, rootInput, ancestorCopies, budget);
+			if (retained === delegate) return delegate;
+			if (retained !== value) {
+				if (copy === void 0) {
+					copy = shallowCopyContainer(container);
+					ancestorCopies.set(container, copy);
+				}
+				if (isRemovedValue(retained)) delete copy[key];
+				else setObjectEntry(copy, key, retained);
+			}
+			continue;
+		}
+		if (isDescendable(value)) {
+			const child = navigateNode(value, childNode, plan, rootInput, ancestorCopies, compactedArrayCopies, budget);
+			if (child === delegate) return delegate;
+			if (child !== value) {
+				if (copy === void 0) {
+					copy = shallowCopyContainer(container);
+					ancestorCopies.set(container, copy);
+				}
+				setObjectEntry(copy, key, child);
+			}
+			continue;
+		}
+		if (value !== null && typeof value === "object") return delegate;
+	}
+	if (copy === void 0) return container;
+	if (removedIndices !== void 0 && Array.isArray(copy) && !compactedArrayCopies.has(copy)) {
+		const compacted = copy;
+		let removedCount = 0;
+		for (const removedIndex of removedIndices.sort((a, b) => a - b)) {
+			compacted.splice(removedIndex - removedCount, 1);
+			removedCount += 1;
+		}
+		compactedArrayCopies.add(copy);
+	}
+	return copy;
+};
+const buildPathDrivenExecutor = (plan, fallback) => {
 	const root = buildPrefixTree(Object.values(plan.exactPathRules));
-	return function fastLane(input) {
-		if (input === null) return input;
-		const inputType = typeof input;
-		if (inputType !== "object") return inputType === "bigint" ? fallback(input) : input;
+	return function pathDriven(input) {
+		if (input === null || typeof input !== "object") return input;
 		if (!(Array.isArray(input) || isPlainObject$1(input))) return fallback(input);
+		const budget = createTraversalBudget();
+		const compactedArrayCopies = /* @__PURE__ */ new Set();
 		let result;
 		try {
-			result = applyNodes(input, root, void 0, plan, input);
-		} catch {
+			result = navigateNode(input, root, plan, input, /* @__PURE__ */ new Map(), compactedArrayCopies, budget);
+		} catch (error) {
+			if (isBudgetExceededError(error)) throw error;
 			return fallback(input);
 		}
 		return result === delegate ? fallback(input) : result;
@@ -2140,7 +2252,7 @@ const applySerialisation = (value, serialise) => {
 };
 const createCallableRedactor = (plan) => {
 	const generalTraversal = (value) => redactValue(value, plan);
-	const executor = plan.isExactPathOnly ? buildFastLaneExecutor(plan, generalTraversal) : generalTraversal;
+	const executor = plan.pathDrivenOnly ? buildPathDrivenExecutor(plan, generalTraversal) : generalTraversal;
 	return function redact(value) {
 		return applySerialisation(executor(value), plan.serialise);
 	};
