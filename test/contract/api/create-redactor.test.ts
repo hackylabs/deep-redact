@@ -25,6 +25,7 @@ import {
   createLaneForcedRedactorFromPlan,
   delegationProofCorpus,
   exactPathEquivalenceCorpus,
+  wildcardEquivalenceCorpus,
 } from '../../fixtures/exact-path-equivalence/index.js'
 import {
   precedenceMatrixFixtures,
@@ -2753,6 +2754,56 @@ describe('Reusable redactor factory contract', () => {
     })
   })
 
+  describe('exact/wildcard prefix overlap routes to the general traversal (code review 2026-06-04)', () => {
+    // Regression guard for the wildcard-dedup divergence found in review of Story 8.4: a non-terminal
+    // concrete segment sharing a wildcard's `*` enumeration depth is an unsafe overlap the rule-driven
+    // engine's two-pass navigation cannot resolve. Such configs must compile pathDrivenOnly: false and
+    // take the O(N) general traversal (which resolves the per-leaf precedence correctly); the safe
+    // shapes — pure wildcard, exact-terminal-vs-wildcard at the same depth — stay on the fast lane.
+    const unsafeOverlapConfigs: ReadonlyArray<readonly [string, DeepRedactOptions]> = [
+      ['divergent leaf (a.b.c + a.*.d)', { paths: ['a.b.c', 'a.*.d'] }],
+      ['convergent leaf (a.b.c + a.*.c)', { paths: ['a.b.c', 'a.*.c'] }],
+      ['wildcard-vs-wildcard cross (a.b.* + a.*.c)', { paths: ['a.b.*', 'a.*.c'] }],
+      ['wildcard at depth 0 (a.b + *.d)', { paths: ['a.b', '*.d'] }],
+      ['array index intermediate (a.0.c + a.*.d)', { paths: ['a.0.c', 'a.*.d'] }],
+      ['public precedence (users.admin.email + users.*.email)', { paths: ['users.admin.email', 'users.*.email'] }],
+    ]
+
+    it.each(unsafeOverlapConfigs)('classifies %s as NOT path-driven', (_title, options) => {
+      expect(compileRedactorPlan(options).pathDrivenOnly).toBe(false)
+    })
+
+    const safeConfigs: ReadonlyArray<readonly [string, DeepRedactOptions]> = [
+      ['exact terminal vs wildcard, same depth (a.b + a.*)', { paths: ['a.b', 'a.*'] }],
+      ['pure wildcard (*.email)', { paths: ['*.email'] }],
+      ['non-overlapping mixed (a.b + c.*)', { paths: ['a.b', 'c.*'] }],
+      ['exact terminal above the wildcard depth (a + *.d)', { paths: ['a', '*.d'] }],
+    ]
+
+    it.each(safeConfigs)('keeps %s on the rule-driven fast lane', (_title, options) => {
+      expect(compileRedactorPlan(options).pathDrivenOnly).toBe(true)
+    })
+
+    it('redacts the divergent leaf the general traversal would (a.b.c + a.*.d)', () => {
+      const options: DeepRedactOptions = { paths: ['a.b.c', 'a.*.d'] }
+      const payload = (): unknown => ({ a: { b: { c: 1, d: 2 }, x: { d: 3 } } })
+
+      // a.b.d — reached via a.* and the a.b intermediate — must be redacted, matching the oracle.
+      expect(deepRedact(options)(payload())).toStrictEqual({
+        a: { b: { c: '[REDACTED]', d: '[REDACTED]' }, x: { d: '[REDACTED]' } },
+      })
+      expect(deepRedact(options)(payload()))
+        .toStrictEqual(redactValue(payload(), compileRedactorPlan(options)))
+    })
+
+    it('keeps exact precedence on the convergent leaf (a.b.c="X" wins over a.*.c="Y")', () => {
+      const redact = deepRedact({ paths: [{ path: 'a.b.c', censor: 'X' }, { path: 'a.*.c', censor: 'Y' }] })
+
+      expect(redact({ a: { b: { c: 1 }, x: { c: 2 } } }))
+        .toStrictEqual({ a: { b: { c: 'X' }, x: { c: 'Y' } } })
+    })
+  })
+
   it('gives exact-path rules precedence over regex path-segment matches on the same leaf', () => {
     const redact = deepRedact({
       paths: [
@@ -5045,5 +5096,188 @@ describe('Rule-driven engine vs. general traversal equivalence', () => {
         redactValue(buildPayload(), plan),
       )
     })
+  })
+})
+
+describe('Wildcard rule-driven engine vs. general traversal equivalence (Story 8.4)', () => {
+  const failOnDelegation = (): never => {
+    throw new Error('rule-driven engine unexpectedly delegated to the general traversal')
+  }
+
+  it.each(wildcardEquivalenceCorpus)(
+    'fast-lane and generic-lane are byte-identical for: $title',
+    (entry) => {
+      // (a) Control — the config selects the rule-driven engine and carries wildcard rules.
+      const plan = compileRedactorPlan(entry.options)
+      expect(plan.pathDrivenOnly).toBe(true)
+      expect(plan.dynamicPathRules.length).toBeGreaterThan(0)
+
+      // (b) Both lanes derived from the same compiled plan via the lane-forcing harness.
+      const fastStructured = createLaneForcedRedactorFromPlan(plan, 'fast')(entry.createPayload())
+      const genericStructured = createLaneForcedRedactorFromPlan(plan, 'generic')(entry.createPayload())
+
+      expect(fastStructured).toStrictEqual(entry.expectedStructured)
+      expect(genericStructured).toStrictEqual(entry.expectedStructured)
+      expect(fastStructured).toStrictEqual(genericStructured)
+
+      expect(JSON.stringify(fastStructured)).toBe(entry.expectedSerialised)
+      expect(JSON.stringify(genericStructured)).toBe(entry.expectedSerialised)
+
+      // (c) Prove the fast lane stays on the rule-driven engine — no delegation — for these configs.
+      expect(buildPathDrivenExecutor(plan, failOnDelegation)(entry.createPayload()))
+        .toStrictEqual(entry.expectedStructured)
+    },
+  )
+
+  it('delivers the concrete matched path to a wildcard function censor for every matched key, identical across lanes (AC 3)', () => {
+    // Capture EVERY invocation's context (not just the last): a wildcard rule matches multiple
+    // concrete keys, and each must report its own concrete path, not the wildcard signature.
+    const fastContexts: FunctionCensorContext[] = []
+    const genericContexts: FunctionCensorContext[] = []
+
+    const fastSpy = vi.fn((_value: unknown, ctx: FunctionCensorContext) => {
+      fastContexts.push(ctx)
+      return '[FN-SPY]'
+    })
+    const genericSpy = vi.fn((_value: unknown, ctx: FunctionCensorContext) => {
+      genericContexts.push(ctx)
+      return '[FN-SPY]'
+    })
+
+    const createPayload = () => ({ users: { email: 'a' }, accounts: { email: 'b' } })
+
+    const fastPlan = compileRedactorPlan({ paths: [{ path: '*.email', censor: fastSpy }] })
+    const genericPlan = compileRedactorPlan({ paths: [{ path: '*.email', censor: genericSpy }] })
+
+    buildPathDrivenExecutor(fastPlan, failOnDelegation)(createPayload())
+    redactValue(createPayload(), genericPlan)
+
+    expect(fastSpy).toHaveBeenCalledTimes(2)
+    expect(genericSpy).toHaveBeenCalledTimes(2)
+
+    // Both matched keys — not just the last — report their own concrete path, not the wildcard
+    // signature. Order-independent: the rule-driven engine may emit in rule-configuration order.
+    expect([...fastContexts].map((ctx) => ctx.matchedPath).sort()).toStrictEqual([
+      ['accounts', 'email'],
+      ['users', 'email'],
+    ])
+    for (const ctx of fastContexts) {
+      expect(ctx.terminalKey).toBe('email')
+      // rulePath surfaces the configured wildcard signature, as the general traversal does.
+      expect(ctx.rulePath).toStrictEqual([{ any: true }, 'email'])
+      expect(ctx.rootInput).toStrictEqual(createPayload())
+    }
+
+    // Every context is delivered identically across lanes (compared as order-independent sets).
+    const byMatchedPath = (contexts: FunctionCensorContext[]) =>
+      [...contexts].sort((left, right) => left.matchedPath.join('.').localeCompare(right.matchedPath.join('.')))
+    expect(byMatchedPath(fastContexts)).toStrictEqual(byMatchedPath(genericContexts))
+  })
+
+  it('routes a wildcard censor-failure diagnostic to the concrete matched path, matching the general traversal (AC 3)', () => {
+    const throwingCensor = (): never => {
+      throw new Error('boom')
+    }
+    const createPayload = () => ({ users: { email: 'a' }, accounts: { email: 'b' } })
+
+    const fastEvents: DiagnosticEvent[] = []
+    const fastPlan = compileRedactorPlan({
+      paths: [{ path: '*.email', censor: throwingCensor }],
+      diagnostics: { sink: (event: DiagnosticEvent) => { fastEvents.push(event) } },
+    })
+    buildPathDrivenExecutor(fastPlan, failOnDelegation)(createPayload())
+
+    const genericEvents: DiagnosticEvent[] = []
+    const genericPlan = compileRedactorPlan({
+      paths: [{ path: '*.email', censor: throwingCensor }],
+      diagnostics: { sink: (event: DiagnosticEvent) => { genericEvents.push(event) } },
+    })
+    redactValue(createPayload(), genericPlan)
+
+    // Diagnostic *content* (canonical path) matches the general traversal; event ordering is
+    // allowed to differ by contract, so compare sorted paths.
+    expect(fastEvents.map((event) => event.path).sort()).toStrictEqual(['accounts.email', 'users.email'])
+    expect(genericEvents.map((event) => event.path).sort()).toStrictEqual(['accounts.email', 'users.email'])
+    expect(fastEvents.every((event) => event.event === 'redaction.failure')).toBe(true)
+  })
+
+  it('throws BUDGET_EXCEEDED when wildcard enumeration exceeds maxNodes (AC 9)', () => {
+    const wide = deepRedact({ paths: ['*.x'], maxNodes: 3 })
+    const payload = { a: { x: 1 }, b: { x: 2 }, c: { x: 3 }, d: { x: 4 }, e: { x: 5 } }
+
+    expect(() => wide(payload)).toThrowError(
+      expect.objectContaining({ code: 'BUDGET_EXCEEDED' }),
+    )
+
+    // Within budget the same wildcard config completes without throwing.
+    const narrow = deepRedact({ paths: ['*.x'], maxNodes: 3 })
+    expect(() => narrow({ a: { x: 1 }, b: { x: 2 } })).not.toThrow()
+  })
+
+  it('censors a non-plain object matched at a wildcard terminal wholesale, no descent or delegation (AC 6)', () => {
+    const plan = compileRedactorPlan({ paths: ['*.when'] })
+    const createPayload = () => ({ u: { when: new Date('2020-01-01T00:00:00.000Z') } })
+
+    const result = buildPathDrivenExecutor(plan, failOnDelegation)(createPayload())
+
+    expect(result).toStrictEqual({ u: { when: '[REDACTED]' } })
+    expect(result).toStrictEqual(redactValue(createPayload(), plan))
+  })
+
+  it('censors a circular reference matched at a wildcard terminal wholesale (AC 6)', () => {
+    const plan = compileRedactorPlan({ paths: ['*.self'] })
+    const createPayload = (): Record<string, unknown> => {
+      const inner: Record<string, unknown> = {}
+      inner.self = inner
+      return { u: inner }
+    }
+
+    const result = buildPathDrivenExecutor(plan, failOnDelegation)(createPayload()) as { u: { self: unknown } }
+
+    expect(result.u.self).toBe('[REDACTED]')
+  })
+
+  it('delegates when a value enumerated under a wildcard has a non-plain prototype (AC 6)', () => {
+    const plan = compileRedactorPlan({ paths: ['*.b'] })
+    const createPayload = () => ({ a: Object.assign(Object.create({ poison: 1 }) as object, { b: 'x' }) })
+
+    // A throwing fallback proves delegation is triggered for the non-plain intermediate.
+    expect(() => buildPathDrivenExecutor(plan, failOnDelegation)(createPayload())).toThrow(/delegated/)
+
+    // With the real fallback, the output matches the general traversal exactly.
+    const wired = buildPathDrivenExecutor(plan, (value) => redactValue(value, plan))(createPayload())
+    expect(wired).toStrictEqual(redactValue(createPayload(), plan))
+  })
+
+  it('delegates a retain terminal sitting above a wildcard segment, output matches the general traversal (AC 5)', () => {
+    const plan = compileRedactorPlan({ paths: [{ path: 'a', retainStructure: true }, 'a.*'] })
+    expect(plan.pathDrivenOnly).toBe(true)
+
+    const createPayload = () => ({ a: { x: { deep: 1 }, y: 2 } })
+
+    expect(() => buildPathDrivenExecutor(plan, failOnDelegation)(createPayload())).toThrow(/delegated/)
+
+    const wired = buildPathDrivenExecutor(plan, (value) => redactValue(value, plan))(createPayload())
+    expect(wired).toStrictEqual(redactValue(createPayload(), plan))
+  })
+
+  it('shallow-copies a shared ancestor exactly once across an exact and a wildcard redaction (AC 5)', () => {
+    // `data` is the common ancestor of the exact `data.token` and the wildcard `data.*.email`.
+    const plan = compileRedactorPlan({ paths: ['data.token', 'data.*.email'] })
+    const payload = { data: { token: 'T', users: { email: 'e1' }, admins: { email: 'e2' } } }
+
+    const result = buildPathDrivenExecutor(plan, failOnDelegation)(payload) as {
+      data: Record<string, unknown>;
+    }
+
+    // Both redactions landed on a single copy of `data` (not two competing copies).
+    expect(result.data).toStrictEqual({
+      token: '[REDACTED]',
+      users: { email: '[REDACTED]' },
+      admins: { email: '[REDACTED]' },
+    })
+    // The original input is never mutated.
+    expect(payload.data.token).toBe('T')
+    expect(result.data).not.toBe(payload.data)
   })
 })

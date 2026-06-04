@@ -17,7 +17,11 @@ const createEmptyLookupTable = <T>(): Record<string, T> =>
 
 export const createGenericisedPlan = (plan: CompiledRedactorPlan): CompiledRedactorPlan => {
   if (plan.dynamicPathRules.length > 0) {
-    throw new Error('createGenericisedPlan: plan must have no pre-existing dynamicPathRules')
+    // A wildcard (or otherwise dynamic) plan already routes through the O(N) general traversal,
+    // and `redactValue` applies the native exact-path-before-dynamic-path precedence. Run it
+    // as-is so the generic lane mirrors production precedence; converting the exact rules to
+    // dynamic here would flatten that ordering and diverge for exact-over-wildcard overlaps.
+    return plan
   }
 
   const convertedRules: CompiledDynamicPathRule[] = []
@@ -456,6 +460,133 @@ export const exactPathEquivalenceCorpus: readonly ExactPathEquivalenceCorpusEntr
     createPayload: () => ({ user: { password: 'secret1', email: 'a@b.com', safe: 'keep' } }),
     expectedStructured: { user: { password: '[REDACTED]', email: '[REDACTED]', safe: 'keep' } },
     expectedSerialised: '{"user":{"password":"[REDACTED]","email":"[REDACTED]","safe":"keep"}}',
+  },
+]
+
+// ── Wildcard equivalence corpus (Story 8.4) ──────────────────────────────────
+// Single-level `*` configs that select the rule-driven engine (pathDrivenOnly === true) and stay
+// on the fast lane (no delegation). Each pins both structured and serialised goldens; the
+// consuming test additionally asserts fast-lane === generic-lane for the binding equivalence
+// contract. CANARY serialised strings catch property-order regressions before the corpus runs.
+
+const SERIALISED_WILDCARD_TERMINAL_MULTI_KEY_CANARY =
+  '{"users":{"email":"[REDACTED]","name":"n"},"accounts":{"email":"[REDACTED]"},"other":5}' as const
+
+const SERIALISED_WILDCARD_OVER_ARRAY_CANARY =
+  '{"list":[{"secret":"[REDACTED]","keep":1},{"secret":"[REDACTED]"},7]}' as const
+
+const SERIALISED_WILDCARD_MID_PATH_CANARY =
+  '{"a":{"x":{"b":"[REDACTED]","c":2},"y":{"b":"[REDACTED]"}}}' as const
+
+const SERIALISED_WILDCARD_PRECEDENCE_OVERLAP_CANARY =
+  '{"a":{"b":"[EXACT-B]","c":"[WILD]","d":"[WILD]"}}' as const
+
+const SERIALISED_WILDCARD_RETAIN_STRUCTURE_CANARY =
+  '{"u1":{"profile":{"s":"[REDACTED]","t":"[REDACTED]"}},"u2":{"profile":{"s":"[REDACTED]"}}}' as const
+
+const SERIALISED_WILDCARD_SHARED_ANCESTOR_CANARY =
+  '{"data":{"token":"[REDACTED]","users":{"email":"[REDACTED]"},"admins":{"email":"[REDACTED]"}}}' as const
+
+const SERIALISED_WILDCARD_ARRAY_REMOVE_COMPACTION_CANARY =
+  '{"list":["[WILD]","[WILD]"]}' as const
+
+const SERIALISED_WILDCARD_FUNCTION_CENSOR_CANARY =
+  '{"users":{"email":"[FN:users.email]"},"accounts":{"email":"[FN:accounts.email]"}}' as const
+
+const SERIALISED_WILDCARD_NON_CONFIGURED_DATE_SIBLING_CANARY =
+  '{"u":{"email":"[REDACTED]","when":"2020-01-01T00:00:00.000Z"}}' as const
+
+export const wildcardEquivalenceCorpus: readonly ExactPathEquivalenceCorpusEntry[] = [
+  {
+    name: 'wildcard-terminal-multi-key',
+    title: 'wildcard terminal matching several object keys — *.email',
+    exactPathEligibilityReason: 'single `*` segment then an exact terminal; matches email under every root key',
+    options: { paths: ['*.email'] },
+    createPayload: () => ({ users: { email: 'a', name: 'n' }, accounts: { email: 'b' }, other: 5 }),
+    expectedStructured: { users: { email: '[REDACTED]', name: 'n' }, accounts: { email: '[REDACTED]' }, other: 5 },
+    expectedSerialised: SERIALISED_WILDCARD_TERMINAL_MULTI_KEY_CANARY,
+  },
+  {
+    name: 'wildcard-over-array',
+    title: 'wildcard over an array — list.*.secret',
+    exactPathEligibilityReason: 'exact `list`, then a `*` over array indices, then exact `secret`; array holes/non-objects skipped',
+    options: { paths: ['list.*.secret'] },
+    createPayload: () => ({ list: [{ secret: 's1', keep: 1 }, { secret: 's2' }, 7] }),
+    expectedStructured: { list: [{ secret: '[REDACTED]', keep: 1 }, { secret: '[REDACTED]' }, 7] },
+    expectedSerialised: SERIALISED_WILDCARD_OVER_ARRAY_CANARY,
+  },
+  {
+    name: 'wildcard-mid-path',
+    title: 'mid-path wildcard — a.*.b',
+    exactPathEligibilityReason: 'exact `a`, then a `*`, then exact `b`; exact segments before and after the wildcard',
+    options: { paths: ['a.*.b'] },
+    createPayload: () => ({ a: { x: { b: 1, c: 2 }, y: { b: 3 } } }),
+    expectedStructured: { a: { x: { b: '[REDACTED]', c: 2 }, y: { b: '[REDACTED]' } } },
+    expectedSerialised: SERIALISED_WILDCARD_MID_PATH_CANARY,
+  },
+  {
+    name: 'wildcard-precedence-overlap',
+    title: 'exact path wins over wildcard at a shared level — a.b and a.* (AC 4)',
+    exactPathEligibilityReason: 'exact `a.b` and wildcard `a.*` both target key b; the exact rule wins and the wildcard does not re-touch b',
+    options: {
+      paths: [
+        { path: 'a.b', censor: '[EXACT-B]' },
+        { path: 'a.*', censor: '[WILD]' },
+      ],
+    },
+    createPayload: () => ({ a: { b: 'B', c: 'C', d: 'D' } }),
+    expectedStructured: { a: { b: '[EXACT-B]', c: '[WILD]', d: '[WILD]' } },
+    expectedSerialised: SERIALISED_WILDCARD_PRECEDENCE_OVERLAP_CANARY,
+  },
+  {
+    name: 'wildcard-retain-structure',
+    title: 'wildcard terminal with retainStructure — *.profile',
+    exactPathEligibilityReason: 'single `*` then exact `profile` with retainStructure: true; descendant leaves redacted under the default policy',
+    options: { paths: [{ path: '*.profile', retainStructure: true }] },
+    createPayload: () => ({ u1: { profile: { s: 1, t: 2 } }, u2: { profile: { s: 3 } } }),
+    expectedStructured: { u1: { profile: { s: '[REDACTED]', t: '[REDACTED]' } }, u2: { profile: { s: '[REDACTED]' } } },
+    expectedSerialised: SERIALISED_WILDCARD_RETAIN_STRUCTURE_CANARY,
+  },
+  {
+    name: 'wildcard-shared-ancestor',
+    title: 'wildcard and exact rule sharing an ancestor copied once — data.token and data.*.email (AC 5)',
+    exactPathEligibilityReason: 'exact `data.token` and wildcard `data.*.email` share the ancestor `data`; one shallow copy carries both redactions',
+    options: { paths: ['data.token', 'data.*.email'] },
+    createPayload: () => ({ data: { token: 'T', users: { email: 'e1' }, admins: { email: 'e2' } } }),
+    expectedStructured: { data: { token: '[REDACTED]', users: { email: '[REDACTED]' }, admins: { email: '[REDACTED]' } } },
+    expectedSerialised: SERIALISED_WILDCARD_SHARED_ANCESTOR_CANARY,
+  },
+  {
+    name: 'wildcard-array-remove-compaction',
+    title: 'exact remove + wildcard censor feed one removedIndices compaction — list.0 remove, list.* censor (AC 5)',
+    exactPathEligibilityReason: 'exact `list.0` removal and wildcard `list.*` censor land on one array copy; the removed index compacts after the wildcard pass',
+    options: {
+      paths: [
+        { path: 'list.0', remove: true },
+        { path: 'list.*', censor: '[WILD]' },
+      ],
+    },
+    createPayload: () => ({ list: ['a', 'b', 'c'] }),
+    expectedStructured: { list: ['[WILD]', '[WILD]'] },
+    expectedSerialised: SERIALISED_WILDCARD_ARRAY_REMOVE_COMPACTION_CANARY,
+  },
+  {
+    name: 'wildcard-function-censor',
+    title: 'wildcard terminal with a function censor reporting the concrete matched path — *.email (AC 3)',
+    exactPathEligibilityReason: 'single `*` then exact `email` with a function censor; the censor receives the concrete matched key path, not the wildcard signature',
+    options: { paths: [{ path: '*.email', censor: determineFunctionCensorOutput }] },
+    createPayload: () => ({ users: { email: 'a' }, accounts: { email: 'b' } }),
+    expectedStructured: { users: { email: '[FN:users.email]' }, accounts: { email: '[FN:accounts.email]' } },
+    expectedSerialised: SERIALISED_WILDCARD_FUNCTION_CENSOR_CANARY,
+  },
+  {
+    name: 'wildcard-non-configured-date-sibling',
+    title: 'non-configured Date sibling under a wildcard config left raw — *.email',
+    exactPathEligibilityReason: 'single `*` then exact `email`; the sibling `when` is never visited, so the live Date is carried over by reference',
+    options: { paths: ['*.email'] },
+    createPayload: () => ({ u: { email: 'e', when: new Date('2020-01-01T00:00:00.000Z') } }),
+    expectedStructured: { u: { email: '[REDACTED]', when: new Date('2020-01-01T00:00:00.000Z') } },
+    expectedSerialised: SERIALISED_WILDCARD_NON_CONFIGURED_DATE_SIBLING_CANARY,
   },
 ]
 

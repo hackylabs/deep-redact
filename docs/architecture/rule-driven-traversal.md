@@ -140,13 +140,34 @@ mode, which visits the matched breadth of the payload. Single-level `*` rules ar
 (optionally with single-level `*`) is choosing the targeted model; choosing
 key, substring, or `**` rules is choosing the breadth-visiting `O(N)` model.
 
-## Traversal Mode Boundary (Forward Reference)
+## Traversal Mode Boundary
 
-Which mode a configuration uses is decided at compile time. A future
-`pathDrivenOnly` determination will gate the rule-driven mode against the
-`O(N)` traversal mode: configurations using only exact paths and single-level
-`*` segments take the rule-driven path, while configurations with key,
-substring, or recursive-wildcard (`**`) rules take the breadth-visiting path.
-The precise shape of that flag is finalised alongside the `**` and substring
-work in Stories 8.4 and 8.5. This document defines the **contract** the modes
-must honour; it does not define the flag.
+Which mode a configuration uses is decided at compile time by the
+`pathDrivenOnly` flag. A configuration takes the **rule-driven** path when its
+targeting is driven solely by exact paths and/or single-level `*` wildcard
+paths, with no key rules, regex-key rules, or substring rules (`stringTests`),
+and none of the key-matching mode flags (`fuzzyKeyMatch`,
+`caseSensitiveKeyMatch: false`); concretely, every dynamic path rule must be
+single-wildcard-only — its segments are all exact properties/indices or
+single-level `*`, with no recursive-wildcard (`**`), ignore segments, or
+regex/ignore-regex segments. Any other configuration — one containing a `**`
+segment, an `ignore`/`regex` path segment, a key or regex-key rule, a substring
+rule, or a disqualifying option flag — takes the breadth-visiting `O(N)`
+traversal mode.
+
+Single-level `*` wildcard support landed in **Story 8.4**: a `*` segment is
+navigated by enumerating only the keys of the container reached at that depth
+(`O(K)` at the wildcard level), not by walking the whole payload. Exact path
+segments before and after the `*` still use direct property/index access.
+Recursive-wildcard (`**`), key-based, and substring rules remain on the `O(N)`
+mode and are addressed in Stories 8.5–8.6.
+
+Compile-time selection is necessary but not sufficient: the rule-driven engine
+is payload-aware at call time. A non-plain prototype on a configured path, a
+non-plain container reached at a wildcard depth (when the `*` is not the
+terminal), or a hostile accessor delegates the whole call to the `O(N)`
+traversal, which produces identical output. A `*` **terminal** whose matched
+value is a non-plain object or circular reference is censored wholesale (censor
+wins, no descent, no delegation), mirroring the exact-terminal behaviour. This
+document defines the **contract** the modes must honour; the flag's
+implementation lives in the compiler.

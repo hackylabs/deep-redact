@@ -510,6 +510,66 @@ export const isDynamicPathSegment = (segment: PathSegment): segment is DynamicPa
   return !isExactPathSegment(segment)
 }
 
+export const isSingleWildcardSegment = (segment: PathSegment): segment is WildcardPathSegment => {
+  return segment.kind === 'wildcard'
+}
+
+// A rule is "single-wildcard-only" when every segment is an exact property/index or a single-
+// level `*` wildcard — and crucially none is `**` (recursive-wildcard), an ignore selector, or a
+// regex/ignore-regex. These rules are the ones the rule-driven engine can navigate by enumerating
+// only the keys at wildcard depths; everything else still routes to the O(N) general traversal.
+export const containsOnlySingleWildcardDynamics = (segments: readonly PathSegment[]): boolean => {
+  return segments.every((segment) => isExactPathSegment(segment) || isSingleWildcardSegment(segment))
+}
+
+const exactSegmentsEqual = (left: PathSegment, right: PathSegment): boolean => {
+  if (left.kind === 'property' && right.kind === 'property') return left.value === right.value
+  if (left.kind === 'index' && right.kind === 'index') return left.value === right.value
+  return false
+}
+
+// Does `candidate` occupy `wildcardRule`'s `*` enumeration depth with a *non-terminal* concrete
+// (property/index) segment? That is the one shape the rule-driven wildcard loop resolves wrongly:
+// `candidate` shares the wildcard's concrete prefix and carries a further concrete segment AT the
+// wildcard depth, so its trie edge there is an intermediate, not a terminal. The wildcard loop's
+// precedence dedup skips any key already claimed by an exact edge, so `candidate`'s key is skipped
+// and the wildcard's deeper sub-path (or wholesale terminal) is silently dropped on that key —
+// diverging from the general traversal. (A concrete *terminal* at the wildcard depth, e.g. `a.b`
+// vs `a.*`, is safe: the exact terminal correctly wins wholesale, which is what skipping it does.)
+const occupiesWildcardDepthAsIntermediate = (
+  candidate: readonly PathSegment[],
+  wildcardRule: readonly PathSegment[],
+): boolean => {
+  const wildcardDepth = wildcardRule.findIndex((segment) => isSingleWildcardSegment(segment))
+  if (wildcardDepth === -1) return false
+  // `candidate` must reach past the wildcard depth via concrete edges only: a concrete key AT the
+  // wildcard depth (the key that would be skipped) plus at least one further segment below it.
+  if (candidate.length < wildcardDepth + 2) return false
+  for (let depth = 0; depth <= wildcardDepth; depth += 1) {
+    if (!isExactPathSegment(candidate[depth])) return false
+  }
+  // The shared prefix above the wildcard depth must match exactly (same trie edges), otherwise the
+  // two rules occupy different branches and never collide.
+  for (let depth = 0; depth < wildcardDepth; depth += 1) {
+    if (!exactSegmentsEqual(candidate[depth], wildcardRule[depth])) return false
+  }
+  return true
+}
+
+// True when any single-wildcard path rule's `*` enumeration depth coincides with another rule's
+// non-terminal concrete segment on a shared prefix. Such configs MUST NOT take the rule-driven fast
+// lane: its two-pass (exact-then-wildcard) navigation cannot resolve the per-leaf precedence between
+// a continuing exact/wildcard path and a wildcard at the same depth, so they route to the O(N)
+// general traversal which resolves it correctly. Pure-wildcard configs and exact-terminal-vs-
+// wildcard at the same depth are unaffected. Operates on every path rule's segments (exact and
+// wildcard alike) because a wildcard rule's own concrete prefix can be the intermediate that another
+// wildcard rule's `*` enumerates (e.g. `a.b.*` + `a.*.c`).
+export const hasUnsafeWildcardOverlap = (rules: readonly (readonly PathSegment[])[]): boolean => {
+  return rules.some((wildcardRule) =>
+    rules.some((candidate) => occupiesWildcardDepthAsIntermediate(candidate, wildcardRule)),
+  )
+}
+
 export const parsePathSelector = (selector: PathSelector): ParsedPathSelector => {
   return typeof selector === 'string'
     ? parseStringPathSelector(selector)

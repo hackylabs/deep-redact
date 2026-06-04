@@ -20,6 +20,8 @@ import {
 } from './compile-ignored-value-types.js'
 import { compileTransformers, type CompiledTransformersPlan } from './compile-transformers.js'
 import {
+  containsOnlySingleWildcardDynamics,
+  hasUnsafeWildcardOverlap,
   isDynamicPathSegment,
   parsePathSelector,
   type ExactPathSegment,
@@ -94,14 +96,12 @@ export interface CompiledRedactorPlan {
   readonly exactPathRules: Readonly<Record<string, CompiledExactPathRule>>;
   readonly exactKeyRules: CompiledExactKeyRules;
   readonly ignoredValueTypes: CompiledIgnoredValueTypesPlan;
-  // Selects the rule-driven exact-path navigation engine: the config targets exact string
-  // paths exclusively, with no key, regex-key, or stringTest rules. Necessary but not
-  // sufficient — final navigation is payload-aware at call time (a non-plain prototype on a
-  // configured path delegates to the general traversal; see navigate-exact-paths.ts).
-  // NOTE: the architecture defines `pathDrivenOnly` as exact paths AND/OR single-level `*`,
-  // but the current predicate is narrower (exact-only; no `*` segment support). When single-
-  // level `*` support is added, this predicate must be WIDENED to include it, not merely
-  // consumed as-is.
+  // Selects the rule-driven navigation engine: the config targets exact string paths and/or
+  // single-level `*` wildcard paths exclusively, with no key, regex-key, or stringTest rules,
+  // and none of the disqualifying selectors (`**` recursive wildcard, ignore segments,
+  // regex/ignore-regex segments). Necessary but not sufficient — final navigation is payload-
+  // aware at call time (a non-plain prototype on a configured path, or a non-plain container
+  // reached at a wildcard depth, delegates to the general traversal; see navigate-exact-paths.ts).
   readonly pathDrivenOnly: boolean;
   readonly maxDepth: number;
   readonly maxNodes: number;
@@ -335,11 +335,26 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
   const substringRules = compileSubstringRules(options.stringTests ?? [], defaults)
 
   // The config selects the rule-driven engine only when redaction is driven purely by exact
-  // string paths: no dynamic path segments, no key/regex-key rules, no stringTests, and
-  // none of the key-matching mode flags (fuzzyKeyMatch, caseSensitiveKeyMatch: false) that
-  // would alter matching behaviour if key rules were present.
-  const pathDrivenOnly = compiledPathRules.dynamicPathRules.length === 0
-    && Object.keys(compiledPathRules.exactPathRules).length > 0
+  // string paths and/or single-level `*` wildcard paths: every dynamic path rule is single-
+  // wildcard-only (no `**`, ignore, or regex segments), no key/regex-key rules, no stringTests,
+  // and none of the key-matching mode flags (fuzzyKeyMatch, caseSensitiveKeyMatch: false) that
+  // would alter matching behaviour if key rules were present. At least one path rule must exist
+  // (an exact path or a qualifying wildcard rule). It is additionally rejected when a wildcard's
+  // `*` enumeration depth coincides with another rule's non-terminal concrete segment on a shared
+  // prefix (e.g. `a.b.c` + `a.*.d`): the engine's two-pass navigation cannot resolve that per-leaf
+  // precedence, so such configs route to the O(N) general traversal instead.
+  const everyDynamicRuleIsSingleWildcard = compiledPathRules.dynamicPathRules
+    .every((rule) => containsOnlySingleWildcardDynamics(rule.segments))
+  const hasAnyPathRule = Object.keys(compiledPathRules.exactPathRules).length > 0
+    || compiledPathRules.dynamicPathRules.length > 0
+  const hasUnsafeOverlap = compiledPathRules.dynamicPathRules.length > 0
+    && hasUnsafeWildcardOverlap([
+      ...Object.values(compiledPathRules.exactPathRules).map((rule) => rule.segments),
+      ...compiledPathRules.dynamicPathRules.map((rule) => rule.segments),
+    ])
+  const pathDrivenOnly = everyDynamicRuleIsSingleWildcard
+    && hasAnyPathRule
+    && !hasUnsafeOverlap
     && exactKeyRules.literalMatchers.length === 0
     && regexKeyRules.matchers.length === 0
     && substringRules.length === 0

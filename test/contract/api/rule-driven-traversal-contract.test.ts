@@ -140,4 +140,77 @@ describe('Rule-driven traversal contract', () => {
       })
     })
   })
+
+  describe('Single-level wildcard cases (Story 8.4)', () => {
+    it('redacts a wildcard terminal matching several enumerated keys', () => {
+      const redact = deepRedact({ paths: ['*.email'] })
+      const payload = {
+        users: { email: 'u@example.com', name: 'keep' },
+        accounts: { email: 'a@example.com' },
+        other: 5,
+      }
+
+      expect(redact(payload)).toStrictEqual({
+        users: { email: '[REDACTED]', name: 'keep' },
+        accounts: { email: '[REDACTED]' },
+        other: 5,
+      })
+    })
+
+    it('redacts a mid-path wildcard with exact segments before and after — a.*.b', () => {
+      const redact = deepRedact({ paths: ['a.*.b'] })
+      const payload = { a: { x: { b: 1, c: 2 }, y: { b: 3 } } }
+
+      expect(redact(payload)).toStrictEqual({
+        a: { x: { b: '[REDACTED]', c: 2 }, y: { b: '[REDACTED]' } },
+      })
+    })
+
+    it('enumerates array indices under a wildcard, skipping non-object elements', () => {
+      const redact = deepRedact({ paths: ['list.*.secret'] })
+      const payload = { list: [{ secret: 's1', keep: 1 }, { secret: 's2' }, 7] }
+
+      expect(redact(payload)).toStrictEqual({
+        list: [{ secret: '[REDACTED]', keep: 1 }, { secret: '[REDACTED]' }, 7],
+      })
+    })
+
+    it('leaves a non-configured transformable sibling under a wildcard config raw, by identity', () => {
+      const redact = deepRedact({ paths: ['*.email'] })
+      const when = new Date('2020-01-01T00:00:00.000Z')
+      const payload = { user: { email: 'u@example.com', when } }
+
+      const output = redact(payload) as { user: { email: string; when: unknown } }
+
+      expect(output.user.email).toBe('[REDACTED]')
+      // The non-configured Date sibling is never visited, so it is carried over unchanged.
+      expect(output.user.when).toBe(when)
+    })
+
+    it('honours exact-path-over-wildcard precedence at a shared level — a.b wins over a.*', () => {
+      const redact = deepRedact({
+        paths: [
+          { path: 'a.b', censor: '[EXACT-B]' },
+          { path: 'a.*', censor: '[WILD]' },
+        ],
+      })
+      const payload = { a: { b: 'B', c: 'C', d: 'D' } }
+
+      expect(redact(payload)).toStrictEqual({
+        a: { b: '[EXACT-B]', c: '[WILD]', d: '[WILD]' },
+      })
+    })
+
+    it('redacts a wildcard leaf reached past a non-terminal exact intermediate — a.b.c + a.*.d', () => {
+      // The exact path a.b.c makes `b` an intermediate key; the wildcard a.*.d must still reach
+      // a.b.d through it (this overlap routes to the general traversal, which resolves it). Found
+      // in review of Story 8.4: the rule-driven dedup had skipped `b` and left a.b.d raw.
+      const redact = deepRedact({ paths: ['a.b.c', 'a.*.d'] })
+      const payload = { a: { b: { c: 1, d: 2 }, x: { d: 3 } } }
+
+      expect(redact(payload)).toStrictEqual({
+        a: { b: { c: '[REDACTED]', d: '[REDACTED]' }, x: { d: '[REDACTED]' } },
+      })
+    })
+  })
 })

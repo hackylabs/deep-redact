@@ -410,6 +410,28 @@ const isExactPathSegment = (segment) => {
 const isDynamicPathSegment = (segment) => {
 	return !isExactPathSegment(segment);
 };
+const isSingleWildcardSegment = (segment) => {
+	return segment.kind === "wildcard";
+};
+const containsOnlySingleWildcardDynamics = (segments) => {
+	return segments.every((segment) => isExactPathSegment(segment) || isSingleWildcardSegment(segment));
+};
+const exactSegmentsEqual = (left, right) => {
+	if (left.kind === "property" && right.kind === "property") return left.value === right.value;
+	if (left.kind === "index" && right.kind === "index") return left.value === right.value;
+	return false;
+};
+const occupiesWildcardDepthAsIntermediate = (candidate, wildcardRule) => {
+	const wildcardDepth = wildcardRule.findIndex((segment) => isSingleWildcardSegment(segment));
+	if (wildcardDepth === -1) return false;
+	if (candidate.length < wildcardDepth + 2) return false;
+	for (let depth = 0; depth <= wildcardDepth; depth += 1) if (!isExactPathSegment(candidate[depth])) return false;
+	for (let depth = 0; depth < wildcardDepth; depth += 1) if (!exactSegmentsEqual(candidate[depth], wildcardRule[depth])) return false;
+	return true;
+};
+const hasUnsafeWildcardOverlap = (rules) => {
+	return rules.some((wildcardRule) => rules.some((candidate) => occupiesWildcardDepthAsIntermediate(candidate, wildcardRule)));
+};
 const parsePathSelector = (selector) => {
 	return typeof selector === "string" ? parseStringPathSelector(selector) : parseStructuredPathSelector(selector);
 };
@@ -623,7 +645,10 @@ const compileRedactorPlan = (options = {}) => {
 	const exactKeyRules = compileExactKeyRules(options.keys ?? [], defaults, keyDefaults);
 	const regexKeyRules = compileRegexKeyRules(options.keys ?? [], defaults);
 	const substringRules = compileSubstringRules(options.stringTests ?? [], defaults);
-	const pathDrivenOnly = compiledPathRules.dynamicPathRules.length === 0 && Object.keys(compiledPathRules.exactPathRules).length > 0 && exactKeyRules.literalMatchers.length === 0 && regexKeyRules.matchers.length === 0 && substringRules.length === 0 && !options.fuzzyKeyMatch && options.caseSensitiveKeyMatch !== false;
+	const everyDynamicRuleIsSingleWildcard = compiledPathRules.dynamicPathRules.every((rule) => containsOnlySingleWildcardDynamics(rule.segments));
+	const hasAnyPathRule = Object.keys(compiledPathRules.exactPathRules).length > 0 || compiledPathRules.dynamicPathRules.length > 0;
+	const hasUnsafeOverlap = compiledPathRules.dynamicPathRules.length > 0 && hasUnsafeWildcardOverlap([...Object.values(compiledPathRules.exactPathRules).map((rule) => rule.segments), ...compiledPathRules.dynamicPathRules.map((rule) => rule.segments)]);
+	const pathDrivenOnly = everyDynamicRuleIsSingleWildcard && hasAnyPathRule && !hasUnsafeOverlap && exactKeyRules.literalMatchers.length === 0 && regexKeyRules.matchers.length === 0 && substringRules.length === 0 && !options.fuzzyKeyMatch && options.caseSensitiveKeyMatch !== false;
 	return Object.freeze({
 		diagnostics: compileDiagnostics(options.diagnostics),
 		defaults,
@@ -1465,33 +1490,79 @@ const shallowCopyContainer = (container) => {
 	}
 	return { ...container };
 };
+const appendMatchedKey = (matchedPath, key) => {
+	return matchedPath === void 0 ? [key] : [...matchedPath, key];
+};
+const renderConcreteCanonicalPath = (matchedPath) => {
+	let path;
+	for (const key of matchedPath) path = appendCanonicalPathSegment(path, typeof key === "number" ? {
+		kind: "index",
+		value: key
+	} : {
+		kind: "property",
+		value: key
+	});
+	return path ?? "";
+};
 const insertRule = (root, segments, rule) => {
 	let level = root;
 	for (let index = 0; index < segments.length; index += 1) {
 		const segment = segments[index];
 		let node;
-		if (segment.kind === "index") {
-			const map = level.indexChildren ??= /* @__PURE__ */ new Map();
-			node = map.get(segment.value);
-			if (node === void 0) {
-				node = {};
-				map.set(segment.value, node);
+		switch (segment.kind) {
+			case "index": {
+				const map = level.indexChildren ??= /* @__PURE__ */ new Map();
+				const existing = map.get(segment.value);
+				if (existing === void 0) {
+					node = {};
+					map.set(segment.value, node);
+				} else node = existing;
+				break;
 			}
-		} else {
-			const map = level.propertyChildren ??= /* @__PURE__ */ new Map();
-			node = map.get(segment.value);
-			if (node === void 0) {
-				node = {};
-				map.set(segment.value, node);
+			case "wildcard":
+				node = level.wildcardChild ??= {};
+				break;
+			case "property": {
+				const map = level.propertyChildren ??= /* @__PURE__ */ new Map();
+				const existing = map.get(segment.value);
+				if (existing === void 0) {
+					node = {};
+					map.set(segment.value, node);
+				} else node = existing;
+				break;
 			}
+			default: throw new TypeError(`Unsupported path segment kind "${segment.kind}" in rule-driven trie.`);
 		}
 		if (index === segments.length - 1) node.rule = rule;
 		level = node;
 	}
 };
-const buildPrefixTree = (rules) => {
+const markWildcardSubtrees = (node) => {
+	let hasWildcard = node.wildcardChild !== void 0 || node.rule?.kind === "wildcard";
+	if (node.wildcardChild !== void 0 && markWildcardSubtrees(node.wildcardChild)) hasWildcard = true;
+	if (node.indexChildren !== void 0) {
+		for (const child of node.indexChildren.values()) if (markWildcardSubtrees(child)) hasWildcard = true;
+	}
+	if (node.propertyChildren !== void 0) {
+		for (const child of node.propertyChildren.values()) if (markWildcardSubtrees(child)) hasWildcard = true;
+	}
+	node.subtreeHasWildcard = hasWildcard;
+	return hasWildcard;
+};
+const buildPrefixTree = (plan) => {
 	const root = {};
-	for (const rule of rules) insertRule(root, rule.segments, rule);
+	for (const rule of Object.values(plan.exactPathRules)) insertRule(root, rule.segments, {
+		canonicalPath: rule.canonicalPath,
+		kind: "exact",
+		policy: rule.policy,
+		rulePath: rule.rulePath
+	});
+	for (const rule of plan.dynamicPathRules) insertRule(root, rule.segments, {
+		kind: "wildcard",
+		policy: rule.policy,
+		rulePath: rule.rulePath
+	});
+	markWildcardSubtrees(root);
 	return root;
 };
 const emitCensorFailure = (plan, canonicalPath, value, error) => {
@@ -1512,6 +1583,20 @@ const applyTerminalRule = (value, rule, plan, rootInput) => {
 		return applyRedaction(value, rule.policy, noContext);
 	} catch (error) {
 		emitCensorFailure(plan, rule.canonicalPath, value, error);
+		return unsupportedValue;
+	}
+};
+const applyWildcardTerminalRule = (value, rule, plan, rootInput, matchedPath) => {
+	try {
+		if (typeof rule.policy.censor === "function") return applyRedaction(value, rule.policy, {
+			matchedPath: Object.freeze([...matchedPath]),
+			rootInput,
+			rulePath: rule.rulePath,
+			terminalKey: matchedPath.at(-1)
+		});
+		return applyRedaction(value, rule.policy, noContext);
+	} catch (error) {
+		emitCensorFailure(plan, renderConcreteCanonicalPath(matchedPath), value, error);
 		return unsupportedValue;
 	}
 };
@@ -1537,6 +1622,14 @@ const enterRetain = (rule) => {
 		rulePath: rule.rulePath
 	};
 };
+const enterRetainWildcard = (rule, matchedPath) => {
+	return {
+		canonicalPrefix: renderConcreteCanonicalPath(matchedPath),
+		matchedPath,
+		policy: rule.policy,
+		rulePath: rule.rulePath
+	};
+};
 const descendRetain = (inherited, segment, key) => {
 	return {
 		canonicalPrefix: appendCanonicalPathSegment(inherited.canonicalPrefix, segment),
@@ -1555,7 +1648,7 @@ const buildSegment = (kind, key) => {
 	};
 };
 const resolveChildInherited = (node, inherited, kind, key) => {
-	if (node?.rule !== void 0) return enterRetain(node.rule);
+	if (node?.rule?.kind === "exact") return enterRetain(node.rule);
 	if (inherited === void 0) return;
 	return descendRetain(inherited, buildSegment(kind, key), key);
 };
@@ -1568,6 +1661,7 @@ const redactRetained = (container, level, inherited, plan, rootInput, budget) =>
 	budget.depth += 1;
 	if (isDepthExceeded(budget, plan.maxDepth)) throw createBudgetExceededError("depth", plan.maxDepth);
 	try {
+		if (level.wildcardChild !== void 0) return delegate;
 		let copy;
 		if (Array.isArray(container)) {
 			const items = container;
@@ -1578,6 +1672,7 @@ const redactRetained = (container, level, inherited, plan, rootInput, budget) =>
 				if (isNodeBudgetExceeded(budget, plan.maxNodes)) throw createBudgetExceededError("nodes", plan.maxNodes);
 				const value = items[index];
 				const node = level.indexChildren?.get(index);
+				if (node?.rule?.kind === "wildcard") return delegate;
 				if (node?.rule !== void 0 && !node.rule.policy.retainStructure) {
 					const redacted = applyTerminalRule(value, node.rule, plan, rootInput);
 					copy ??= shallowCopyContainer(container);
@@ -1614,6 +1709,7 @@ const redactRetained = (container, level, inherited, plan, rootInput, budget) =>
 		for (const key in container) {
 			const value = container[key];
 			const node = level.propertyChildren?.get(key);
+			if (node?.rule?.kind === "wildcard") return delegate;
 			if (node?.rule !== void 0 && !node.rule.policy.retainStructure) {
 				const redacted = applyTerminalRule(value, node.rule, plan, rootInput);
 				copy ??= shallowCopyContainer(container);
@@ -1658,12 +1754,49 @@ const resolveRetainTerminal = (value, childNode, plan, rootInput, ancestorCopies
 	if (requiresDelegation(value)) return delegate;
 	return applyTerminalRule(value, childNode.rule, plan, rootInput);
 };
-const navigateNode = (container, level, plan, rootInput, ancestorCopies, compactedArrayCopies, budget) => {
+const resolveRetainTerminalWildcard = (value, childNode, plan, rootInput, ancestorCopies, budget, matchedPath) => {
+	const rule = childNode.rule;
+	if (isDescendable(value)) {
+		const existing = ancestorCopies.get(value);
+		if (existing !== void 0) return existing;
+		const descended = redactRetained(value, childNode, enterRetainWildcard(rule, matchedPath), plan, rootInput, budget);
+		if (descended === delegate) return delegate;
+		if (descended !== value) ancestorCopies.set(value, descended);
+		return descended;
+	}
+	if (requiresDelegation(value)) return delegate;
+	return applyWildcardTerminalRule(value, rule, plan, rootInput, matchedPath);
+};
+const navigateNode = (container, level, plan, rootInput, ancestorCopies, compactedArrayCopies, budget, matchedPath) => {
 	let copy = ancestorCopies.get(container);
 	let removedIndices;
 	if (level.indexChildren !== void 0) for (const [index, childNode] of level.indexChildren) {
 		if (!(index in container)) continue;
 		const value = container[index];
+		if (childNode.rule?.kind === "wildcard") {
+			const concreteMatchedPath = appendMatchedKey(matchedPath, index);
+			if (childNode.rule.policy.retainStructure) {
+				const retained = resolveRetainTerminalWildcard(value, childNode, plan, rootInput, ancestorCopies, budget, concreteMatchedPath);
+				if (retained === delegate) return delegate;
+				if (retained !== value) {
+					if (copy === void 0) {
+						copy = shallowCopyContainer(container);
+						ancestorCopies.set(container, copy);
+					}
+					if (isRemovedValue(retained)) (removedIndices ??= []).push(index);
+					else copy[index] = retained;
+				}
+			} else {
+				const redacted = applyWildcardTerminalRule(value, childNode.rule, plan, rootInput, concreteMatchedPath);
+				if (copy === void 0) {
+					copy = shallowCopyContainer(container);
+					ancestorCopies.set(container, copy);
+				}
+				if (isRemovedValue(redacted)) (removedIndices ??= []).push(index);
+				else copy[index] = redacted;
+			}
+			continue;
+		}
 		if (childNode.rule !== void 0 && !childNode.rule.policy.retainStructure) {
 			const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput);
 			if (copy === void 0) {
@@ -1688,7 +1821,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 			continue;
 		}
 		if (isDescendable(value)) {
-			const child = navigateNode(value, childNode, plan, rootInput, ancestorCopies, compactedArrayCopies, budget);
+			const child = navigateNode(value, childNode, plan, rootInput, ancestorCopies, compactedArrayCopies, budget, matchedPath !== void 0 || childNode.subtreeHasWildcard === true ? appendMatchedKey(matchedPath, index) : void 0);
 			if (child === delegate) return delegate;
 			if (child !== value) {
 				if (copy === void 0) {
@@ -1704,6 +1837,30 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 	if (level.propertyChildren !== void 0) for (const [key, childNode] of level.propertyChildren) {
 		if (!(key in container)) continue;
 		const value = container[key];
+		if (childNode.rule?.kind === "wildcard") {
+			const concreteMatchedPath = appendMatchedKey(matchedPath, key);
+			if (childNode.rule.policy.retainStructure) {
+				const retained = resolveRetainTerminalWildcard(value, childNode, plan, rootInput, ancestorCopies, budget, concreteMatchedPath);
+				if (retained === delegate) return delegate;
+				if (retained !== value) {
+					if (copy === void 0) {
+						copy = shallowCopyContainer(container);
+						ancestorCopies.set(container, copy);
+					}
+					if (isRemovedValue(retained)) delete copy[key];
+					else setObjectEntry(copy, key, retained);
+				}
+			} else {
+				const redacted = applyWildcardTerminalRule(value, childNode.rule, plan, rootInput, concreteMatchedPath);
+				if (copy === void 0) {
+					copy = shallowCopyContainer(container);
+					ancestorCopies.set(container, copy);
+				}
+				if (isRemovedValue(redacted)) delete copy[key];
+				else setObjectEntry(copy, key, redacted);
+			}
+			continue;
+		}
 		if (childNode.rule !== void 0 && !childNode.rule.policy.retainStructure) {
 			const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput);
 			if (copy === void 0) {
@@ -1728,7 +1885,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 			continue;
 		}
 		if (isDescendable(value)) {
-			const child = navigateNode(value, childNode, plan, rootInput, ancestorCopies, compactedArrayCopies, budget);
+			const child = navigateNode(value, childNode, plan, rootInput, ancestorCopies, compactedArrayCopies, budget, matchedPath !== void 0 || childNode.subtreeHasWildcard === true ? appendMatchedKey(matchedPath, key) : void 0);
 			if (child === delegate) return delegate;
 			if (child !== value) {
 				if (copy === void 0) {
@@ -1740,6 +1897,44 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 			continue;
 		}
 		if (value !== null && typeof value === "object") return delegate;
+	}
+	if (level.wildcardChild !== void 0) {
+		const wildcardChild = level.wildcardChild;
+		if (Array.isArray(container)) {
+			const items = container;
+			for (let index = 0; index < items.length; index += 1) {
+				if (!(index in items)) continue;
+				if (level.indexChildren?.has(index)) continue;
+				budget.nodesVisited += 1;
+				if (isNodeBudgetExceeded(budget, plan.maxNodes)) throw createBudgetExceededError("nodes", plan.maxNodes);
+				const value = items[index];
+				const result = applyWildcardEdge(value, wildcardChild, appendMatchedKey(matchedPath, index), plan, rootInput, ancestorCopies, compactedArrayCopies, budget);
+				if (result === delegate) return delegate;
+				if (result !== value) {
+					if (copy === void 0) {
+						copy = shallowCopyContainer(container);
+						ancestorCopies.set(container, copy);
+					}
+					if (isRemovedValue(result)) (removedIndices ??= []).push(index);
+					else copy[index] = result;
+				}
+			}
+		} else for (const key of Object.keys(container)) {
+			if (level.propertyChildren?.has(key)) continue;
+			budget.nodesVisited += 1;
+			if (isNodeBudgetExceeded(budget, plan.maxNodes)) throw createBudgetExceededError("nodes", plan.maxNodes);
+			const value = container[key];
+			const result = applyWildcardEdge(value, wildcardChild, appendMatchedKey(matchedPath, key), plan, rootInput, ancestorCopies, compactedArrayCopies, budget);
+			if (result === delegate) return delegate;
+			if (result !== value) {
+				if (copy === void 0) {
+					copy = shallowCopyContainer(container);
+					ancestorCopies.set(container, copy);
+				}
+				if (isRemovedValue(result)) delete copy[key];
+				else setObjectEntry(copy, key, result);
+			}
+		}
 	}
 	if (copy === void 0) return container;
 	if (removedIndices !== void 0 && Array.isArray(copy) && !compactedArrayCopies.has(copy)) {
@@ -1753,8 +1948,17 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 	}
 	return copy;
 };
+const applyWildcardEdge = (value, wildcardChild, matchedPath, plan, rootInput, ancestorCopies, compactedArrayCopies, budget) => {
+	if (wildcardChild.rule !== void 0) {
+		if (!wildcardChild.rule.policy.retainStructure) return applyWildcardTerminalRule(value, wildcardChild.rule, plan, rootInput, matchedPath);
+		return resolveRetainTerminalWildcard(value, wildcardChild, plan, rootInput, ancestorCopies, budget, matchedPath);
+	}
+	if (isDescendable(value)) return navigateNode(value, wildcardChild, plan, rootInput, ancestorCopies, compactedArrayCopies, budget, matchedPath);
+	if (value !== null && typeof value === "object") return delegate;
+	return value;
+};
 const buildPathDrivenExecutor = (plan, fallback) => {
-	const root = buildPrefixTree(Object.values(plan.exactPathRules));
+	const root = buildPrefixTree(plan);
 	return function pathDriven(input) {
 		if (input === null || typeof input !== "object") return input;
 		if (!(Array.isArray(input) || isPlainObject$1(input))) return fallback(input);
@@ -1762,7 +1966,7 @@ const buildPathDrivenExecutor = (plan, fallback) => {
 		const compactedArrayCopies = /* @__PURE__ */ new Set();
 		let result;
 		try {
-			result = navigateNode(input, root, plan, input, /* @__PURE__ */ new Map(), compactedArrayCopies, budget);
+			result = navigateNode(input, root, plan, input, /* @__PURE__ */ new Map(), compactedArrayCopies, budget, void 0);
 		} catch (error) {
 			if (isBudgetExceededError(error)) throw error;
 			return fallback(input);
