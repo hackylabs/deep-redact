@@ -16,7 +16,7 @@ import { compileRedactorPlan } from '../../../src/core/compiler/compile-redactor
  *    engine's introduction.
  *
  * All cases use the public deepRedact(...) API only, so they pin observable
- * behaviour rather than internal lane wiring.
+ * behaviour rather than internal execution-mode wiring.
  */
 describe('Rule-driven traversal contract', () => {
   describe('Invariant cases (locked baseline)', () => {
@@ -113,7 +113,7 @@ describe('Rule-driven traversal contract', () => {
         const redact = deepRedact({ paths: ['a.b'] })
 
         // Under the rule-driven contract, non-object roots have no addressable properties and
-        // are returned as-is. This differs from the old fast-lane behaviour (which delegated
+        // are returned as-is. This differs from the old compiled-executor behaviour (which delegated
         // BigInt to the general traversal and produced a transformer marker). The new contract
         // is intentional: Story 8.3 will handle BigInt transformation for serialise:true via
         // the serialise-only output adapter.

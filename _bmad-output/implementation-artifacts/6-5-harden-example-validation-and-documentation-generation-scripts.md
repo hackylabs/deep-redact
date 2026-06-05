@@ -414,7 +414,7 @@ This must pass without any file regeneration because `buildGeneratedExampleDoc`'
 
 ### Deferred-Work Cleanup on Completion
 
-When this story is marked `done` during code review, the reviewer must remove all five bullet items from `_bmad-output/implementation-artifacts/deferred-work.md` under:
+When this story is marked `done` during code review, the reviewer must remove all five bullet items from `_bmad-output/implementation-artifacts/deferred-work-audit.md` under:
 - `## Deferred from: code review of 5-6-establish-the-worked-example-manifest-and-validation-harness (2026-05-22)` — the two items that are addressed here:
   - `loadExampleManifest surfaces a raw SyntaxError...`
   - `Contract tests do not assert ExampleVerificationError property fields...`

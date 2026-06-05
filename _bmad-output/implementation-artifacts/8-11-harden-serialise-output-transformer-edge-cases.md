@@ -74,13 +74,13 @@ Likely files:
 - [src/core/validation/validate-config.ts](src/core/validation/validate-config.ts)
 - [docs/architecture/serialise-output.md](docs/architecture/serialise-output.md)
 - [test/contract/api/create-redactor.test.ts](test/contract/api/create-redactor.test.ts)
-- [test/unit/standardTransformers.test.ts](test/unit/standardTransformers.test.ts)
+- [test/contract/api/create-redactor.test.ts](test/contract/api/create-redactor.test.ts) transformer edge-case sections
 
 Avoid changing output marker shapes unless tests and docs are updated in the same change.
 
 ## Verification
 
-- `source .agents/initialise-env.sh && pnpm exec vitest run test/contract/api/create-redactor.test.ts test/unit/standardTransformers.test.ts --reporter=verbose`
+- `source .agents/initialise-env.sh && pnpm exec vitest run test/contract/api/create-redactor.test.ts --reporter=verbose`
 - `source .agents/initialise-env.sh && pnpm run test`
 - `source .agents/initialise-env.sh && pnpm exec tsc --noEmit`
 - `source .agents/initialise-env.sh && pnpm lint`

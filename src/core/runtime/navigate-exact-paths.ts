@@ -993,7 +993,7 @@ const navigateNode = (
     // instead), so skipping the key correctly lets the higher-precedence exact terminal win wholesale.
     // Each enumerated key counts against `maxNodes` (AC 9) so a wide wildcard container is bounded;
     // the threshold maps to the engine's `O(P + ΣK)` cost rather than the general traversal's per-node
-    // count, so the two lanes need not throw at an identical node total (full cross-mode safety-limit
+    // count, so the two execution modes need not throw at an identical node total (full cross-mode safety-limit
     // parity is Story 8.6's scope).
     const wildcardChild = level.wildcardChild
 

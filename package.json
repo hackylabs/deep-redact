@@ -61,7 +61,7 @@
     "url": "git+https://github.com/hackylabs/deep-redact"
   },
   "scripts": {
-    "bench": "pnpm exec vitest bench --config vitest.bench.config.ts --run",
+    "bench": "pnpm run bench:produce",
     "build": "pnpm run verify-generated-files && pnpm exec tsdown",
     "generate": "pnpm run generate-exports && pnpm run generate-readme && pnpm run generate-precedence-doc && pnpm run generate-one-way-redaction-doc && pnpm run generate-fast-redact-migration-doc && pnpm run generate-v3-migration-doc && pnpm run generate-example-docs",
     "generate-exports": "node --experimental-strip-types ./scripts/generate-exports.ts",
@@ -86,19 +86,15 @@
     "verify:benchmarks": "pnpm run build && node --experimental-strip-types ./scripts/verify-benchmarks.ts"
   },
   "//": [
-    "autocannon, fast-redact and obglob are installed only as internal benchmark comparisons and are not used in the library",
+    "deep-redact-v3 and fast-redact are installed only as internal benchmark comparisons and are not used in the library",
     "all dependencies are for development purposes only"
   ],
   "devDependencies": {
     "@eslint/js": "9.39.4",
-    "@hackylabs/obglob": "1.1.2",
     "deep-redact-v3": "npm:@hackylabs/deep-redact@^3.0.0",
-    "@memlab/core": "2.0.0",
     "@stylistic/eslint-plugin": "4.4.1",
-    "@types/autocannon": "7.12.7",
     "@types/fast-redact": "3.0.4",
     "@types/node": "24.1.0",
-    "autocannon": "8.0.0",
     "eslint": "9.39.4",
     "eslint-plugin-unicorn": "59.0.1",
     "fast-redact": "3.5.0",

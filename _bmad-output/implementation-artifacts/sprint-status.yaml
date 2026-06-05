@@ -1,5 +1,5 @@
 # generated: 2026-04-13T09:43:13+0100
-# last_updated: 2026-06-05T13:19:31+0100
+# last_updated: 2026-06-05T14:00:41+0100
 # project: deep-redact
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Scrum Master typically creates the next story after the previous one is 'done'
 
 generated: 2026-04-13T09:43:13+0100
-last_updated: 2026-06-05T13:19:31+0100
+last_updated: 2026-06-05T14:00:41+0100
 project: deep-redact
 project_key: NOKEY
 tracking_system: file-system
@@ -117,7 +117,7 @@ development_status:
   8-4-extend-rule-driven-engine-for-single-level-wildcard-paths: done
   8-5-extend-rule-driven-engine-for-double-wildcard-paths-and-key-based-rules: done
   8-6-integrate-substring-matching-and-finalise-rule-driven-engine: done
-  8-7-clean-up-dead-source-tests-scripts-and-stale-traversal-artefacts: ready-for-dev
+  8-7-clean-up-dead-source-tests-scripts-and-stale-traversal-artefacts: done
   8-8-resolve-alias-aware-redaction-conflicts-in-rule-driven-output: ready-for-dev
   8-9-enforce-rule-driven-budget-accounting-for-exact-path-hops: ready-for-dev
   8-10-restore-lint-and-benchmark-guardrail-hygiene: ready-for-dev

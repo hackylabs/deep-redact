@@ -43,7 +43,6 @@ export default tseslint.config(
       'benchmark.json',
       'load-test-results.json',
       'test/bench/**',
-      'test/load/**',
       'test/unit/**',
     ],
   },
@@ -115,13 +114,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/types.ts', 'src/utils/**/*.ts'],
-    rules: {
-      '@typescript-eslint/no-unsafe-function-type': 'off',
-    },
-  },
-  {
-    files: ['src/core/runtime/redact-value.ts', 'src/core/runtime/fast-lane.ts'],
+    files: ['src/core/runtime/redact-value.ts'],
     rules: {
       'unicorn/no-new-array': 'off',
       'unicorn/prefer-spread': 'off',

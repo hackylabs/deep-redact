@@ -24,7 +24,7 @@ const createCallableRedactor = (plan: CompiledRedactorPlan): Redactor => {
   return function redact(value: unknown): unknown {
     if (plan.serialise) {
       // The serialise adapter walks the whole redacted graph (O(N)) regardless of plan shape, so
-      // the path-driven fast lane offers no benefit here. More importantly, only the general
+      // the path-driven executor offers no benefit here. More importantly, only the general
       // traversal populates `cycleRegistry`: the path-driven engine never visits non-configured
       // subtrees, so a circular back-edge into a redacted ancestor would otherwise reach the
       // adapter as a raw, unredacted object and leak (the redacted copy and the original alias

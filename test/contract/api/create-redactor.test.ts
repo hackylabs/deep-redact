@@ -21,8 +21,8 @@ import {
 import { buildPathDrivenExecutor } from '../../../src/core/runtime/navigate-exact-paths.js'
 import { redactValue } from '../../../src/core/runtime/redact-value.js'
 import {
-  createLaneForcedRedactor,
-  createLaneForcedRedactorFromPlan,
+  createExecutionModeForcedRedactor,
+  createExecutionModeForcedRedactorFromPlan,
   delegationProofCorpus,
   exactPathEquivalenceCorpus,
   wildcardEquivalenceCorpus,
@@ -2774,7 +2774,7 @@ describe('Reusable redactor factory contract', () => {
     // concrete segment sharing a wildcard's `*` enumeration depth is an unsafe overlap the rule-driven
     // engine's two-pass navigation cannot resolve. Such configs must compile pathDrivenOnly: false and
     // take the O(N) general traversal (which resolves the per-leaf precedence correctly); the safe
-    // shapes — pure wildcard, exact-terminal-vs-wildcard at the same depth — stay on the fast lane.
+    // shapes — pure wildcard, exact-terminal-vs-wildcard at the same depth — stay path-driven.
     const unsafeOverlapConfigs: ReadonlyArray<readonly [string, DeepRedactOptions]> = [
       ['divergent leaf (a.b.c + a.*.d)', { paths: ['a.b.c', 'a.*.d'] }],
       ['convergent leaf (a.b.c + a.*.c)', { paths: ['a.b.c', 'a.*.c'] }],
@@ -2795,7 +2795,7 @@ describe('Reusable redactor factory contract', () => {
       ['exact terminal above the wildcard depth (a + *.d)', { paths: ['a', '*.d'] }],
     ]
 
-    it.each(safeConfigs)('keeps %s on the rule-driven fast lane', (_title, options) => {
+    it.each(safeConfigs)('keeps %s on the rule-driven executor', (_title, options) => {
       expect(compileRedactorPlan(options).pathDrivenOnly).toBe(true)
     })
 
@@ -5307,45 +5307,45 @@ describe('Function censors and same-length string replacement', () => {
   })
 })
 
-describe('Exact-path fast-lane and generic traversal equivalence', () => {
+describe('Exact-path rule-driven and generic traversal equivalence', () => {
   it.each(exactPathEquivalenceCorpus)(
-    'proves fast-lane and generic-lane are behaviourally equivalent for: $title',
+    'proves path-driven and generic traversal are behaviourally equivalent for: $title',
     (entry) => {
-      // (a) Control — verify the compiled plan exclusively uses the exact-path fast lane
+      // (a) Control — verify the compiled plan exclusively uses the path-driven executor
       const plan = compileRedactorPlan(entry.options)
       expect(Object.keys(plan.exactPathRules).length).toBe((entry.options.paths ?? []).length)
       expect(plan.dynamicPathRules.length).toBe(0)
 
-      // (b) Fast-lane run — both lanes derived from the same compiled plan
-      const fastStructured = createLaneForcedRedactorFromPlan(plan, 'fast')(entry.createPayload())
-      const fastSerialised = JSON.stringify(fastStructured)
+      // (b) Path-driven run — both execution modes derived from the same compiled plan
+      const pathDrivenStructured = createExecutionModeForcedRedactorFromPlan(plan, 'path-driven')(entry.createPayload())
+      const pathDrivenSerialised = JSON.stringify(pathDrivenStructured)
 
-      expect(fastStructured).toStrictEqual(entry.expectedStructured)
-      expect(fastSerialised).toBe(entry.expectedSerialised)
+      expect(pathDrivenStructured).toStrictEqual(entry.expectedStructured)
+      expect(pathDrivenSerialised).toBe(entry.expectedSerialised)
 
-      // (c) Generic-lane run — same golden assertions plus cross-lane equality
-      const genericStructured = createLaneForcedRedactorFromPlan(plan, 'generic')(entry.createPayload())
+      // (c) Generic traversal run — same golden assertions plus cross-mode equality
+      const genericStructured = createExecutionModeForcedRedactorFromPlan(plan, 'generic')(entry.createPayload())
       const genericSerialised = JSON.stringify(genericStructured)
 
       expect(genericStructured).toStrictEqual(entry.expectedStructured)
       expect(genericSerialised).toBe(entry.expectedSerialised)
 
-      expect(fastStructured).toStrictEqual(genericStructured)
-      expect(fastSerialised).toBe(genericSerialised)
+      expect(pathDrivenStructured).toStrictEqual(genericStructured)
+      expect(pathDrivenSerialised).toBe(genericSerialised)
     },
   )
 
-  it('delivers identical FunctionCensorContext to both lanes for exact-path-function-censor', () => {
+  it('delivers identical FunctionCensorContext to both execution modes for exact-path-function-censor', () => {
     const functionCensorEntry = exactPathEquivalenceCorpus.find(
       (entry) => entry.name === 'exact-path-function-censor',
     )
     if (functionCensorEntry == null) throw new Error('exact-path-function-censor corpus entry not found')
 
-    let fastCapturedContext: FunctionCensorContext | undefined
+    let pathDrivenCapturedContext: FunctionCensorContext | undefined
     let genericCapturedContext: FunctionCensorContext | undefined
 
-    const fastSpy = vi.fn((_value: unknown, ctx: FunctionCensorContext) => {
-      fastCapturedContext = ctx
+    const pathDrivenSpy = vi.fn((_value: unknown, ctx: FunctionCensorContext) => {
+      pathDrivenCapturedContext = ctx
       return '[FN-SPY]'
     })
     const genericSpy = vi.fn((_value: unknown, ctx: FunctionCensorContext) => {
@@ -5353,29 +5353,29 @@ describe('Exact-path fast-lane and generic traversal equivalence', () => {
       return '[FN-SPY]'
     })
 
-    const fastOptions = { paths: [{ path: 'account.secret', censor: fastSpy }] }
+    const pathDrivenOptions = { paths: [{ path: 'account.secret', censor: pathDrivenSpy }] }
     const genericOptions = { paths: [{ path: 'account.secret', censor: genericSpy }] }
 
     const expectedPayload = { account: { secret: 'hidden', visible: 'show' } }
 
-    createLaneForcedRedactor(fastOptions, 'fast')(functionCensorEntry.createPayload())
-    createLaneForcedRedactor(genericOptions, 'generic')(functionCensorEntry.createPayload())
+    createExecutionModeForcedRedactor(pathDrivenOptions, 'path-driven')(functionCensorEntry.createPayload())
+    createExecutionModeForcedRedactor(genericOptions, 'generic')(functionCensorEntry.createPayload())
 
-    expect(fastSpy).toHaveBeenCalledOnce()
+    expect(pathDrivenSpy).toHaveBeenCalledOnce()
     expect(genericSpy).toHaveBeenCalledOnce()
 
-    expect(fastCapturedContext).toBeDefined()
+    expect(pathDrivenCapturedContext).toBeDefined()
     expect(genericCapturedContext).toBeDefined()
 
-    expect(fastCapturedContext!.matchedPath).toStrictEqual(['account', 'secret'])
-    expect(fastCapturedContext!.rulePath).toStrictEqual(['account', 'secret'])
-    expect(fastCapturedContext!.rootInput).toStrictEqual(expectedPayload)
-    expect(fastCapturedContext!.terminalKey).toBe('secret')
+    expect(pathDrivenCapturedContext!.matchedPath).toStrictEqual(['account', 'secret'])
+    expect(pathDrivenCapturedContext!.rulePath).toStrictEqual(['account', 'secret'])
+    expect(pathDrivenCapturedContext!.rootInput).toStrictEqual(expectedPayload)
+    expect(pathDrivenCapturedContext!.terminalKey).toBe('secret')
 
-    expect(fastCapturedContext).toStrictEqual(genericCapturedContext)
+    expect(pathDrivenCapturedContext).toStrictEqual(genericCapturedContext)
   })
 
-  it('produces byte-for-byte identical custom-serialised output across lanes for single-exact-path', () => {
+  it('produces byte-for-byte identical custom-serialised output across execution modes for single-exact-path', () => {
     const entry = exactPathEquivalenceCorpus.find(
       (e) => e.name === 'single-exact-path',
     )
@@ -5383,18 +5383,18 @@ describe('Exact-path fast-lane and generic traversal equivalence', () => {
 
     const customSerialise = vi.fn((value: unknown) => JSON.stringify({ v: value }))
 
-    const fastStructured = createLaneForcedRedactor(entry.options, 'fast')(entry.createPayload())
-    const genericStructured = createLaneForcedRedactor(entry.options, 'generic')(entry.createPayload())
+    const pathDrivenStructured = createExecutionModeForcedRedactor(entry.options, 'path-driven')(entry.createPayload())
+    const genericStructured = createExecutionModeForcedRedactor(entry.options, 'generic')(entry.createPayload())
 
-    const fastCustomSerialised = customSerialise(fastStructured)
+    const pathDrivenCustomSerialised = customSerialise(pathDrivenStructured)
     const genericCustomSerialised = customSerialise(genericStructured)
 
-    expect(fastCustomSerialised).toBe(entry.expectedCustomSerialised)
+    expect(pathDrivenCustomSerialised).toBe(entry.expectedCustomSerialised)
     expect(genericCustomSerialised).toBe(entry.expectedCustomSerialised)
-    expect(fastCustomSerialised).toBe(genericCustomSerialised)
+    expect(pathDrivenCustomSerialised).toBe(genericCustomSerialised)
   })
 
-  it('returns byte-for-byte identical serialised string across lanes when serialise: true (AC 7)', () => {
+  it('returns byte-for-byte identical serialised string across execution modes when serialise: true (AC 7)', () => {
     const options: DeepRedactOptions = { paths: ['user.password'], serialise: true }
     const sharedPlan = compileRedactorPlan(options)
 
@@ -5402,13 +5402,13 @@ describe('Exact-path fast-lane and generic traversal equivalence', () => {
     expect(sharedPlan.dynamicPathRules.length).toBe(0)
 
     const payload = { user: { password: 'secret', safe: 'keep' } }
-    const fastResult = createLaneForcedRedactorFromPlan(sharedPlan, 'fast')(payload)
-    const genericResult = createLaneForcedRedactorFromPlan(sharedPlan, 'generic')(payload)
+    const pathDrivenResult = createExecutionModeForcedRedactorFromPlan(sharedPlan, 'path-driven')(payload)
+    const genericResult = createExecutionModeForcedRedactorFromPlan(sharedPlan, 'generic')(payload)
 
-    expect(typeof fastResult).toBe('string')
-    expect(fastResult).toBe('{"user":{"password":"[REDACTED]","safe":"keep"}}')
+    expect(typeof pathDrivenResult).toBe('string')
+    expect(pathDrivenResult).toBe('{"user":{"password":"[REDACTED]","safe":"keep"}}')
     expect(genericResult).toBe('{"user":{"password":"[REDACTED]","safe":"keep"}}')
-    expect(fastResult).toBe(genericResult)
+    expect(pathDrivenResult).toBe(genericResult)
   })
 })
 
@@ -5502,38 +5502,38 @@ describe('Wildcard rule-driven engine vs. general traversal equivalence (Story 8
   }
 
   it.each(wildcardEquivalenceCorpus)(
-    'fast-lane and generic-lane are byte-identical for: $title',
+    'path-driven and generic traversal are byte-identical for: $title',
     (entry) => {
       // (a) Control — the config selects the rule-driven engine and carries wildcard rules.
       const plan = compileRedactorPlan(entry.options)
       expect(plan.pathDrivenOnly).toBe(true)
       expect(plan.dynamicPathRules.length).toBeGreaterThan(0)
 
-      // (b) Both lanes derived from the same compiled plan via the lane-forcing harness.
-      const fastStructured = createLaneForcedRedactorFromPlan(plan, 'fast')(entry.createPayload())
-      const genericStructured = createLaneForcedRedactorFromPlan(plan, 'generic')(entry.createPayload())
+      // (b) Both execution modes derived from the same compiled plan via the mode-forcing harness.
+      const pathDrivenStructured = createExecutionModeForcedRedactorFromPlan(plan, 'path-driven')(entry.createPayload())
+      const genericStructured = createExecutionModeForcedRedactorFromPlan(plan, 'generic')(entry.createPayload())
 
-      expect(fastStructured).toStrictEqual(entry.expectedStructured)
+      expect(pathDrivenStructured).toStrictEqual(entry.expectedStructured)
       expect(genericStructured).toStrictEqual(entry.expectedStructured)
-      expect(fastStructured).toStrictEqual(genericStructured)
+      expect(pathDrivenStructured).toStrictEqual(genericStructured)
 
-      expect(JSON.stringify(fastStructured)).toBe(entry.expectedSerialised)
+      expect(JSON.stringify(pathDrivenStructured)).toBe(entry.expectedSerialised)
       expect(JSON.stringify(genericStructured)).toBe(entry.expectedSerialised)
 
-      // (c) Prove the fast lane stays on the rule-driven engine — no delegation — for these configs.
+      // (c) Prove the path-driven executor avoids delegation for these configs.
       expect(buildPathDrivenExecutor(plan, failOnDelegation)(entry.createPayload()))
         .toStrictEqual(entry.expectedStructured)
     },
   )
 
-  it('delivers the concrete matched path to a wildcard function censor for every matched key, identical across lanes (AC 3)', () => {
+  it('delivers the concrete matched path to a wildcard function censor for every matched key, identical across execution modes (AC 3)', () => {
     // Capture EVERY invocation's context (not just the last): a wildcard rule matches multiple
     // concrete keys, and each must report its own concrete path, not the wildcard signature.
-    const fastContexts: FunctionCensorContext[] = []
+    const pathDrivenContexts: FunctionCensorContext[] = []
     const genericContexts: FunctionCensorContext[] = []
 
-    const fastSpy = vi.fn((_value: unknown, ctx: FunctionCensorContext) => {
-      fastContexts.push(ctx)
+    const pathDrivenSpy = vi.fn((_value: unknown, ctx: FunctionCensorContext) => {
+      pathDrivenContexts.push(ctx)
       return '[FN-SPY]'
     })
     const genericSpy = vi.fn((_value: unknown, ctx: FunctionCensorContext) => {
@@ -5543,32 +5543,32 @@ describe('Wildcard rule-driven engine vs. general traversal equivalence (Story 8
 
     const createPayload = () => ({ users: { email: 'a' }, accounts: { email: 'b' } })
 
-    const fastPlan = compileRedactorPlan({ paths: [{ path: '*.email', censor: fastSpy }] })
+    const pathDrivenPlan = compileRedactorPlan({ paths: [{ path: '*.email', censor: pathDrivenSpy }] })
     const genericPlan = compileRedactorPlan({ paths: [{ path: '*.email', censor: genericSpy }] })
 
-    buildPathDrivenExecutor(fastPlan, failOnDelegation)(createPayload())
+    buildPathDrivenExecutor(pathDrivenPlan, failOnDelegation)(createPayload())
     redactValue(createPayload(), genericPlan)
 
-    expect(fastSpy).toHaveBeenCalledTimes(2)
+    expect(pathDrivenSpy).toHaveBeenCalledTimes(2)
     expect(genericSpy).toHaveBeenCalledTimes(2)
 
     // Both matched keys — not just the last — report their own concrete path, not the wildcard
     // signature. Order-independent: the rule-driven engine may emit in rule-configuration order.
-    expect([...fastContexts].map((ctx) => ctx.matchedPath).sort()).toStrictEqual([
+    expect([...pathDrivenContexts].map((ctx) => ctx.matchedPath).sort()).toStrictEqual([
       ['accounts', 'email'],
       ['users', 'email'],
     ])
-    for (const ctx of fastContexts) {
+    for (const ctx of pathDrivenContexts) {
       expect(ctx.terminalKey).toBe('email')
       // rulePath surfaces the configured wildcard signature, as the general traversal does.
       expect(ctx.rulePath).toStrictEqual([{ any: true }, 'email'])
       expect(ctx.rootInput).toStrictEqual(createPayload())
     }
 
-    // Every context is delivered identically across lanes (compared as order-independent sets).
+    // Every context is delivered identically across execution modes (compared as order-independent sets).
     const byMatchedPath = (contexts: FunctionCensorContext[]) =>
       [...contexts].sort((left, right) => left.matchedPath.join('.').localeCompare(right.matchedPath.join('.')))
-    expect(byMatchedPath(fastContexts)).toStrictEqual(byMatchedPath(genericContexts))
+    expect(byMatchedPath(pathDrivenContexts)).toStrictEqual(byMatchedPath(genericContexts))
   })
 
   it('routes a wildcard censor-failure diagnostic to the concrete matched path, matching the general traversal (AC 3)', () => {
@@ -5577,12 +5577,12 @@ describe('Wildcard rule-driven engine vs. general traversal equivalence (Story 8
     }
     const createPayload = () => ({ users: { email: 'a' }, accounts: { email: 'b' } })
 
-    const fastEvents: DiagnosticEvent[] = []
-    const fastPlan = compileRedactorPlan({
+    const pathDrivenEvents: DiagnosticEvent[] = []
+    const pathDrivenPlan = compileRedactorPlan({
       paths: [{ path: '*.email', censor: throwingCensor }],
-      diagnostics: { sink: (event: DiagnosticEvent) => { fastEvents.push(event) } },
+      diagnostics: { sink: (event: DiagnosticEvent) => { pathDrivenEvents.push(event) } },
     })
-    buildPathDrivenExecutor(fastPlan, failOnDelegation)(createPayload())
+    buildPathDrivenExecutor(pathDrivenPlan, failOnDelegation)(createPayload())
 
     const genericEvents: DiagnosticEvent[] = []
     const genericPlan = compileRedactorPlan({
@@ -5593,9 +5593,9 @@ describe('Wildcard rule-driven engine vs. general traversal equivalence (Story 8
 
     // Diagnostic *content* (canonical path) matches the general traversal; event ordering is
     // allowed to differ by contract, so compare sorted paths.
-    expect(fastEvents.map((event) => event.path).sort()).toStrictEqual(['accounts.email', 'users.email'])
+    expect(pathDrivenEvents.map((event) => event.path).sort()).toStrictEqual(['accounts.email', 'users.email'])
     expect(genericEvents.map((event) => event.path).sort()).toStrictEqual(['accounts.email', 'users.email'])
-    expect(fastEvents.every((event) => event.event === 'redaction.failure')).toBe(true)
+    expect(pathDrivenEvents.every((event) => event.event === 'redaction.failure')).toBe(true)
   })
 
   it('throws BUDGET_EXCEEDED when wildcard enumeration exceeds maxNodes (AC 9)', () => {

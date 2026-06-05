@@ -557,8 +557,8 @@ const occupiesWildcardDepthAsIntermediate = (
 }
 
 // True when any single-wildcard path rule's `*` enumeration depth coincides with another rule's
-// non-terminal concrete segment on a shared prefix. Such configs MUST NOT take the rule-driven fast
-// lane: its two-pass (exact-then-wildcard) navigation cannot resolve the per-leaf precedence between
+// non-terminal concrete segment on a shared prefix. Such configs MUST NOT take the path-driven
+// executor: its two-pass (exact-then-wildcard) navigation cannot resolve the per-leaf precedence between
 // a continuing exact/wildcard path and a wildcard at the same depth, so they route to the O(N)
 // general traversal which resolves it correctly. Pure-wildcard configs and exact-terminal-vs-
 // wildcard at the same depth are unaffected. Operates on every path rule's segments (exact and

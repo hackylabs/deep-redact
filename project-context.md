@@ -45,22 +45,22 @@ These rules override any default step instructions in the code review workflow.
 
 ### HARD RULE — Deferred Approval Gate
 
-The review agent **must not** write any item to `_bmad-output/implementation-artifacts/deferred-work.md` without first presenting each proposed deferral to the user individually and receiving explicit approval. For each finding classified as `defer`, halt and ask:
+The review agent **must not** write any item to `_bmad-output/implementation-artifacts/deferred-work-audit.md` without first presenting each proposed deferral to the user individually and receiving explicit approval. For each finding classified as `defer`, halt and ask:
 
 > **Proposed deferral:** [item title and detail]
 > Approve adding to the deferred work register?
-> 1. Yes — add to deferred-work.md
+> 1. Yes — add to deferred-work-audit.md
 > 2. No — reclassify as `patch`
 > 3. No — dismiss (noise, not worth tracking)
 
-Only proceed to write the entry if the user selects option 1. If denied, reclassify per the user's choice. Never batch-write defer findings to deferred-work.md without per-item approval.
+Only proceed to write the entry if the user selects option 1. If denied, reclassify per the user's choice. Never batch-write defer findings to deferred-work-audit.md without per-item approval.
 
 ### HARD RULE — Addressed Deferred Item Cleanup
 
 When a story is marked `done` during step 6 of the review workflow, the review agent must check whether the story file's Dev Notes contain any `Deferred from:` references. If so:
 
-1. Open `_bmad-output/implementation-artifacts/deferred-work.md`.
-2. For each `Deferred from:` reference in the story's Dev Notes, locate and remove the corresponding section and bullet entries from deferred-work.md.
-3. Save the updated deferred-work.md.
+1. Open `_bmad-output/implementation-artifacts/deferred-work-audit.md`.
+2. For each `Deferred from:` reference in the story's Dev Notes, locate and remove the corresponding section and bullet entries from deferred-work-audit.md.
+3. Save the updated deferred-work-audit.md.
 
-Stories created specifically to address deferred items (such as 6.x hardening stories) must result in the removal of the items they addressed from deferred-work.md when they are marked done. The deferred-work.md file must never retain entries that have been resolved by a completed story.
+Stories created specifically to address deferred items (such as 6.x hardening stories) must result in the removal of the items they addressed from deferred-work-audit.md when they are marked done. The deferred-work-audit.md file must never retain entries that have been resolved by a completed story.

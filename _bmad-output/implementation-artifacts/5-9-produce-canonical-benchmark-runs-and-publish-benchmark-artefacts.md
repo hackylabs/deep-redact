@@ -254,15 +254,15 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 
 This module is imported by `run-benchmarks.ts` only. It should NOT be called during `pnpm run build` (unlike `verify-generated-files.ts` which is called during build). Do NOT wire it into `generated-files.ts` or `verify-generated-files.ts`.
 
-### Existing `test/bench/redact.bench.ts`
+### Retired Vitest Bench Suite
 
-The existing `redact.bench.ts` uses the v3 class-based API (`import { DeepRedact } from '../../src'`; `new DeepRedact(...)`). This file is from the red-phase suite. **Do NOT modify or delete it.** The v4 source no longer exports `DeepRedact` as a class, so this bench file currently fails to compile — that is expected red-phase behaviour. Story `5.9` creates entirely new infrastructure (`manifest.json` + `scripts/run-benchmarks.ts`) alongside it.
+Story 8.7 cleanup note (2026-06-05): the old Vitest bench suite that used the v3 class-based API has been removed. Current benchmark work should use the artefact-producing infrastructure (`test/bench/manifest.json` + `scripts/run-benchmarks.ts`).
 
-Do NOT attempt to run `pnpm run bench` (vitest bench) as part of this story's verification — it will fail on the old bench file. Story `5.9`'s verification uses `pnpm run bench:produce` instead.
+Story `5.9`'s verification uses `pnpm run bench:produce`.
 
-### `vitest.bench.config.ts`
+### Benchmark Runner Configuration
 
-Do NOT modify `vitest.bench.config.ts`. It governs the old vitest bench run and is separate from the new artefact-producing infrastructure.
+The removed Vitest bench configuration governed only the retired bench suite. It is separate from the current artefact-producing infrastructure.
 
 ### CLI Argument Parsing in `run-benchmarks.ts`
 

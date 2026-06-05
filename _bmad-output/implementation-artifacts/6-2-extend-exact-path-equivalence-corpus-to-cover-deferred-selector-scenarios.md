@@ -267,7 +267,7 @@ The equivalence corpus test block begins at line 4693 in `test/contract/api/crea
 - `renderSelectorSignature`: [src/core/matching/path-normaliser.ts:80](src/core/matching/path-normaliser.ts#L80)
 - `buildSameLengthReplacement` (length logic): [src/core/replacement/apply-redaction.ts:14](src/core/replacement/apply-redaction.ts#L14)
 - `CompiledDynamicPathRule` type: [src/core/compiler/compile-redactor-plan.ts:48](src/core/compiler/compile-redactor-plan.ts#L48)
-- Deferred items source: `_bmad-output/implementation-artifacts/deferred-work.md` lines 6–14
+- Deferred items source: `_bmad-output/implementation-artifacts/deferred-work-audit.md`
 
 ## Dev Agent Record
 

@@ -1,6 +1,6 @@
 # Deep Redact
 
-Deep Redact v4 is currently in its foundation phase. The initial v4 foundation work establishes the package surface, contributor tooling, generated artefact workflow, and dual-format build output without shipping the runtime redaction engine yet.
+Deep Redact v4 is a function-first redaction library with a rule-driven runtime, generated documentation workflow, contributor tooling, and dual-format build output.
 
 ## Contributor Baseline
 
@@ -52,8 +52,8 @@ import { createRedactor, deepRedact } from '@hackylabs/deep-redact'
 const redact = deepRedact()
 const sameFactory = createRedactor()
 
-redact({ secret: 'value' }) // throws until the v4 runtime lands
-sameFactory({ secret: 'value' }) // throws until the v4 runtime lands
+redact({ secret: 'value' }) // { secret: 'value' }
+sameFactory({ secret: 'value' }) // { secret: 'value' }
 ```
 
 ## Current Status
@@ -61,8 +61,8 @@ sameFactory({ secret: 'value' }) // throws until the v4 runtime lands
 - `deepRedact(options)` is the primary public factory.
 - `createRedactor(options)` is the named alias.
 - The published package surface includes the root entrypoint, the optional console adapter subpath, and `package.json`.
-- The runtime implementation is intentionally placeholder-only in the current foundation scaffold.
-- The retained legacy tests remain in the repository as explicit red-phase pressure outside the default contract gate.
+- The runtime applies the current v4 redaction contracts for configured paths, keys, substring rules, and serialised output.
+- Additional focused unit suites run outside the default contract gate through `pnpm run test:red-phase`.
 
 ## Scripts
 

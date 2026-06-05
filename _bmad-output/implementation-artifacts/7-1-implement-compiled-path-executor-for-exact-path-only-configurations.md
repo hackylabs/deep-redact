@@ -249,19 +249,16 @@ The tree node does not need to store the accumulated path for `matchedPath`. Bec
 
 `applySerialisation` is already defined locally in `create-redactor.ts` (handles `serialise: true` and function serialisers). `plan.serialise` is `SerialiseOption | undefined` from `CompiledRedactorPlan`. Both are already present — no new imports required for them.
 
-Lane selection is **per-call** (corrected 2026-05-25): an `isExactPathOnly` plan builds the fast-lane executor at init time, but each call first checks whether the payload is **fast-lane-safe**. Unsafe payloads delegate to `redactValue` so transformer/`ignoredValueTypes`/diagnostics/circular semantics are preserved.
+Story 8.7 cleanup note (2026-06-05): the original wiring snippet in this Dev Notes section described the removed Story 7.1 compiled executor. Do not copy that historical pseudocode into future work. The active Epic 8 runtime uses `pathDrivenOnly` to select `buildPathDrivenExecutor`, with the general traversal as the delegation fallback.
 
 ```typescript
-import { buildFastLaneExecutor, isFastLaneSafePayload } from './runtime/fast-lane.js'
+import { buildPathDrivenExecutor } from './runtime/navigate-exact-paths.js'
 
 const createCallableRedactor = (plan: CompiledRedactorPlan): Redactor => {
-  const fastLane = plan.isExactPathOnly ? buildFastLaneExecutor(plan) : undefined
-
-  const executor = fastLane === undefined
-    ? (value: unknown) => redactValue(value, plan)
-    : (value: unknown) => isFastLaneSafePayload(value)
-      ? fastLane(value)
-      : redactValue(value, plan)
+  const generalTraversal = (value: unknown) => redactValue(value, plan)
+  const executor = plan.pathDrivenOnly
+    ? buildPathDrivenExecutor(plan, generalTraversal)
+    : generalTraversal
 
   return function redact(value: unknown): unknown {
     return applySerialisation(executor(value), plan.serialise)
@@ -269,7 +266,7 @@ const createCallableRedactor = (plan: CompiledRedactorPlan): Redactor => {
 }
 ```
 
-**Fast-lane-safe guard (`isFastLaneSafePayload`).** Returns `false` (⇒ delegate to general traversal) when the payload graph contains: any supported-transformable runtime value (use `resolveSupportedTransformableValueKind`), a non-plain-object prototype, or a property whose accessor throws (read inside `try/catch`). Cycle safety via a **bounded depth cap** — exceeding it returns `false` (delegate). The guard allocates **no** `WeakMap`, frozen array, `Object.defineProperty`, or canonical path string. Re-measure the benchmark after adding the guard; the guard is allocation-free and the benchmark payload is tiny, so the ≤60 % gate is expected to hold.
+Payload safety and serialised-output handling now follow the Story 8.2 and Story 8.3 contracts. Preserve this section as historical context for Story 7.1 only; use current Epic 8 story notes for implementation guidance.
 
 **Identity & sparse holes.** The fast-lane executor must return the **same input reference** when nothing was redacted, and must copy arrays preserving holes (mirror the general traversal's `new Array(length)` + `if (!(index in value)) continue`), not `[...arr]`.
 

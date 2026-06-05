@@ -10,7 +10,7 @@ import { buildPathDrivenExecutor } from '../../../src/core/runtime/navigate-exac
 import type { DeepRedactOptions, FunctionCensorContext } from '../../../src/index.js'
 import type { PathSegment } from '../../../src/core/matching/path-parser.js'
 
-// ── Lane-override mechanism ──────────────────────────────────────────────────
+// ── Execution-mode override mechanism ────────────────────────────────────────
 
 const createEmptyLookupTable = <T>(): Record<string, T> =>
   Object.create(null) as Record<string, T>
@@ -19,7 +19,7 @@ export const createGenericisedPlan = (plan: CompiledRedactorPlan): CompiledRedac
   if (plan.dynamicPathRules.length > 0) {
     // A wildcard (or otherwise dynamic) plan already routes through the O(N) general traversal,
     // and `redactValue` applies the native exact-path-before-dynamic-path precedence. Run it
-    // as-is so the generic lane mirrors production precedence; converting the exact rules to
+    // as-is so the generic traversal mirrors production precedence; converting the exact rules to
     // dynamic here would flatten that ordering and diverge for exact-over-wildcard overlaps.
     return plan
   }
@@ -47,16 +47,16 @@ export const createGenericisedPlan = (plan: CompiledRedactorPlan): CompiledRedac
   })
 }
 
-export const createLaneForcedRedactorFromPlan = (
+export const createExecutionModeForcedRedactorFromPlan = (
   plan: CompiledRedactorPlan,
-  lane: 'fast' | 'generic',
+  mode: 'path-driven' | 'generic',
 ): (value: unknown) => unknown => {
-  // 'fast' exercises the rule-driven engine (trie-guided exact-path navigation) with the
-  // general traversal as its delegation fallback; 'generic' converts the exact rules to
-  // dynamic rules and runs the O(N) general traversal. The serialise step mirrors
-  // create-redactor's applySerialisation so byte-for-byte equality is comparable across lanes.
-  const activePlan = lane === 'generic' ? createGenericisedPlan(plan) : plan
-  const executor = lane === 'fast'
+  // 'path-driven' exercises the rule-driven engine (trie-guided exact-path navigation)
+  // with the general traversal as its delegation fallback; 'generic' converts the exact
+  // rules to dynamic rules and runs the O(N) general traversal. The serialise step mirrors
+  // create-redactor's applySerialisation so byte-for-byte equality is comparable across modes.
+  const activePlan = mode === 'generic' ? createGenericisedPlan(plan) : plan
+  const executor = mode === 'path-driven'
     ? buildPathDrivenExecutor(plan, (value: unknown) => redactValue(value, plan))
     : (value: unknown): unknown => redactValue(value, activePlan)
 
@@ -68,10 +68,10 @@ export const createLaneForcedRedactorFromPlan = (
   }
 }
 
-export const createLaneForcedRedactor = (
+export const createExecutionModeForcedRedactor = (
   options: DeepRedactOptions,
-  lane: 'fast' | 'generic',
-): (value: unknown) => unknown => createLaneForcedRedactorFromPlan(compileRedactorPlan(options), lane)
+  mode: 'path-driven' | 'generic',
+): (value: unknown) => unknown => createExecutionModeForcedRedactorFromPlan(compileRedactorPlan(options), mode)
 
 // ── Corpus entry type ────────────────────────────────────────────────────────
 
@@ -464,10 +464,10 @@ export const exactPathEquivalenceCorpus: readonly ExactPathEquivalenceCorpusEntr
 ]
 
 // ── Wildcard equivalence corpus (Story 8.4) ──────────────────────────────────
-// Single-level `*` configs that select the rule-driven engine (pathDrivenOnly === true) and stay
-// on the fast lane (no delegation). Each pins both structured and serialised goldens; the
-// consuming test additionally asserts fast-lane === generic-lane for the binding equivalence
-// contract. CANARY serialised strings catch property-order regressions before the corpus runs.
+// Single-level `*` configs that select the rule-driven engine (pathDrivenOnly === true) and avoid
+// delegation. Each pins both structured and serialised goldens; the consuming test additionally
+// asserts path-driven output === generic output for the binding equivalence contract. CANARY
+// serialised strings catch property-order regressions before the corpus runs.
 
 const SERIALISED_WILDCARD_TERMINAL_MULTI_KEY_CANARY =
   '{"users":{"email":"[REDACTED]","name":"n"},"accounts":{"email":"[REDACTED]"},"other":5}' as const

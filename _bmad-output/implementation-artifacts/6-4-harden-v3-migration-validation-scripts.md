@@ -384,7 +384,7 @@ Recommended implementation order to avoid mid-way verification failures:
 
 ### Deferred-Work Cleanup on Completion
 
-When this story is marked `done` during code review, the reviewer must remove all seven bullet items under the `## Deferred from: code review of 5-5-publish-a-dedicated-deep-redact-v3-to-v4-migration-path (2026-05-22)` section from `_bmad-output/implementation-artifacts/deferred-work.md`. This is enforced by the project-context hard rule on deferred-item cleanup.
+When this story is marked `done` during code review, the reviewer must remove all seven bullet items under the `## Deferred from: code review of 5-5-publish-a-dedicated-deep-redact-v3-to-v4-migration-path (2026-05-22)` section from `_bmad-output/implementation-artifacts/deferred-work-audit.md`. This is enforced by the project-context hard rule on deferred-item cleanup.
 
 ## File List
 
