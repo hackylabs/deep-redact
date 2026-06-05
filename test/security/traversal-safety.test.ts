@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, it, expect } from 'vitest'
-import { deepRedact } from '../../src/index.js'
+import { deepRedact, type DeepRedactOptions } from '../../src/index.js'
+import { compileRedactorPlan } from '../../src/core/compiler/compile-redactor-plan.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const corpus = JSON.parse(
@@ -90,6 +91,34 @@ describe('traversal safety — custom limits', () => {
 
   it('throws BUDGET_EXCEEDED at a user-configured maxNodes, not the default', () => {
     const redactNarrow = deepRedact({ keys: ['secret'], maxNodes: 5 })
+    expect(() => redactNarrow(buildWideObject(6))).toThrowError(
+      expect.objectContaining({ code: 'BUDGET_EXCEEDED' })
+    )
+    expect(() => redactNarrow(buildWideObject(4))).not.toThrow()
+  })
+
+  it('throws BUDGET_EXCEEDED for a substring-driven maxDepth breach in the generic traversal', () => {
+    const options = {
+      maxDepth: 3,
+      stringTests: [/token=[^&\s]+/],
+    } satisfies DeepRedactOptions
+    const redactShallow = deepRedact(options)
+
+    expect(compileRedactorPlan(options).pathDrivenOnly).toBe(false)
+    expect(() => redactShallow(buildNestedObject(4))).toThrowError(
+      expect.objectContaining({ code: 'BUDGET_EXCEEDED' })
+    )
+    expect(() => redactShallow(buildNestedObject(2))).not.toThrow()
+  })
+
+  it('throws BUDGET_EXCEEDED for a substring-driven maxNodes breach in the generic traversal', () => {
+    const options = {
+      maxNodes: 5,
+      stringTests: [/token=[^&\s]+/],
+    } satisfies DeepRedactOptions
+    const redactNarrow = deepRedact(options)
+
+    expect(compileRedactorPlan(options).pathDrivenOnly).toBe(false)
     expect(() => redactNarrow(buildWideObject(6))).toThrowError(
       expect.objectContaining({ code: 'BUDGET_EXCEEDED' })
     )

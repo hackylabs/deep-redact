@@ -1,5 +1,5 @@
 # generated: 2026-04-13T09:43:13+0100
-# last_updated: 2026-05-31T20:50:00+0100
+# last_updated: 2026-06-05T10:00:01+0100
 # project: deep-redact
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Scrum Master typically creates the next story after the previous one is 'done'
 
 generated: 2026-04-13T09:43:13+0100
-last_updated: 2026-06-05T08:59:45+0100
+last_updated: 2026-06-05T10:00:01+0100
 project: deep-redact
 project_key: NOKEY
 tracking_system: file-system
@@ -115,7 +115,7 @@ development_status:
   8-3-move-transformer-and-circular-handling-into-a-serialise-only-output-adapter: done
   8-4-extend-rule-driven-engine-for-single-level-wildcard-paths: done
   8-5-extend-rule-driven-engine-for-double-wildcard-paths-and-key-based-rules: done
-  8-6-integrate-substring-matching-and-finalise-rule-driven-engine: backlog
+  8-6-integrate-substring-matching-and-finalise-rule-driven-engine: done
   epic-8-retrospective: optional
 
   epic-9: backlog

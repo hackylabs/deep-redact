@@ -26,14 +26,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/`.
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v3 3.0.5 |
 |--------|------------------------------|-----------------------------------------------|
-| Median | 0.000281 ms | 0.007124 ms |
-| Mean | 0.000310 ms | 0.007149 ms |
-| Min | 0.000277 ms | 0.006724 ms |
-| Max | 0.000839 ms | 0.008485 ms |
+| Median | 0.000223 ms | 0.004902 ms |
+| Mean | 0.000244 ms | 0.004927 ms |
+| Min | 0.000204 ms | 0.004572 ms |
+| Max | 0.000805 ms | 0.006446 ms |
 
 ### Threshold
 
-**Overhead:** -96.06%
+**Overhead:** -95.45%
 **Policy:** median within -100% to 0%
 **Gate scope:** protected-branch, release-candidate
 **Result:** PASSED
@@ -62,14 +62,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/`.
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/json-stringify-regex 1.0.0 |
 |--------|------------------------------|-----------------------------------------------------|
-| Median | 0.000290 ms | 0.001532 ms |
-| Mean | 0.000301 ms | 0.001552 ms |
-| Min | 0.000287 ms | 0.001520 ms |
-| Max | 0.000737 ms | 0.001946 ms |
+| Median | 0.000227 ms | 0.001298 ms |
+| Mean | 0.000235 ms | 0.001306 ms |
+| Min | 0.000212 ms | 0.001231 ms |
+| Max | 0.000594 ms | 0.001604 ms |
 
 ### Threshold
 
-**Overhead:** -81.08%
+**Overhead:** -82.48%
 **Policy:** median within -100% to 0%
 **Gate scope:** protected-branch, release-candidate
 **Result:** PASSED
@@ -98,14 +98,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/`.
 
 | Metric | @hackylabs/deep-redact 4.0.0 | fast-redact 3.5.0 |
 |--------|------------------------------|-------------------|
-| Median | 0.004382 ms | 0.000548 ms |
-| Mean | 0.004463 ms | 0.000553 ms |
-| Min | 0.004343 ms | 0.000537 ms |
-| Max | 0.004913 ms | 0.000961 ms |
+| Median | 0.003464 ms | 0.000466 ms |
+| Mean | 0.003773 ms | 0.000468 ms |
+| Min | 0.003346 ms | 0.000457 ms |
+| Max | 0.010718 ms | 0.000502 ms |
 
 ### Threshold
 
-**Overhead:** 699.07%
+**Overhead:** 642.6%
 **Policy:** median within -100% to 1000%
 **Gate scope:** protected-branch, release-candidate
 **Result:** PASSED
@@ -134,14 +134,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/`.
 
 | Metric | @hackylabs/deep-redact 4.0.0 | fast-redact 3.5.0 |
 |--------|------------------------------|-------------------|
-| Median | 0.000433 ms | 0.000457 ms |
-| Mean | 0.000452 ms | 0.000480 ms |
-| Min | 0.000429 ms | 0.000445 ms |
-| Max | 0.000881 ms | 0.000881 ms |
+| Median | 0.000337 ms | 0.000344 ms |
+| Mean | 0.000345 ms | 0.000349 ms |
+| Min | 0.000314 ms | 0.000337 ms |
+| Max | 0.000795 ms | 0.000694 ms |
 
 ### Threshold
 
-**Overhead:** -5.21%
+**Overhead:** -1.87%
 **Policy:** median within -100% to 75%
 **Gate scope:** protected-branch, release-candidate
 **Result:** PASSED
@@ -170,14 +170,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/`.
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v3 3.0.5 |
 |--------|------------------------------|-----------------------------------------------|
-| Median | 0.000434 ms | 0.006298 ms |
-| Mean | 0.000452 ms | 0.006445 ms |
-| Min | 0.000429 ms | 0.006166 ms |
-| Max | 0.000873 ms | 0.009096 ms |
+| Median | 0.000340 ms | 0.004275 ms |
+| Mean | 0.000352 ms | 0.004325 ms |
+| Min | 0.000333 ms | 0.004078 ms |
+| Max | 0.000781 ms | 0.004786 ms |
 
 ### Threshold
 
-**Overhead:** -93.11%
+**Overhead:** -92.05%
 **Policy:** median within -100% to 0%
 **Gate scope:** protected-branch, release-candidate
 **Result:** PASSED
@@ -206,14 +206,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/`.
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/json-stringify-regex 1.0.0 |
 |--------|------------------------------|-----------------------------------------------------|
-| Median | 0.000433 ms | 0.001534 ms |
-| Mean | 0.000452 ms | 0.001549 ms |
-| Min | 0.000429 ms | 0.001517 ms |
-| Max | 0.001112 ms | 0.002088 ms |
+| Median | 0.000351 ms | 0.001285 ms |
+| Mean | 0.000365 ms | 0.001296 ms |
+| Min | 0.000336 ms | 0.001269 ms |
+| Max | 0.001093 ms | 0.001729 ms |
 
 ### Threshold
 
-**Overhead:** -71.78%
+**Overhead:** -72.69%
 **Policy:** median within -100% to 50%
 **Gate scope:** protected-branch, release-candidate
 **Result:** PASSED

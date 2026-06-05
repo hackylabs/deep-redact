@@ -3085,6 +3085,199 @@ describe('Reusable redactor factory contract', () => {
     })
   })
 
+  describe('substring traversal boundary', () => {
+    it('matches the generic traversal oracle for substring-only bare RegExp rules', () => {
+      const options: DeepRedactOptions = {
+        stringTests: [/token=[^&\s]+/],
+      }
+      const createPayload = () => ({
+        events: [
+          'token=array-secret',
+          'visible',
+        ],
+        user: {
+          note: 'safe token=object-secret tail',
+          safe: 'visible',
+        },
+      })
+
+      const output = expectStructuredPublicOutputToMatchGenericTraversal(options, createPayload)
+
+      expect(output).toStrictEqual({
+        events: [
+          '[REDACTED]',
+          'visible',
+        ],
+        user: {
+          note: '[REDACTED]',
+          safe: 'visible',
+        },
+      })
+    })
+
+    it('matches the generic traversal oracle for structured substring replacers', () => {
+      const options: DeepRedactOptions = {
+        stringTests: [{
+          pattern: /token=[^&\s]+/g,
+          replacer: (value, pattern) => value.replace(pattern, 'token=[REDACTED]'),
+        }],
+      }
+      const createPayload = () => ({
+        events: [
+          'prefix token=array-one middle token=array-two',
+          'visible',
+        ],
+        user: {
+          note: 'safe token=object-secret tail',
+          safe: 'visible',
+        },
+      })
+
+      const output = expectStructuredPublicOutputToMatchGenericTraversal(options, createPayload)
+
+      expect(output).toStrictEqual({
+        events: [
+          'prefix token=[REDACTED] middle token=[REDACTED]',
+          'visible',
+        ],
+        user: {
+          note: 'safe token=[REDACTED] tail',
+          safe: 'visible',
+        },
+      })
+    })
+
+    it('keeps path and wildcard winners ahead of substring rewrites in the generic oracle', () => {
+      const options: DeepRedactOptions = {
+        paths: [
+          {
+            path: 'account.id',
+            censor: '[EXACT-PATH]',
+          },
+          {
+            path: 'profiles.*.email',
+            censor: '[WILDCARD-PATH]',
+          },
+        ],
+        stringTests: [{
+          pattern: /token=[^&\s]+/g,
+          replacer: (value, pattern) => value.replace(pattern, 'token=[SUBSTRING]'),
+        }],
+      }
+      const createPayload = () => ({
+        account: {
+          id: 'token=account-id',
+          note: 'token=account-note',
+        },
+        audit: {
+          note: 'token=audit-note',
+        },
+        profiles: {
+          admin: {
+            email: 'token=admin-email',
+            note: 'token=admin-note',
+          },
+          guest: {
+            email: 'guest@example.com',
+            note: 'visible',
+          },
+        },
+      })
+
+      const output = expectStructuredPublicOutputToMatchGenericTraversal(options, createPayload)
+
+      expect(output).toStrictEqual({
+        account: {
+          id: '[EXACT-PATH]',
+          note: 'token=[SUBSTRING]',
+        },
+        audit: {
+          note: 'token=[SUBSTRING]',
+        },
+        profiles: {
+          admin: {
+            email: '[WILDCARD-PATH]',
+            note: 'token=[SUBSTRING]',
+          },
+          guest: {
+            email: '[WILDCARD-PATH]',
+            note: 'visible',
+          },
+        },
+      })
+    })
+
+    it('routes an otherwise safe wildcard-only plan to the generic oracle when substring matching is added', () => {
+      const options: DeepRedactOptions = {
+        paths: ['profiles.*.token'],
+        stringTests: [/note-secret/],
+      }
+      const createPayload = () => ({
+        profiles: {
+          admin: {
+            note: 'note-secret',
+            token: 'admin-token',
+          },
+          guest: {
+            note: 'visible',
+            token: 'guest-token',
+          },
+        },
+      })
+
+      expect(compileRedactorPlan({ paths: ['profiles.*.token'] }).pathDrivenOnly).toBe(true)
+
+      const output = expectStructuredPublicOutputToMatchGenericTraversal(options, createPayload)
+
+      expect(output).toStrictEqual({
+        profiles: {
+          admin: {
+            note: '[REDACTED]',
+            token: '[REDACTED]',
+          },
+          guest: {
+            note: 'visible',
+            token: '[REDACTED]',
+          },
+        },
+      })
+    })
+
+    it('runs generic substring traversal before custom serialise output', () => {
+      const serialisedInputs: unknown[] = []
+      const options: DeepRedactOptions = {
+        paths: [{
+          path: 'account.id',
+          censor: '[EXACT-PATH]',
+        }],
+        serialise: (value) => {
+          serialisedInputs.push(value)
+          return JSON.stringify(value)
+        },
+        stringTests: [{
+          pattern: /token=[^&\s]+/,
+          replacer: (value, pattern) => value.replace(pattern, 'token=[SUBSTRING]'),
+        }],
+      }
+      const payload = {
+        account: {
+          id: 'token=account-id',
+          note: 'token=account-note',
+        },
+      }
+      const expectedStructured = {
+        account: {
+          id: '[EXACT-PATH]',
+          note: 'token=[SUBSTRING]',
+        },
+      }
+
+      expect(compileRedactorPlan(options).pathDrivenOnly).toBe(false)
+      expect(deepRedact(options)(payload)).toBe(JSON.stringify(expectedStructured))
+      expect(serialisedInputs).toStrictEqual([expectedStructured])
+    })
+  })
+
   it('lets a more specific regex path rule outrank an inherited retained parent path policy', () => {
     const redact = deepRedact({
       paths: [
@@ -5406,15 +5599,20 @@ describe('Wildcard rule-driven engine vs. general traversal equivalence (Story 8
   })
 
   it('throws BUDGET_EXCEEDED when wildcard enumeration exceeds maxNodes (AC 9)', () => {
-    const wide = deepRedact({ paths: ['*.x'], maxNodes: 3 })
+    const options = { paths: ['*.x'], maxNodes: 3 } satisfies DeepRedactOptions
+    expect(compileRedactorPlan(options).pathDrivenOnly).toBe(true)
+
+    const wide = deepRedact(options)
     const payload = { a: { x: 1 }, b: { x: 2 }, c: { x: 3 }, d: { x: 4 }, e: { x: 5 } }
 
     expect(() => wide(payload)).toThrowError(
       expect.objectContaining({ code: 'BUDGET_EXCEEDED' }),
     )
 
-    // Within budget the same wildcard config completes without throwing.
-    const narrow = deepRedact({ paths: ['*.x'], maxNodes: 3 })
+    // At and below the budget boundary the same wildcard config completes without throwing.
+    expect(() => wide({ a: { x: 1 }, b: { x: 2 }, c: { x: 3 } })).not.toThrow()
+
+    const narrow = deepRedact(options)
     expect(() => narrow({ a: { x: 1 }, b: { x: 2 } })).not.toThrow()
   })
 

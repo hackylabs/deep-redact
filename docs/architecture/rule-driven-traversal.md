@@ -132,32 +132,45 @@ sensitive; values nobody configured are, by definition, outside that
 declaration.
 
 Callers who need every transformable value processed into a stable serialisable form
-should use `serialise: true`; the serialise adapter handles all supported runtime
-types (Date, BigInt, Map, Set, Error, RegExp, URL) and neutralises circular
-references regardless of which traversal mode ran. Key-based rules (`keys`) and
-recursive-wildcard (`**`) rules route to the `O(N)` traversal mode; substring
-rules also disqualify the rule-driven mode today, with full substring boundary
-wording left to Story 8.6. These targeting modes are **not** transformation
+should use `serialise: true` or a custom `serialise` function; the serialise
+adapter handles all supported runtime types (Date, BigInt, Map, Set, Error,
+RegExp, URL) and neutralises circular references regardless of which traversal
+mode ran. Transformation and circular neutralisation are output-stage behaviour
+gated by serialised output, not a reason to choose substring, key, or
+recursive-wildcard targeting.
+
+Targeting modes that must inspect payload breadth route to the `O(N)` traversal:
+key rules (`keys`), regex-key rules, recursive-wildcard (`**`) rules, regex or
+ignore path segments, substring rules (`stringTests`), fuzzy key matching, and
+case-insensitive key matching. These targeting modes are **not** transformation
 escape hatches: under `serialise: false`, non-redacted runtime values remain raw.
 Single-level `*` rules are also not an escape hatch: they stay in the rule-driven
-engine. Choosing exact paths (optionally with single-level `*`) is choosing the
-targeted model; choosing key rules or `**` is choosing the breadth-visiting `O(N)`
-model.
+engine when they are otherwise safe. Choosing exact paths (optionally with safe
+single-level `*`) is choosing the targeted model; choosing any breadth-visiting
+targeting mode is choosing the generic `O(N)` model.
 
 ## Traversal Mode Boundary
 
 Which mode a configuration uses is decided at compile time by the
-`pathDrivenOnly` flag. A configuration takes the **rule-driven** path when its
-targeting is driven solely by exact paths and/or single-level `*` wildcard
-paths, with no key rules, regex-key rules, or substring rules (`stringTests`),
-and none of the key-matching mode flags (`fuzzyKeyMatch`,
-`caseSensitiveKeyMatch: false`); concretely, every dynamic path rule must be
-single-wildcard-only — its segments are all exact properties/indices or
-single-level `*`, with no recursive-wildcard (`**`), ignore segments, or
-regex/ignore-regex segments. Any other configuration — one containing a `**`
-segment, an `ignore`/`regex` path segment, a key or regex-key rule, a substring
-rule, or a disqualifying option flag — takes the breadth-visiting `O(N)`
-traversal mode.
+`pathDrivenOnly` flag. A configuration takes the **rule-driven** path when all of
+these conditions hold:
+
+- It contains at least one path rule.
+- Every path rule is exact or every dynamic path rule is single-wildcard-only:
+  its segments are exact properties/indices or single-level `*`.
+- There is no unsafe wildcard-depth overlap between any path rules. Unsafe means
+  a wildcard enumeration depth shares a prefix with another rule's non-terminal
+  concrete segment: `a.b.c` with `a.*.d`, and `a.b.*` with `a.*.c`, both route
+  to the generic traversal; `account.token` with `profiles.*.email` remains
+  rule-driven when otherwise safe.
+- There are no recursive-wildcard (`**`) segments, regex path segments, ignore
+  path segments, or ignore-regex path segments.
+- There are no key rules, regex-key rules, or substring rules (`stringTests`).
+- `fuzzyKeyMatch` is false or unset.
+- `caseSensitiveKeyMatch` is true or unset.
+
+Every other configuration takes the breadth-visiting `O(N)` traversal mode,
+including any configuration with `stringTests`.
 
 Single-level `*` wildcard support landed in **Story 8.4**: a `*` segment is
 navigated by enumerating only the keys of the container reached at that depth
@@ -165,8 +178,9 @@ navigated by enumerating only the keys of the container reached at that depth
 segments before and after the `*` still use direct property/index access.
 Recursive-wildcard (`**`) and key-based rules were pinned in **Story 8.5** as
 intentionally outside the rule-driven engine: they route to the `O(N)` generic
-traversal and are applied there alongside any path rules in one pass. Full
-substring boundary finalisation remains Story 8.6 scope.
+traversal and are applied there alongside any path rules in one pass. Substring
+rules (`stringTests`) follow the same generic traversal boundary because the
+runtime must inspect string values across the payload to know whether they match.
 
 Compile-time selection is necessary but not sufficient: the rule-driven engine
 is payload-aware at call time. A non-plain prototype on a configured path, a

@@ -414,6 +414,10 @@ describe('compiled exact-selector rule plan', () => {
         'safe mixed exact and single-level wildcard paths',
         { paths: ['account.token', 'profiles.*.email'] },
       ],
+      [
+        'safe paths with an empty substring rule list',
+        { paths: ['account.token', 'profiles.*.email'], stringTests: [] },
+      ],
     ]
 
     it.each(safePathDrivenCases)('sets pathDrivenOnly: true for %s', (_label, options) => {
@@ -454,8 +458,35 @@ describe('compiled exact-selector rule plan', () => {
         { caseSensitiveKeyMatch: false, paths: ['account.token'] },
       ],
       [
-        'substring rule',
+        'bare substring rule',
+        { stringTests: [/token=[^&\s]+/] },
+      ],
+      [
+        'structured substring rule',
+        {
+          stringTests: [{
+            pattern: /token=[^&\s]+/,
+            replacer: (value, pattern) => value.replace(pattern, 'token=[REDACTED]'),
+          }],
+        },
+      ],
+      [
+        'exact path plus substring rule',
         { paths: ['account.token'], stringTests: [/token=[^&\s]+/] },
+      ],
+      [
+        'single-level wildcard path plus substring rule',
+        {
+          paths: ['accounts.*.token'],
+          stringTests: [{
+            pattern: /token=[^&\s]+/,
+            replacer: (value, pattern) => value.replace(pattern, 'token=[REDACTED]'),
+          }],
+        },
+      ],
+      [
+        'safe mixed exact and single-level wildcard paths plus substring rule',
+        { paths: ['account.token', 'profiles.*.email'], stringTests: [/token=[^&\s]+/] },
       ],
       [
         'unsafe exact and wildcard shared-prefix overlap',
