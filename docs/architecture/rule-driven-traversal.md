@@ -23,9 +23,10 @@ wildcard (`*`) expansion: a `*` segment requires the engine to enumerate the
 keys of the container at that level so it can descend into each. Enumeration at
 a `*` level is the only point at which positions outside a rule's literal path
 are touched, and even then only the keys of the specifically targeted container
-are read. (Recursive wildcard `**` is not part of this rule-driven navigation;
-its handling is not yet implemented in the rule-driven engine, and until then a
-configuration containing `**` routes to the `O(N)` traversal mode described below.)
+are read. Recursive wildcard `**` is intentionally outside this rule-driven
+navigation. A configuration containing `**` routes to the `O(N)` traversal mode
+described below, where the generic traversal resolves zero, one, or many
+intermediate path segments.
 
 ### Cost Model
 
@@ -133,12 +134,15 @@ declaration.
 Callers who need every transformable value processed into a stable serialisable form
 should use `serialise: true`; the serialise adapter handles all supported runtime
 types (Date, BigInt, Map, Set, Error, RegExp, URL) and neutralises circular
-references regardless of which traversal mode ran. Key-based rules (`keys`),
-substring rules, and recursive-wildcard (`**`) rules route to the `O(N)` traversal
-mode, which visits the matched breadth of the payload. Single-level `*` rules are
-**not** an escape hatch: they stay in the rule-driven engine. Choosing exact paths
-(optionally with single-level `*`) is choosing the targeted model; choosing
-key, substring, or `**` rules is choosing the breadth-visiting `O(N)` model.
+references regardless of which traversal mode ran. Key-based rules (`keys`) and
+recursive-wildcard (`**`) rules route to the `O(N)` traversal mode; substring
+rules also disqualify the rule-driven mode today, with full substring boundary
+wording left to Story 8.6. These targeting modes are **not** transformation
+escape hatches: under `serialise: false`, non-redacted runtime values remain raw.
+Single-level `*` rules are also not an escape hatch: they stay in the rule-driven
+engine. Choosing exact paths (optionally with single-level `*`) is choosing the
+targeted model; choosing key rules or `**` is choosing the breadth-visiting `O(N)`
+model.
 
 ## Traversal Mode Boundary
 
@@ -159,8 +163,10 @@ Single-level `*` wildcard support landed in **Story 8.4**: a `*` segment is
 navigated by enumerating only the keys of the container reached at that depth
 (`O(K)` at the wildcard level), not by walking the whole payload. Exact path
 segments before and after the `*` still use direct property/index access.
-Recursive-wildcard (`**`), key-based, and substring rules remain on the `O(N)`
-mode and are addressed in Stories 8.5–8.6.
+Recursive-wildcard (`**`) and key-based rules were pinned in **Story 8.5** as
+intentionally outside the rule-driven engine: they route to the `O(N)` generic
+traversal and are applied there alongside any path rules in one pass. Full
+substring boundary finalisation remains Story 8.6 scope.
 
 Compile-time selection is necessary but not sufficient: the rule-driven engine
 is payload-aware at call time. A non-plain prototype on a configured path, a
@@ -171,3 +177,7 @@ value is a non-plain object or circular reference is censored wholesale (censor
 wins, no descent, no delegation), mirroring the exact-terminal behaviour. This
 document defines the **contract** the modes must honour; the flag's
 implementation lives in the compiler.
+
+The non-plain root/intermediate container cases above are governed by the
+existing prototype-pollution guard. A fuller prototype-handling contract remains
+deferred; this document records only the traversal-mode boundary.

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { DeepRedactOptions } from '../../../../src/index.js'
 import { compileRedactorPlan } from '../../../../src/core/compiler/compile-redactor-plan.js'
 import { validateConfig } from '../../../../src/core/validation/validate-config.js'
 
@@ -247,10 +248,10 @@ describe('compiled exact-selector rule plan', () => {
     expect(Object.isFrozen(plan.substringRules[0])).toBe(true)
     expect(Object.isFrozen(plan.substringRules[1])).toBe(true)
     expect(plan.substringRules[0]?.pattern).not.toBe(barePattern)
-    expect(plan.substringRules[0]?.pattern.source).toBe('token=[^&\\s]+')
+    expect(plan.substringRules[0]?.pattern.source).toBe(String.raw`token=[^&\s]+`)
     expect(plan.substringRules[0]?.pattern.flags).toBe('g')
     expect(plan.substringRules[1]?.pattern).not.toBe(structuredPattern)
-    expect(plan.substringRules[1]?.pattern.source).toBe('api-key=[^&\\s]+')
+    expect(plan.substringRules[1]?.pattern.source).toBe(String.raw`api-key=[^&\s]+`)
     expect(plan.substringRules[1]?.pattern.flags).toBe('i')
   })
 
@@ -346,7 +347,7 @@ describe('compiled exact-selector rule plan', () => {
 
     expect(Object.keys(plan.exactPathRules)).toEqual([])
     expect(plan.dynamicPathRules.map((rule) => rule.signature)).toEqual([
-      'users.{regex:{"source":"^tenant-\\\\d+$","flags":"i"}}.token',
+      String.raw`users.{regex:{"source":"^tenant-\\d+$","flags":"i"}}.token`,
       'users.{ignore-regex:{"source":"^internal","flags":""}}.token',
     ])
     const directRegexSegment = plan.dynamicPathRules[0]?.segments[1]
@@ -397,6 +398,74 @@ describe('compiled exact-selector rule plan', () => {
       path: 'options.paths[1]',
       message: expect.stringMatching(/duplicate dynamic selector/i),
     }))
+  })
+
+  describe('pathDrivenOnly traversal-mode boundary', () => {
+    const safePathDrivenCases: ReadonlyArray<readonly [string, DeepRedactOptions]> = [
+      [
+        'exact paths only',
+        { paths: ['account.token', 'profile.email'] },
+      ],
+      [
+        'single-level wildcard paths only',
+        { paths: ['accounts.*.token', 'profiles.*.email'] },
+      ],
+      [
+        'safe mixed exact and single-level wildcard paths',
+        { paths: ['account.token', 'profiles.*.email'] },
+      ],
+    ]
+
+    it.each(safePathDrivenCases)('sets pathDrivenOnly: true for %s', (_label, options) => {
+      expect(compileRedactorPlan(options).pathDrivenOnly).toBe(true)
+    })
+
+    const genericTraversalBoundaryCases: ReadonlyArray<readonly [string, DeepRedactOptions]> = [
+      [
+        'recursive wildcard path',
+        { paths: ['account.**.token'] },
+      ],
+      [
+        'mixed exact and recursive wildcard paths',
+        { paths: ['account.id', 'account.**.token'] },
+      ],
+      [
+        'regex path segment',
+        { paths: [['accounts', /^tenant-\d+$/, 'token']] },
+      ],
+      [
+        'ignore path segment',
+        { paths: [['accounts', { ignore: 'public' }, 'token']] },
+      ],
+      [
+        'exact key rule',
+        { keys: ['token'], paths: ['account.token'] },
+      ],
+      [
+        'regex key rule',
+        { keys: [/token$/i], paths: ['account.token'] },
+      ],
+      [
+        'global fuzzy key matching',
+        { fuzzyKeyMatch: true, paths: ['account.token'] },
+      ],
+      [
+        'global case-insensitive key matching',
+        { caseSensitiveKeyMatch: false, paths: ['account.token'] },
+      ],
+      [
+        'substring rule',
+        { paths: ['account.token'], stringTests: [/token=[^&\s]+/] },
+      ],
+      [
+        'unsafe exact and wildcard shared-prefix overlap',
+        { paths: ['a.b.c', 'a.*.d'] },
+      ],
+    ]
+
+    it.each(genericTraversalBoundaryCases)('sets pathDrivenOnly: false for %s', (_label, options) => {
+      expect(compileRedactorPlan(options).pathDrivenOnly).toBe(false)
+    })
   })
 
   it('rejects exact structured selectors that duplicate canonical string selectors', () => {
@@ -529,10 +598,10 @@ describe('compiled exact-selector rule plan', () => {
 
   it('compiles ignored value types into a frozen membership plan without sharing the caller-owned container', () => {
     const ignoredValueTypes: {
-      bigint: boolean
-      Error: boolean
-      Map: boolean
-      URL?: boolean
+      bigint: boolean;
+      Error: boolean;
+      Map: boolean;
+      URL?: boolean;
     } = {
       bigint: true,
       Error: false,
@@ -561,7 +630,7 @@ describe('compiled exact-selector rule plan', () => {
     const firstSink = (_event: unknown) => undefined
     const secondSink = (_event: unknown) => undefined
     const diagnostics: {
-      sink?: (event: unknown) => void
+      sink?: (event: unknown) => void;
     } = {
       sink: firstSink,
     }

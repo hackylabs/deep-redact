@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { deepRedact } from '../../../src/index.js'
+import { deepRedact, type FunctionCensorContext } from '../../../src/index.js'
+import { compileRedactorPlan } from '../../../src/core/compiler/compile-redactor-plan.js'
 
 /**
  * Contract tests for the rule-driven traversal model documented in
@@ -211,6 +212,109 @@ describe('Rule-driven traversal contract', () => {
       expect(redact(payload)).toStrictEqual({
         a: { b: { c: '[REDACTED]', d: '[REDACTED]' }, x: { d: '[REDACTED]' } },
       })
+    })
+  })
+
+  describe('Double wildcard boundary cases (Story 8.5)', () => {
+    it('routes recursive wildcard selectors to the breadth-visiting traversal mode', () => {
+      expect(compileRedactorPlan({ paths: ['account.**.token'] }).pathDrivenOnly).toBe(false)
+    })
+
+    it('redacts recursive wildcard matches across zero, one, and many intermediate segments', () => {
+      const redact = deepRedact({ paths: ['account.**.token'] })
+
+      expect(redact({
+        account: {
+          token: 'root-token',
+          session: {
+            token: 'session-token',
+            safe: 'keep-session',
+          },
+          audit: {
+            session: {
+              token: 'audit-token',
+            },
+          },
+          safe: 'keep-account',
+        },
+        token: 'root-sibling',
+      })).toStrictEqual({
+        account: {
+          token: '[REDACTED]',
+          session: {
+            token: '[REDACTED]',
+            safe: 'keep-session',
+          },
+          audit: {
+            session: {
+              token: '[REDACTED]',
+            },
+          },
+          safe: 'keep-account',
+        },
+        token: 'root-sibling',
+      })
+    })
+
+    it('delivers concrete matched paths and the recursive wildcard rule path to function censors', () => {
+      const contexts: FunctionCensorContext[] = []
+      const redact = deepRedact({
+        paths: [{
+          path: 'account.**.token',
+          censor: (_value: unknown, context: FunctionCensorContext) => {
+            contexts.push(context)
+            return '[FN]'
+          },
+        }],
+      })
+
+      redact({
+        account: {
+          token: 'root-token',
+          session: {
+            token: 'session-token',
+          },
+          audit: {
+            session: {
+              token: 'audit-token',
+            },
+          },
+        },
+      })
+
+      expect(contexts.map((context) => context.matchedPath).sort()).toStrictEqual([
+        ['account', 'audit', 'session', 'token'],
+        ['account', 'session', 'token'],
+        ['account', 'token'],
+      ])
+      for (const context of contexts) {
+        expect(context.rulePath).toStrictEqual(['account', { anyDepth: true }, 'token'])
+        expect(context.terminalKey).toBe('token')
+      }
+    })
+
+    it('leaves non-redacted runtime-value siblings raw under serialise: false', () => {
+      const when = new Date('2026-06-05T08:00:00.000Z')
+      const metadata = new Map<string, unknown>([['token', 'map-token']])
+      const circular: Record<string, unknown> = { label: 'loop' }
+      circular.self = circular
+      const payload = {
+        account: {
+          token: 'root-token',
+        },
+        circular,
+        metadata,
+        when,
+      }
+      const redact = deepRedact({ paths: ['account.**.token'] })
+
+      const output = redact(payload) as typeof payload
+
+      expect(output.account.token).toBe('[REDACTED]')
+      expect(output.when).toBe(when)
+      expect(output.metadata).toBe(metadata)
+      expect(output.circular).toBe(circular)
+      expect(output.circular.self).toBe(circular)
     })
   })
 })

@@ -242,6 +242,21 @@ const expectTrackedPrecedenceCallCounts = (
   }
 }
 
+const expectStructuredPublicOutputToMatchGenericTraversal = (
+  options: DeepRedactOptions,
+  createPayload: () => unknown,
+): unknown => {
+  const plan = compileRedactorPlan(options)
+  expect(plan.pathDrivenOnly).toBe(false)
+
+  const publicOutput = deepRedact(options)(createPayload())
+  const genericOutput = redactValue(createPayload(), plan)
+
+  expect(publicOutput).toStrictEqual(genericOutput)
+
+  return publicOutput
+}
+
 const normalisePrecedenceDocumentationValue = (value: unknown): unknown => {
   if (typeof value === 'function') {
     return '[function]'
@@ -2878,6 +2893,195 @@ describe('Reusable redactor factory contract', () => {
         alice: { accessToken: '[REGEX-PATH]' },
         bob: { accessToken: '[KEY]' },
       },
+    })
+  })
+
+  describe('path and key traversal boundary (Story 8.5)', () => {
+    it('matches the generic traversal oracle for recursive wildcard path-only configs', () => {
+      const options: DeepRedactOptions = {
+        paths: ['account.**.token'],
+      }
+      const createPayload = () => ({
+        account: {
+          audit: {
+            session: {
+              token: 'audit-token',
+            },
+          },
+          session: {
+            token: 'session-token',
+          },
+          token: 'root-token',
+        },
+        outside: {
+          token: 'outside-token',
+        },
+      })
+
+      const output = expectStructuredPublicOutputToMatchGenericTraversal(options, createPayload)
+
+      expect(output).toStrictEqual({
+        account: {
+          audit: {
+            session: {
+              token: '[REDACTED]',
+            },
+          },
+          session: {
+            token: '[REDACTED]',
+          },
+          token: '[REDACTED]',
+        },
+        outside: {
+          token: 'outside-token',
+        },
+      })
+    })
+
+    it('applies exact path, wildcard path, literal key, and regex key rules in one generic traversal', () => {
+      const options: DeepRedactOptions = {
+        censor: (_value: unknown, context: FunctionCensorContext) => context.rulePath[0] instanceof RegExp
+          ? '[REGEX-KEY]'
+          : '[LITERAL-KEY]',
+        keys: ['token', /token$/i],
+        paths: [
+          {
+            path: 'account.id',
+            censor: '[EXACT-PATH]',
+          },
+          {
+            path: 'profiles.*.email',
+            censor: '[WILDCARD-PATH]',
+          },
+        ],
+      }
+      const createPayload = () => ({
+        account: {
+          id: 'acct-1',
+          safe: 'keep-account',
+          token: 'account-token',
+        },
+        outside: {
+          refreshToken: 'outside-refresh',
+          safe: 'keep-outside',
+          token: 'outside-token',
+        },
+        profiles: {
+          admin: {
+            email: 'admin@example.com',
+            token: 'profile-token',
+          },
+          guest: {
+            email: 'guest@example.com',
+            refreshToken: 'guest-refresh',
+          },
+        },
+      })
+
+      const output = expectStructuredPublicOutputToMatchGenericTraversal(options, createPayload)
+
+      expect(output).toStrictEqual({
+        account: {
+          id: '[EXACT-PATH]',
+          safe: 'keep-account',
+          token: '[LITERAL-KEY]',
+        },
+        outside: {
+          refreshToken: '[REGEX-KEY]',
+          safe: 'keep-outside',
+          token: '[LITERAL-KEY]',
+        },
+        profiles: {
+          admin: {
+            email: '[WILDCARD-PATH]',
+            token: '[LITERAL-KEY]',
+          },
+          guest: {
+            email: '[WILDCARD-PATH]',
+            refreshToken: '[REGEX-KEY]',
+          },
+        },
+      })
+    })
+
+    it('keeps recursive dynamic path precedence over key rules while key rules redact outside the recursive path', () => {
+      const options: DeepRedactOptions = {
+        censor: '[KEY]',
+        keys: ['token'],
+        paths: [{
+          path: 'account.**.token',
+          censor: '[PATH]',
+        }],
+      }
+      const createPayload = () => ({
+        account: {
+          audit: {
+            session: {
+              token: 'audit-token',
+            },
+          },
+          session: {
+            token: 'session-token',
+          },
+          token: 'root-token',
+        },
+        otherToken: 'regex-like-name-without-exact-key-hit',
+        outside: {
+          token: 'outside-token',
+        },
+      })
+
+      const output = expectStructuredPublicOutputToMatchGenericTraversal(options, createPayload)
+
+      expect(output).toStrictEqual({
+        account: {
+          audit: {
+            session: {
+              token: '[PATH]',
+            },
+          },
+          session: {
+            token: '[PATH]',
+          },
+          token: '[PATH]',
+        },
+        otherToken: 'regex-like-name-without-exact-key-hit',
+        outside: {
+          token: '[KEY]',
+        },
+      })
+    })
+
+    it('routes case-insensitive literal key configs to the generic traversal even when no key is hit', () => {
+      const options: DeepRedactOptions = {
+        caseSensitiveKeyMatch: false,
+        keys: ['api_key'],
+        paths: [{
+          path: 'account.id',
+          censor: '[PATH]',
+        }],
+      }
+      const createPayload = () => ({
+        account: {
+          credential: 'visible-key-miss',
+          id: 'acct-1',
+        },
+        audit: {
+          credential: 'also-visible',
+        },
+      })
+
+      const output = expectStructuredPublicOutputToMatchGenericTraversal(options, createPayload)
+
+      expect(output).toStrictEqual({
+        account: {
+          credential: 'visible-key-miss',
+          id: '[PATH]',
+        },
+        audit: {
+          credential: 'also-visible',
+        },
+      })
     })
   })
 
