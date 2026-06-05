@@ -19,21 +19,21 @@
   },
   "measurements": {
     "subject": {
-      "median": 0.000431999999999789,
-      "mean": 0.00043727369000000647,
-      "min": 0.00042475000000013097,
-      "max": 0.0007145839999993768,
+      "median": 0.0004990779999861843,
+      "mean": 0.0005109520200005911,
+      "min": 0.0004649099999951432,
+      "max": 0.000683408000010786,
       "unit": "ms"
     },
     "comparator": {
-      "median": 0.0013120819999994638,
-      "mean": 0.0013314591600000047,
-      "min": 0.001284665999999561,
-      "max": 0.001738999999999578,
+      "median": 0.0013732399999989867,
+      "mean": 0.0013911193800014822,
+      "min": 0.0013405579999944165,
+      "max": 0.0016286660000214396,
       "unit": "ms"
     }
   },
-  "overheadPct": -67.08,
+  "overheadPct": -63.66,
   "generatingPlatform": {
     "os": "darwin",
     "arch": "arm64",
@@ -43,11 +43,12 @@
     "passed": true,
     "metric": "median",
     "minOverheadPct": -100,
+    "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
     "maxOverheadPct": 50,
     "runScope": [
       "protected-branch",
       "release-candidate"
     ]
   },
-  "generatedAt": "2026-06-05T13:57:43.998Z"
+  "generatedAt": "2026-06-05T14:36:30.646Z"
 }

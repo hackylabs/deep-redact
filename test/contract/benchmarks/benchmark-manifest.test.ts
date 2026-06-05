@@ -23,6 +23,8 @@ const requiredThresholdPolicyKeys = [
   'runScope',
 ]
 
+const workElisionSafetySignal = 'benchmark-output-equivalence-contract'
+
 const requiredFixtureFiles = ['input.json', 'deep-redact-config.json', 'competitor-config.json']
 
 describe('benchmark manifest contract', () => {
@@ -57,6 +59,27 @@ describe('benchmark manifest contract', () => {
       for (const key of requiredThresholdPolicyKeys) {
         expect(row.thresholdPolicy as Record<string, unknown>, `thresholdPolicy missing field: ${key}`).toHaveProperty(key)
       }
+    }
+  })
+
+  it('requires broad lower-overhead floors to name an output-equivalence safety signal', () => {
+    const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'test/bench/manifest.json'), 'utf8')) as {
+      rows: Array<{ id: string; thresholdPolicy: { minOverheadPct: number; minOverheadRationale?: unknown } }>;
+    }
+
+    for (const row of manifest.rows) {
+      if (row.thresholdPolicy.minOverheadPct > -100) {
+        continue
+      }
+
+      expect(
+        row.thresholdPolicy.minOverheadRationale,
+        `row "${row.id}" has minOverheadPct -100 without rationale metadata`,
+      ).toEqual(expect.any(String))
+      expect(
+        row.thresholdPolicy.minOverheadRationale,
+        `row "${row.id}" rationale must name the benchmark output-equivalence safety signal`,
+      ).toContain(workElisionSafetySignal)
     }
   })
 

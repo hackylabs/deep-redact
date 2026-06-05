@@ -25,7 +25,19 @@ const requiredThresholdDecisionKeys = ['passed', 'metric', 'minOverheadPct', 'ma
 describe('benchmark artefacts contract', () => {
   const manifest = JSON.parse(
     readFileSync(path.join(repoRoot, 'test/bench/manifest.json'), 'utf8'),
-  ) as { rows: Array<{ id: string; outputArtefact: string }> }
+  ) as {
+    rows: Array<{
+      id: string;
+      outputArtefact: string;
+      thresholdPolicy: {
+        comparatorMetric: string;
+        minOverheadPct: number;
+        maxOverheadPct: number;
+        runScope: string[];
+        minOverheadRationale?: string;
+      };
+    }>;
+  }
 
   it('every manifest row has a corresponding committed artefact file', () => {
     for (const row of manifest.rows) {
@@ -57,6 +69,38 @@ describe('benchmark artefacts contract', () => {
           artefact.thresholdDecision,
           `thresholdDecision in ${row.outputArtefact} missing field: ${key}`,
         ).toHaveProperty(key)
+      }
+    }
+  })
+
+  it('thresholdDecision on each committed artefact matches the current manifest policy', () => {
+    for (const row of manifest.rows) {
+      const artefactPath = path.join(repoRoot, 'test/artefacts/benchmarks', row.outputArtefact)
+      const artefact = JSON.parse(readFileSync(artefactPath, 'utf8')) as {
+        overheadPct: number | null;
+        thresholdDecision: Record<string, unknown>;
+      }
+
+      expect(artefact.thresholdDecision.metric, `${row.outputArtefact} metric is stale`).toBe(row.thresholdPolicy.comparatorMetric)
+      expect(artefact.thresholdDecision.minOverheadPct, `${row.outputArtefact} min overhead is stale`).toBe(row.thresholdPolicy.minOverheadPct)
+      expect(artefact.thresholdDecision.maxOverheadPct, `${row.outputArtefact} max overhead is stale`).toBe(row.thresholdPolicy.maxOverheadPct)
+      expect(artefact.thresholdDecision.runScope, `${row.outputArtefact} run scope is stale`).toEqual(row.thresholdPolicy.runScope)
+      expect(artefact.thresholdDecision.passed, `${row.outputArtefact} passed decision is stale`).toBe(
+        artefact.overheadPct !== null &&
+        artefact.overheadPct >= row.thresholdPolicy.minOverheadPct &&
+        artefact.overheadPct <= row.thresholdPolicy.maxOverheadPct,
+      )
+
+      if (row.thresholdPolicy.minOverheadRationale === undefined) {
+        expect(
+          artefact.thresholdDecision,
+          `${row.outputArtefact} should not retain obsolete minOverheadRationale metadata`,
+        ).not.toHaveProperty('minOverheadRationale')
+      } else {
+        expect(
+          artefact.thresholdDecision.minOverheadRationale,
+          `${row.outputArtefact} min overhead rationale is stale`,
+        ).toBe(row.thresholdPolicy.minOverheadRationale)
       }
     }
   })

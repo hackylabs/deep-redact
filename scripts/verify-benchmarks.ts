@@ -35,6 +35,9 @@ async function runCli(): Promise<void> {
     }
 
     const artefact = JSON.parse(readFileSync(artefactPath, 'utf8')) as BenchmarkArtefact
+    const expectedPassed = artefact.overheadPct !== null &&
+      artefact.overheadPct >= row.thresholdPolicy.minOverheadPct &&
+      artefact.overheadPct <= row.thresholdPolicy.maxOverheadPct
 
     const overheadDisplay = artefact.overheadPct === null
       ? 'N/A (comparator metric was zero)'
@@ -43,10 +46,14 @@ async function runCli(): Promise<void> {
       `[${row.id}] overhead: ${overheadDisplay} | threshold: ${artefact.thresholdDecision.minOverheadPct}%–${artefact.thresholdDecision.maxOverheadPct}% | passed: ${artefact.thresholdDecision.passed}`,
     )
 
+    if (artefact.thresholdDecision.passed !== expectedPassed) {
+      mismatches.push(`${row.id}: thresholdDecision.passed is stale`)
+    }
+
     if (
       isGateScope &&
       artefact.thresholdDecision.runScope.includes(runScope) &&
-      !artefact.thresholdDecision.passed
+      !expectedPassed
     ) {
       if (artefact.overheadPct === null) {
         failures.push(`${row.id}: overhead unevaluable — comparator metric was zero`)

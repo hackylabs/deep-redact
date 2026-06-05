@@ -16,6 +16,7 @@
       "thresholdPolicy": {
         "comparatorMetric": "median",
         "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 0,
         "runScope": ["protected-branch", "release-candidate"]
       }
@@ -32,6 +33,7 @@
       "thresholdPolicy": {
         "comparatorMetric": "median",
         "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 0,
         "runScope": ["protected-branch", "release-candidate"]
       }
@@ -47,6 +49,7 @@
       "thresholdPolicy": {
         "comparatorMetric": "median",
         "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 1000,
         "runScope": ["protected-branch", "release-candidate"]
       }
@@ -62,6 +65,7 @@
       "thresholdPolicy": {
         "comparatorMetric": "median",
         "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 75,
         "runScope": ["protected-branch", "release-candidate"]
       }
@@ -78,6 +82,7 @@
       "thresholdPolicy": {
         "comparatorMetric": "median",
         "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 0,
         "runScope": ["protected-branch", "release-candidate"]
       }
@@ -94,6 +99,7 @@
       "thresholdPolicy": {
         "comparatorMetric": "median",
         "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 50,
         "runScope": ["protected-branch", "release-candidate"]
       }

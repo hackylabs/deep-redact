@@ -18,3 +18,5 @@ jobs:
       - run: corepack prepare pnpm@10.33.0 --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm run verify:benchmarks
+        env:
+          DEEP_REDACT_BENCH_RUN_SCOPE: protected-branch

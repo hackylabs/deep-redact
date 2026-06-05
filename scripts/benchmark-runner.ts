@@ -9,10 +9,10 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 export const repositoryRoot = path.resolve(scriptDirectory, '..')
 
 // Measured calls are batched: each timed sample runs BATCH_SIZE calls and divides the elapsed
-// time by the batch size. At sub-microsecond per-call costs a single `performance.now()` pair
-// per call both quantises the median to the timer's tick resolution and charges timer overhead
-// to every call, distorting the subject/comparator ratio. Batching amortises both away and
-// yields the true per-call cost. SAMPLE_COUNT * BATCH_SIZE == ITERATIONS.
+// redaction time by the batch size. Clones are prepared one at a time and clone-preparation time
+// is subtracted from the batch window, avoiding unrealistic simultaneous batch pre-allocation
+// while still keeping clone work outside the measured redaction cost. SAMPLE_COUNT * BATCH_SIZE
+// == ITERATIONS.
 const SAMPLE_COUNT = 200
 const BATCH_SIZE = 500
 const ITERATIONS = SAMPLE_COUNT * BATCH_SIZE
@@ -21,6 +21,7 @@ const WARMUP_ITERATIONS = 10_000
 export interface BenchmarkThresholdPolicy {
   comparatorMetric: string;
   minOverheadPct: number;
+  minOverheadRationale?: string;
   maxOverheadPct: number;
   runScope: string[];
 }
@@ -85,6 +86,7 @@ export interface BenchmarkArtefact {
     passed: boolean;
     metric: string;
     minOverheadPct: number;
+    minOverheadRationale?: string;
     maxOverheadPct: number;
     runScope: string[];
   };
@@ -97,22 +99,26 @@ export function loadBenchmarkManifest(repoRoot: string): BenchmarkManifest {
   return JSON.parse(raw) as BenchmarkManifest
 }
 
-function collectSamples(fn: (fresh: unknown) => void, payload: unknown): MeasurementStats {
+export function collectSamples(fn: (fresh: unknown) => void, payload: unknown): MeasurementStats {
   for (let i = 0; i < WARMUP_ITERATIONS; i++) {
     fn(structuredClone(payload))
   }
 
-  // Each sample is the mean per-call time over a freshly-cloned batch. Cloning happens outside
-  // the timed region so only the redaction work is measured.
+  // Each sample is the mean per-call redaction time over freshly-cloned payloads.
   const samples: number[] = []
   for (let sample = 0; sample < SAMPLE_COUNT; sample++) {
-    const batch: unknown[] = Array.from({ length: BATCH_SIZE }, () => structuredClone(payload))
-
     const t0 = performance.now()
+    let cloneElapsed = 0
     for (let i = 0; i < BATCH_SIZE; i++) {
-      fn(batch[i])
+      const cloneStart = performance.now()
+      const fresh = structuredClone(payload)
+      cloneElapsed += performance.now() - cloneStart
+      fn(fresh)
     }
-    const elapsed = performance.now() - t0
+    const elapsed = performance.now() - t0 - cloneElapsed
+    if (elapsed <= 0) {
+      throw new Error('Benchmark sample produced non-positive redaction time after clone subtraction.')
+    }
 
     samples.push(elapsed / BATCH_SIZE)
   }
@@ -215,6 +221,9 @@ export function runBenchmarkRow(row: BenchmarkRow, repoRoot: string): BenchmarkA
       passed,
       metric: row.thresholdPolicy.comparatorMetric,
       minOverheadPct: row.thresholdPolicy.minOverheadPct,
+      ...(row.thresholdPolicy.minOverheadRationale === undefined
+        ? {}
+        : { minOverheadRationale: row.thresholdPolicy.minOverheadRationale }),
       maxOverheadPct: row.thresholdPolicy.maxOverheadPct,
       runScope: row.thresholdPolicy.runScope,
     },
@@ -252,6 +261,15 @@ export function buildBenchmarkResultsDoc(repoRoot: string): string {
 
     const subjectHeader = `${subject.name} ${subject.version}`
     const comparatorHeader = `${comparator.name} ${comparator.version}`
+    const thresholdLines = [
+      `**Overhead:** ${overheadPct === null ? 'N/A (comparator metric was zero)' : `${overheadPct}%`}`,
+      `**Policy:** ${thresholdDecision.metric} within ${thresholdDecision.minOverheadPct}% to ${thresholdDecision.maxOverheadPct}%`,
+      ...(thresholdDecision.minOverheadRationale === undefined
+        ? []
+        : [`**Lower-bound rationale:** ${thresholdDecision.minOverheadRationale}`]),
+      `**Gate scope:** ${thresholdDecision.runScope.join(', ')}`,
+      `**Result:** ${thresholdDecision.passed ? 'PASSED' : 'FAILED'}`,
+    ]
 
     sections.push(
       '',
@@ -286,10 +304,7 @@ export function buildBenchmarkResultsDoc(repoRoot: string): string {
       '',
       '### Threshold',
       '',
-      `**Overhead:** ${overheadPct === null ? 'N/A (comparator metric was zero)' : `${overheadPct}%`}`,
-      `**Policy:** ${thresholdDecision.metric} within ${thresholdDecision.minOverheadPct}% to ${thresholdDecision.maxOverheadPct}%`,
-      `**Gate scope:** ${thresholdDecision.runScope.join(', ')}`,
-      `**Result:** ${thresholdDecision.passed ? 'PASSED' : 'FAILED'}`,
+      ...thresholdLines,
     )
   }
 
