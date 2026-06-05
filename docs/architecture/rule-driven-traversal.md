@@ -9,11 +9,15 @@ and sits alongside the [precedence](./precedence.md) and
 
 ## Traversal Contract
 
-The engine's outer loop iterates the **configured rules**, not the nodes of the
-payload. For each rule, the engine navigates directly to the position that rule
-targets by following the rule's path segments from the root. A rule whose path
-cannot be resolved — because an intermediate or terminal key is absent — is
-silently skipped; it does not throw and does not affect any other rule.
+The engine walks a compiled trie of the **configured rules**, not the nodes of
+the payload. It navigates directly to the positions those rules target by
+following configured path segments from the root. Shared prefixes are followed
+once as trie work during a rule-driven call, rather than once per configured
+rule string. A rule whose path cannot be resolved — because an intermediate or
+terminal key is absent — is silently skipped for redaction: the engine does not
+throw, follow unobserved suffixes, or enumerate unconfigured siblings. Any
+concrete prefix reached before the first missing segment still participates in
+the shared traversal budget for that call.
 
 Positions not covered by any configured rule are **not visited** during
 navigation. The engine never performs a blanket walk of the payload to ask
@@ -30,20 +34,35 @@ intermediate path segments.
 
 ### Cost Model
 
-The traversal cost is a function of the configuration, not of the payload size:
+The traversal cost is a function of concrete configured work reached at runtime,
+not of the whole payload size:
 
-- **Exact-path-only configuration:** `O(P)`, where `P` is the total number of
-  path segments across all configured paths. The engine performs one navigation
-  step per segment per rule and visits nothing else. Payload breadth and the
-  number of non-configured siblings are irrelevant to the cost.
+- **Exact-path-only configuration:** `O(P_reached)`, where `P_reached` is the
+  number of existing exact property/index edges followed by the compiled trie.
+  The root container is not counted as an exact hop. Each existing exact
+  property or index edge counts, including terminal exact segments. Missing
+  paths charge only the concrete prefix reached before the first missing segment;
+  unobserved configured suffixes and unconfigured siblings are not charged.
+  Shared prefixes count when the trie follows them as runtime work, not once per
+  rule string.
 - **Configuration containing single-level `*` segments:**
-  `O(P + Σ K_at_wildcard_levels)`, where `K_at_wildcard_levels` is the number of
-  keys present in each container reached at a `*` segment. The wildcard forces
-  enumeration of that one container's keys; the remainder of the navigation
-  stays exact.
+  `O(P_reached + Σ K_at_wildcard_levels)`, where `K_at_wildcard_levels` is the
+  number of keys present in each container reached at a `*` segment. The
+  wildcard forces enumeration of that one container's keys; exact property/index
+  segments before and after the wildcard are charged as exact hops in the same
+  traversal budget.
 
 This replaces the previous `O(N)` model, in which cost scaled with the total
 number of nodes `N` in the payload regardless of how few were configured.
+
+`maxDepth` and `maxNodes` are enforced against this rule-driven budget, not
+against the generic traversal's raw node totals. Equality is allowed: a limit of
+`1` permits exactly one counted exact hop or enumerated wildcard key and rejects
+the next counted unit. `maxDepth` tracks the currently followed concrete path,
+while `maxNodes` aggregates the concrete rule-driven work performed during the
+call. `BudgetExceededError` always propagates out of the rule-driven executor;
+only non-budget runtime errors, such as hostile accessors, can delegate to the
+generic traversal when fallback is allowed.
 
 ### Relationship To The Prior Compiled Path Executor
 

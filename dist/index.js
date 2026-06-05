@@ -1678,6 +1678,15 @@ const buildSegment = (kind, key) => {
 		value: key
 	};
 };
+const enterExactHop = (budget, plan) => {
+	budget.depth += 1;
+	budget.nodesVisited += 1;
+	if (isDepthExceeded(budget, plan.maxDepth)) throw createBudgetExceededError("depth", plan.maxDepth);
+	if (isNodeBudgetExceeded(budget, plan.maxNodes)) throw createBudgetExceededError("nodes", plan.maxNodes);
+};
+const leaveExactHop = (budget) => {
+	budget.depth -= 1;
+};
 const resolveChildInherited = (node, inherited, kind, key) => {
 	if (node?.rule?.kind === "exact") return enterRetain(node.rule);
 	if (inherited === void 0) return;
@@ -1738,8 +1747,10 @@ const redactRetained = (container, level, inherited, plan, rootInput, budget) =>
 			return copy;
 		}
 		for (const key in container) {
-			const value = container[key];
 			const node = level.propertyChildren?.get(key);
+			budget.nodesVisited += 1;
+			if (isNodeBudgetExceeded(budget, plan.maxNodes)) throw createBudgetExceededError("nodes", plan.maxNodes);
+			const value = container[key];
 			if (node?.rule?.kind === "wildcard") return delegate;
 			if (node?.rule !== void 0 && !node.rule.policy.retainStructure) {
 				const redacted = applyTerminalRule(value, node.rule, plan, rootInput);
@@ -1748,8 +1759,6 @@ const redactRetained = (container, level, inherited, plan, rootInput, budget) =>
 				else setObjectEntry(copy, key, redacted);
 				continue;
 			}
-			budget.nodesVisited += 1;
-			if (isNodeBudgetExceeded(budget, plan.maxNodes)) throw createBudgetExceededError("nodes", plan.maxNodes);
 			if (Array.isArray(value) || isPlainObject$1(value)) {
 				const childInherited = resolveChildInherited(node, inherited, "property", key);
 				const child = redactRetained(value, node ?? emptyLevel, childInherited, plan, rootInput, budget);
@@ -1803,11 +1812,45 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 	let removedIndices;
 	if (level.indexChildren !== void 0) for (const [index, childNode] of level.indexChildren) {
 		if (!(index in container)) continue;
-		const value = container[index];
-		if (childNode.rule?.kind === "wildcard") {
-			const concreteMatchedPath = appendMatchedKey(matchedPath, index);
-			if (childNode.rule.policy.retainStructure) {
-				const retained = resolveRetainTerminalWildcard(value, childNode, plan, rootInput, ancestorCopies, budget, concreteMatchedPath);
+		enterExactHop(budget, plan);
+		try {
+			const value = container[index];
+			if (childNode.rule?.kind === "wildcard") {
+				const concreteMatchedPath = appendMatchedKey(matchedPath, index);
+				if (childNode.rule.policy.retainStructure) {
+					const retained = resolveRetainTerminalWildcard(value, childNode, plan, rootInput, ancestorCopies, budget, concreteMatchedPath);
+					if (retained === delegate) return delegate;
+					if (retained !== value) {
+						if (copy === void 0) {
+							copy = shallowCopyContainer(container);
+							storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
+						}
+						if (isRemovedValue(retained)) (removedIndices ??= []).push(index);
+						else copy[index] = retained;
+					}
+				} else {
+					const redacted = applyWildcardTerminalRule(value, childNode.rule, plan, rootInput, concreteMatchedPath);
+					if (copy === void 0) {
+						copy = shallowCopyContainer(container);
+						storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
+					}
+					if (isRemovedValue(redacted)) (removedIndices ??= []).push(index);
+					else copy[index] = redacted;
+				}
+				continue;
+			}
+			if (childNode.rule !== void 0 && !childNode.rule.policy.retainStructure) {
+				const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput);
+				if (copy === void 0) {
+					copy = shallowCopyContainer(container);
+					storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
+				}
+				if (isRemovedValue(redacted)) (removedIndices ??= []).push(index);
+				else copy[index] = redacted;
+				continue;
+			}
+			if (childNode.rule !== void 0) {
+				const retained = resolveRetainTerminal(value, childNode, plan, rootInput, ancestorCopies, budget);
 				if (retained === delegate) return delegate;
 				if (retained !== value) {
 					if (copy === void 0) {
@@ -1817,61 +1860,66 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 					if (isRemovedValue(retained)) (removedIndices ??= []).push(index);
 					else copy[index] = retained;
 				}
-			} else {
-				const redacted = applyWildcardTerminalRule(value, childNode.rule, plan, rootInput, concreteMatchedPath);
-				if (copy === void 0) {
-					copy = shallowCopyContainer(container);
-					storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
+				continue;
+			}
+			if (isDescendable(value)) {
+				const child = navigateNode(value, childNode, plan, rootInput, ancestorCopies, compactedArrayCopies, budget, matchedPath !== void 0 || childNode.subtreeHasWildcard === true ? appendMatchedKey(matchedPath, index) : void 0);
+				if (child === delegate) return delegate;
+				if (child !== value) {
+					if (copy === void 0) {
+						copy = shallowCopyContainer(container);
+						storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
+					}
+					copy[index] = child;
 				}
-				if (isRemovedValue(redacted)) (removedIndices ??= []).push(index);
-				else copy[index] = redacted;
+				continue;
 			}
-			continue;
+			if (value !== null && typeof value === "object") return delegate;
+		} finally {
+			leaveExactHop(budget);
 		}
-		if (childNode.rule !== void 0 && !childNode.rule.policy.retainStructure) {
-			const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput);
-			if (copy === void 0) {
-				copy = shallowCopyContainer(container);
-				storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
-			}
-			if (isRemovedValue(redacted)) (removedIndices ??= []).push(index);
-			else copy[index] = redacted;
-			continue;
-		}
-		if (childNode.rule !== void 0) {
-			const retained = resolveRetainTerminal(value, childNode, plan, rootInput, ancestorCopies, budget);
-			if (retained === delegate) return delegate;
-			if (retained !== value) {
-				if (copy === void 0) {
-					copy = shallowCopyContainer(container);
-					storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
-				}
-				if (isRemovedValue(retained)) (removedIndices ??= []).push(index);
-				else copy[index] = retained;
-			}
-			continue;
-		}
-		if (isDescendable(value)) {
-			const child = navigateNode(value, childNode, plan, rootInput, ancestorCopies, compactedArrayCopies, budget, matchedPath !== void 0 || childNode.subtreeHasWildcard === true ? appendMatchedKey(matchedPath, index) : void 0);
-			if (child === delegate) return delegate;
-			if (child !== value) {
-				if (copy === void 0) {
-					copy = shallowCopyContainer(container);
-					storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
-				}
-				copy[index] = child;
-			}
-			continue;
-		}
-		if (value !== null && typeof value === "object") return delegate;
 	}
 	if (level.propertyChildren !== void 0) for (const [key, childNode] of level.propertyChildren) {
 		if (!(key in container)) continue;
-		const value = container[key];
-		if (childNode.rule?.kind === "wildcard") {
-			const concreteMatchedPath = appendMatchedKey(matchedPath, key);
-			if (childNode.rule.policy.retainStructure) {
-				const retained = resolveRetainTerminalWildcard(value, childNode, plan, rootInput, ancestorCopies, budget, concreteMatchedPath);
+		enterExactHop(budget, plan);
+		try {
+			const value = container[key];
+			if (childNode.rule?.kind === "wildcard") {
+				const concreteMatchedPath = appendMatchedKey(matchedPath, key);
+				if (childNode.rule.policy.retainStructure) {
+					const retained = resolveRetainTerminalWildcard(value, childNode, plan, rootInput, ancestorCopies, budget, concreteMatchedPath);
+					if (retained === delegate) return delegate;
+					if (retained !== value) {
+						if (copy === void 0) {
+							copy = shallowCopyContainer(container);
+							storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
+						}
+						if (isRemovedValue(retained)) delete copy[key];
+						else setObjectEntry(copy, key, retained);
+					}
+				} else {
+					const redacted = applyWildcardTerminalRule(value, childNode.rule, plan, rootInput, concreteMatchedPath);
+					if (copy === void 0) {
+						copy = shallowCopyContainer(container);
+						storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
+					}
+					if (isRemovedValue(redacted)) delete copy[key];
+					else setObjectEntry(copy, key, redacted);
+				}
+				continue;
+			}
+			if (childNode.rule !== void 0 && !childNode.rule.policy.retainStructure) {
+				const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput);
+				if (copy === void 0) {
+					copy = shallowCopyContainer(container);
+					storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
+				}
+				if (isRemovedValue(redacted)) delete copy[key];
+				else setObjectEntry(copy, key, redacted);
+				continue;
+			}
+			if (childNode.rule !== void 0) {
+				const retained = resolveRetainTerminal(value, childNode, plan, rootInput, ancestorCopies, budget);
 				if (retained === delegate) return delegate;
 				if (retained !== value) {
 					if (copy === void 0) {
@@ -1881,53 +1929,24 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 					if (isRemovedValue(retained)) delete copy[key];
 					else setObjectEntry(copy, key, retained);
 				}
-			} else {
-				const redacted = applyWildcardTerminalRule(value, childNode.rule, plan, rootInput, concreteMatchedPath);
-				if (copy === void 0) {
-					copy = shallowCopyContainer(container);
-					storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
+				continue;
+			}
+			if (isDescendable(value)) {
+				const child = navigateNode(value, childNode, plan, rootInput, ancestorCopies, compactedArrayCopies, budget, matchedPath !== void 0 || childNode.subtreeHasWildcard === true ? appendMatchedKey(matchedPath, key) : void 0);
+				if (child === delegate) return delegate;
+				if (child !== value) {
+					if (copy === void 0) {
+						copy = shallowCopyContainer(container);
+						storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
+					}
+					setObjectEntry(copy, key, child);
 				}
-				if (isRemovedValue(redacted)) delete copy[key];
-				else setObjectEntry(copy, key, redacted);
+				continue;
 			}
-			continue;
+			if (value !== null && typeof value === "object") return delegate;
+		} finally {
+			leaveExactHop(budget);
 		}
-		if (childNode.rule !== void 0 && !childNode.rule.policy.retainStructure) {
-			const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput);
-			if (copy === void 0) {
-				copy = shallowCopyContainer(container);
-				storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
-			}
-			if (isRemovedValue(redacted)) delete copy[key];
-			else setObjectEntry(copy, key, redacted);
-			continue;
-		}
-		if (childNode.rule !== void 0) {
-			const retained = resolveRetainTerminal(value, childNode, plan, rootInput, ancestorCopies, budget);
-			if (retained === delegate) return delegate;
-			if (retained !== value) {
-				if (copy === void 0) {
-					copy = shallowCopyContainer(container);
-					storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
-				}
-				if (isRemovedValue(retained)) delete copy[key];
-				else setObjectEntry(copy, key, retained);
-			}
-			continue;
-		}
-		if (isDescendable(value)) {
-			const child = navigateNode(value, childNode, plan, rootInput, ancestorCopies, compactedArrayCopies, budget, matchedPath !== void 0 || childNode.subtreeHasWildcard === true ? appendMatchedKey(matchedPath, key) : void 0);
-			if (child === delegate) return delegate;
-			if (child !== value) {
-				if (copy === void 0) {
-					copy = shallowCopyContainer(container);
-					storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
-				}
-				setObjectEntry(copy, key, child);
-			}
-			continue;
-		}
-		if (value !== null && typeof value === "object") return delegate;
 	}
 	if (level.wildcardChild !== void 0) {
 		const wildcardChild = level.wildcardChild;

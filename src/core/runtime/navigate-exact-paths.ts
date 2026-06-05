@@ -443,6 +443,26 @@ const buildSegment = (kind: 'property' | 'index', key: string | number): ExactPa
     : { kind: 'property', value: key as string }
 }
 
+const enterExactHop = (
+  budget: TraversalBudget,
+  plan: CompiledRedactorPlan,
+): void => {
+  budget.depth += 1
+  budget.nodesVisited += 1
+
+  if (isDepthExceeded(budget, plan.maxDepth)) {
+    throw createBudgetExceededError('depth', plan.maxDepth)
+  }
+
+  if (isNodeBudgetExceeded(budget, plan.maxNodes)) {
+    throw createBudgetExceededError('nodes', plan.maxNodes)
+  }
+}
+
+const leaveExactHop = (budget: TraversalBudget): void => {
+  budget.depth -= 1
+}
+
 // Resolves the inherited-retain policy for a child container: a retain rule at this node
 // starts a fresh retain, an active inherited retain continues (with its position advanced),
 // and otherwise there is none. Within a retained subtree the rule-driven engine delegates on any
@@ -608,8 +628,15 @@ const redactRetained = (
   }
 
   for (const key in container) {
-    const value = (container as Record<string, unknown>)[key]
     const node = level.propertyChildren?.get(key)
+
+    budget.nodesVisited += 1
+
+    if (isNodeBudgetExceeded(budget, plan.maxNodes)) {
+      throw createBudgetExceededError('nodes', plan.maxNodes)
+    }
+
+    const value = (container as Record<string, unknown>)[key]
 
     if (node?.rule?.kind === 'wildcard') {
       // A wildcard terminal overriding a retained leaf — delegate (rare retain/wildcard mix).
@@ -627,12 +654,6 @@ const redactRetained = (
       }
 
       continue
-    }
-
-    budget.nodesVisited += 1
-
-    if (isNodeBudgetExceeded(budget, plan.maxNodes)) {
-      throw createBudgetExceededError('nodes', plan.maxNodes)
     }
 
     if (Array.isArray(value) || isPlainObject(value)) {
@@ -810,15 +831,75 @@ const navigateNode = (
         continue
       }
 
-      const value = (container as Record<number, unknown>)[index]
+      enterExactHop(budget, plan)
 
-      if (childNode.rule?.kind === 'wildcard') {
-        // A wildcard terminal reached via an exact index edge (e.g. `a.*.0`): apply it at the
-        // concrete matched key path. Censor wins wholesale on a non-retain terminal (AC 6).
-        const concreteMatchedPath = appendMatchedKey(matchedPath, index)
+      try {
+        const value = (container as Record<number, unknown>)[index]
 
-        if (childNode.rule.policy.retainStructure) {
-          const retained = resolveRetainTerminalWildcard(value, childNode, plan, rootInput, ancestorCopies, budget, concreteMatchedPath)
+        if (childNode.rule?.kind === 'wildcard') {
+          // A wildcard terminal reached via an exact index edge (e.g. `a.*.0`): apply it at the
+          // concrete matched key path. Censor wins wholesale on a non-retain terminal (AC 6).
+          const concreteMatchedPath = appendMatchedKey(matchedPath, index)
+
+          if (childNode.rule.policy.retainStructure) {
+            const retained = resolveRetainTerminalWildcard(value, childNode, plan, rootInput, ancestorCopies, budget, concreteMatchedPath)
+
+            if (retained === delegate) {
+              return delegate
+            }
+
+            if (retained !== value) {
+              if (copy === undefined) {
+                copy = shallowCopyContainer(container) as Record<string | number, unknown>
+                storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
+              }
+
+              if (isRemovedValue(retained)) {
+                (removedIndices ??= []).push(index)
+              } else {
+                copy[index] = retained
+              }
+            }
+          } else {
+            const redacted = applyWildcardTerminalRule(value, childNode.rule, plan, rootInput, concreteMatchedPath)
+
+            if (copy === undefined) {
+              copy = shallowCopyContainer(container) as Record<string | number, unknown>
+              storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
+            }
+
+            if (isRemovedValue(redacted)) {
+              (removedIndices ??= []).push(index)
+            } else {
+              copy[index] = redacted
+            }
+          }
+
+          continue
+        }
+
+        if (childNode.rule !== undefined && !childNode.rule.policy.retainStructure) {
+          // Terminal (non-retain): the censor wins wholesale, even over a container value or a
+          // circular reference at the terminal — no descent (AC 5).
+          const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput)
+
+          if (copy === undefined) {
+            copy = shallowCopyContainer(container) as Record<string | number, unknown>
+            storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
+          }
+
+          if (isRemovedValue(redacted)) {
+            (removedIndices ??= []).push(index)
+          } else {
+            copy[index] = redacted
+          }
+
+          continue
+        }
+
+        if (childNode.rule !== undefined) {
+          // Terminal with `retainStructure` (AC 10).
+          const retained = resolveRetainTerminal(value, childNode, plan, rootInput, ancestorCopies, budget)
 
           if (retained === delegate) {
             return delegate
@@ -836,94 +917,40 @@ const navigateNode = (
               copy[index] = retained
             }
           }
-        } else {
-          const redacted = applyWildcardTerminalRule(value, childNode.rule, plan, rootInput, concreteMatchedPath)
 
-          if (copy === undefined) {
-            copy = shallowCopyContainer(container) as Record<string | number, unknown>
-            storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
+          continue
+        }
+
+        if (isDescendable(value)) {
+          const childMatchedPath = matchedPath !== undefined || childNode.subtreeHasWildcard === true
+            ? appendMatchedKey(matchedPath, index)
+            : undefined
+          const child = navigateNode(value, childNode, plan, rootInput, ancestorCopies, compactedArrayCopies, budget, childMatchedPath)
+
+          if (child === delegate) {
+            return delegate
           }
 
-          if (isRemovedValue(redacted)) {
-            (removedIndices ??= []).push(index)
-          } else {
-            copy[index] = redacted
+          if (child !== value) {
+            if (copy === undefined) {
+              copy = shallowCopyContainer(container) as Record<string | number, unknown>
+              storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
+            }
+            copy[index] = child
           }
+
+          continue
         }
 
-        continue
-      }
-
-      if (childNode.rule !== undefined && !childNode.rule.policy.retainStructure) {
-        // Terminal (non-retain): the censor wins wholesale, even over a container value or a
-        // circular reference at the terminal — no descent (AC 5).
-        const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput)
-
-        if (copy === undefined) {
-          copy = shallowCopyContainer(container) as Record<string | number, unknown>
-          storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
-        }
-
-        if (isRemovedValue(redacted)) {
-          (removedIndices ??= []).push(index)
-        } else {
-          copy[index] = redacted
-        }
-
-        continue
-      }
-
-      if (childNode.rule !== undefined) {
-        // Terminal with `retainStructure` (AC 10).
-        const retained = resolveRetainTerminal(value, childNode, plan, rootInput, ancestorCopies, budget)
-
-        if (retained === delegate) {
+        if (value !== null && typeof value === 'object') {
+          // A non-plain container on a *configured* intermediate path — delegate (AC 3).
           return delegate
         }
 
-        if (retained !== value) {
-          if (copy === undefined) {
-            copy = shallowCopyContainer(container) as Record<string | number, unknown>
-            storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
-          }
-
-          if (isRemovedValue(retained)) {
-            (removedIndices ??= []).push(index)
-          } else {
-            copy[index] = retained
-          }
-        }
-
-        continue
+        // Primitive / null intermediate — cannot be descended, silently skip (AC 4).
+      } finally {
+        leaveExactHop(budget)
       }
-
-      if (isDescendable(value)) {
-        const childMatchedPath = matchedPath !== undefined || childNode.subtreeHasWildcard === true
-          ? appendMatchedKey(matchedPath, index)
-          : undefined
-        const child = navigateNode(value, childNode, plan, rootInput, ancestorCopies, compactedArrayCopies, budget, childMatchedPath)
-
-        if (child === delegate) {
-          return delegate
-        }
-
-        if (child !== value) {
-          if (copy === undefined) {
-            copy = shallowCopyContainer(container) as Record<string | number, unknown>
-            storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
-          }
-          copy[index] = child
-        }
-
-        continue
-      }
-
-      if (value !== null && typeof value === 'object') {
-        // A non-plain container on a *configured* intermediate path — delegate (AC 3).
-        return delegate
-      }
-
-      // Primitive / null intermediate — cannot be descended, silently skip (AC 4).
     }
   }
 
@@ -934,16 +961,73 @@ const navigateNode = (
         continue
       }
 
-      const value = (container as Record<string, unknown>)[key]
+      enterExactHop(budget, plan)
 
-      if (childNode.rule?.kind === 'wildcard') {
-        // A wildcard terminal reached via an exact property edge (e.g. `*.email` or `a.*.b`):
-        // apply it at the concrete matched key path. Censor wins wholesale on a non-retain
-        // terminal (AC 6).
-        const concreteMatchedPath = appendMatchedKey(matchedPath, key)
+      try {
+        const value = (container as Record<string, unknown>)[key]
 
-        if (childNode.rule.policy.retainStructure) {
-          const retained = resolveRetainTerminalWildcard(value, childNode, plan, rootInput, ancestorCopies, budget, concreteMatchedPath)
+        if (childNode.rule?.kind === 'wildcard') {
+          // A wildcard terminal reached via an exact property edge (e.g. `*.email` or `a.*.b`):
+          // apply it at the concrete matched key path. Censor wins wholesale on a non-retain
+          // terminal (AC 6).
+          const concreteMatchedPath = appendMatchedKey(matchedPath, key)
+
+          if (childNode.rule.policy.retainStructure) {
+            const retained = resolveRetainTerminalWildcard(value, childNode, plan, rootInput, ancestorCopies, budget, concreteMatchedPath)
+
+            if (retained === delegate) {
+              return delegate
+            }
+
+            if (retained !== value) {
+              if (copy === undefined) {
+                copy = shallowCopyContainer(container) as Record<string | number, unknown>
+                storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
+              }
+
+              if (isRemovedValue(retained)) {
+                delete copy[key]
+              } else {
+                setObjectEntry(copy as Record<string, unknown>, key, retained)
+              }
+            }
+          } else {
+            const redacted = applyWildcardTerminalRule(value, childNode.rule, plan, rootInput, concreteMatchedPath)
+
+            if (copy === undefined) {
+              copy = shallowCopyContainer(container) as Record<string | number, unknown>
+              storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
+            }
+
+            if (isRemovedValue(redacted)) {
+              delete copy[key]
+            } else {
+              setObjectEntry(copy as Record<string, unknown>, key, redacted)
+            }
+          }
+
+          continue
+        }
+
+        if (childNode.rule !== undefined && !childNode.rule.policy.retainStructure) {
+          const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput)
+
+          if (copy === undefined) {
+            copy = shallowCopyContainer(container) as Record<string | number, unknown>
+            storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
+          }
+
+          if (isRemovedValue(redacted)) {
+            delete copy[key]
+          } else {
+            setObjectEntry(copy as Record<string, unknown>, key, redacted)
+          }
+
+          continue
+        }
+
+        if (childNode.rule !== undefined) {
+          const retained = resolveRetainTerminal(value, childNode, plan, rootInput, ancestorCopies, budget)
 
           if (retained === delegate) {
             return delegate
@@ -961,91 +1045,40 @@ const navigateNode = (
               setObjectEntry(copy as Record<string, unknown>, key, retained)
             }
           }
-        } else {
-          const redacted = applyWildcardTerminalRule(value, childNode.rule, plan, rootInput, concreteMatchedPath)
 
-          if (copy === undefined) {
-            copy = shallowCopyContainer(container) as Record<string | number, unknown>
-            storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
+          continue
+        }
+
+        if (isDescendable(value)) {
+          const childMatchedPath = matchedPath !== undefined || childNode.subtreeHasWildcard === true
+            ? appendMatchedKey(matchedPath, key)
+            : undefined
+          const child = navigateNode(value, childNode, plan, rootInput, ancestorCopies, compactedArrayCopies, budget, childMatchedPath)
+
+          if (child === delegate) {
+            return delegate
           }
 
-          if (isRemovedValue(redacted)) {
-            delete copy[key]
-          } else {
-            setObjectEntry(copy as Record<string, unknown>, key, redacted)
+          if (child !== value) {
+            if (copy === undefined) {
+              copy = shallowCopyContainer(container) as Record<string | number, unknown>
+              storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
+            }
+            setObjectEntry(copy as Record<string, unknown>, key, child)
           }
+
+          continue
         }
 
-        continue
-      }
-
-      if (childNode.rule !== undefined && !childNode.rule.policy.retainStructure) {
-        const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput)
-
-        if (copy === undefined) {
-          copy = shallowCopyContainer(container) as Record<string | number, unknown>
-          storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
-        }
-
-        if (isRemovedValue(redacted)) {
-          delete copy[key]
-        } else {
-          setObjectEntry(copy as Record<string, unknown>, key, redacted)
-        }
-
-        continue
-      }
-
-      if (childNode.rule !== undefined) {
-        const retained = resolveRetainTerminal(value, childNode, plan, rootInput, ancestorCopies, budget)
-
-        if (retained === delegate) {
+        if (value !== null && typeof value === 'object') {
+          // A non-plain container on a *configured* intermediate path — delegate (AC 3).
           return delegate
         }
 
-        if (retained !== value) {
-          if (copy === undefined) {
-            copy = shallowCopyContainer(container) as Record<string | number, unknown>
-            storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
-          }
-
-          if (isRemovedValue(retained)) {
-            delete copy[key]
-          } else {
-            setObjectEntry(copy as Record<string, unknown>, key, retained)
-          }
-        }
-
-        continue
+        // Primitive / null intermediate — cannot be descended, silently skip (AC 4).
+      } finally {
+        leaveExactHop(budget)
       }
-
-      if (isDescendable(value)) {
-        const childMatchedPath = matchedPath !== undefined || childNode.subtreeHasWildcard === true
-          ? appendMatchedKey(matchedPath, key)
-          : undefined
-        const child = navigateNode(value, childNode, plan, rootInput, ancestorCopies, compactedArrayCopies, budget, childMatchedPath)
-
-        if (child === delegate) {
-          return delegate
-        }
-
-        if (child !== value) {
-          if (copy === undefined) {
-            copy = shallowCopyContainer(container) as Record<string | number, unknown>
-            storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
-          }
-          setObjectEntry(copy as Record<string, unknown>, key, child)
-        }
-
-        continue
-      }
-
-      if (value !== null && typeof value === 'object') {
-        // A non-plain container on a *configured* intermediate path — delegate (AC 3).
-        return delegate
-      }
-
-      // Primitive / null intermediate — cannot be descended, silently skip (AC 4).
     }
   }
 

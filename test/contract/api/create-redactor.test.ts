@@ -5837,8 +5837,8 @@ describe('Wildcard rule-driven engine vs. general traversal equivalence (Story 8
     expect(pathDrivenEvents.every((event) => event.event === 'redaction.failure')).toBe(true)
   })
 
-  it('throws BUDGET_EXCEEDED when wildcard enumeration exceeds maxNodes (AC 9)', () => {
-    const options = { paths: ['*.x'], maxNodes: 3 } satisfies DeepRedactOptions
+  it('throws BUDGET_EXCEEDED when wildcard enumeration and exact suffix work exceed maxNodes (AC 9)', () => {
+    const options = { paths: ['*.x'], maxNodes: 6 } satisfies DeepRedactOptions
     expect(compileRedactorPlan(options).pathDrivenOnly).toBe(true)
 
     const wide = deepRedact(options)
@@ -5849,6 +5849,7 @@ describe('Wildcard rule-driven engine vs. general traversal equivalence (Story 8
     )
 
     // At and below the budget boundary the same wildcard config completes without throwing.
+    // Each matched branch charges one wildcard enumeration plus the exact suffix hop.
     expect(() => wide({ a: { x: 1 }, b: { x: 2 }, c: { x: 3 } })).not.toThrow()
 
     const narrow = deepRedact(options)
