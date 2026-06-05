@@ -8,16 +8,19 @@ Deep Redact is a one-way redaction library. There is no `restore` or `unredact` 
 
 The following capabilities are supported and covered by validated worked examples:
 
-- [key targeting](docs/examples/key-targeting.md)
-- [path targeting](docs/examples/path-targeting.md)
-- [regex property matching](docs/examples/regex-property-matching.md)
-- [substring targeting](docs/examples/substring-targeting.md)
-- [replacement behaviour](docs/examples/replacement-and-removal.md)
-- [structured versus serialised output](docs/examples/serialised-output.md)
-- [transformer support](docs/examples/custom-transformer.md)
-- [ignored-value-type behaviour](docs/examples/ignored-value-types.md)
-- [graceful [UNSUPPORTED] degradation](docs/examples/graceful-error-replacement.md)
-- [optional console.* redaction](docs/examples/console-redaction.md)
+- [key targeting](../examples/key-targeting.md)
+- [fuzzy key matching](../examples/fuzzy-key-matching.md)
+- [case-insensitive key matching](../examples/case-insensitive-key-matching.md)
+- [path targeting](../examples/path-targeting.md)
+- [path-segment ignore selectors](../examples/path-segment-ignore.md)
+- [regex property matching](../examples/regex-property-matching.md)
+- [substring targeting](../examples/substring-targeting.md)
+- [replacement behaviour](../examples/replacement-and-removal.md)
+- [structured versus serialised output](../examples/serialised-output.md)
+- [transformer support](../examples/custom-transformer.md)
+- [ignored-value-type behaviour](../examples/ignored-value-types.md)
+- [graceful [UNSUPPORTED] degradation](../examples/graceful-error-replacement.md)
+- [optional console.* redaction](../examples/console-redaction.md)
 
 ## Targeting semantics
 
@@ -31,7 +34,7 @@ Rules are evaluated in precedence order. When multiple rules match a node, the h
 
 When `retainStructure: true` is set on a matched rule, descendant nodes remain traversable for lower-precedence rules. Without it, the matched node and all descendants are replaced as a unit.
 
-For the canonical precedence contract and full matrix, see [docs/architecture/precedence.md](docs/architecture/precedence.md).
+For the canonical precedence contract and full matrix, see [docs/architecture/precedence.md](../architecture/precedence.md).
 
 ## Migration expectations
 
@@ -44,13 +47,13 @@ The following intentional behavioural divergences from `fast-redact` have been v
 - **omitted-serialise-structured-output**: fast-redact returns a JSON string when `serialize` is omitted. → Deep Redact v4 returns structured output when `serialise` is omitted. (The default output type intentionally differs.)
 - **non-string-censor-value**: fast-redact accepts documented non-string censor values such as number literals. → Deep Redact v4 rejects root censor values that are neither strings nor functions. (The v4 public Censor contract is intentionally narrower.)
 
-For the complete migration matrix and fixture-verified examples, see [docs/migration/from-fast-redact.md](docs/migration/from-fast-redact.md).
+For the complete migration matrix and fixture-verified examples, see [docs/migration/from-fast-redact.md](../migration/from-fast-redact.md).
 
 ### Deep Redact v3 migration
 
 Deep Redact v4 introduces a factory API (`deepRedact(config)`) to replace the v3 class instantiation pattern (`new DeepRedact(config)`). The redaction method is unchanged.
 
-For the complete v3 migration matrix and fixture-verified examples, see [docs/migration/from-v3.md](docs/migration/from-v3.md).
+For the complete v3 migration matrix and fixture-verified examples, see [docs/migration/from-v3.md](../migration/from-v3.md).
 
 ## Verification evidence
 
@@ -81,4 +84,4 @@ Deep Redact v4 is a single-library, one-way redaction engine. Guidance on what i
 - Reversible redaction, restore, or unredact operations
 - Broader platform work beyond this library
 
-For the canonical one-way redaction contract, see [docs/architecture/one-way-redaction.md](docs/architecture/one-way-redaction.md).
+For the canonical one-way redaction contract, see [docs/architecture/one-way-redaction.md](../architecture/one-way-redaction.md).

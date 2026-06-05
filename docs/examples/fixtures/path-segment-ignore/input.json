@@ -1,0 +1,1 @@
+{ "users": { "admin": { "email": "admin@example.test", "role": "owner" }, "customer": { "email": "customer@example.test", "role": "buyer" } } }

@@ -7,9 +7,18 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 const repositoryRoot = path.resolve(scriptDirectory, '..')
 export const standardisationGuideDocPath = path.join(repositoryRoot, 'docs', 'platform', 'standardisation-guide.md')
 
+const markdownRelativeLinkFromGuide = (repoRoot: string, targetPath: string): string => {
+  const guideDirectory = path.join(repoRoot, 'docs', 'platform')
+  const absoluteTarget = path.join(repoRoot, targetPath)
+  return path.relative(guideDirectory, absoluteTarget).split(path.sep).join(path.posix.sep)
+}
+
 const CAPABILITY_EXAMPLES = [
   { label: 'key targeting',                           exampleId: 'key-targeting' },
+  { label: 'fuzzy key matching',                       exampleId: 'fuzzy-key-matching' },
+  { label: 'case-insensitive key matching',            exampleId: 'case-insensitive-key-matching' },
   { label: 'path targeting',                          exampleId: 'path-targeting' },
+  { label: 'path-segment ignore selectors',            exampleId: 'path-segment-ignore' },
   { label: 'regex property matching',                 exampleId: 'regex-property-matching' },
   { label: 'substring targeting',                     exampleId: 'substring-targeting' },
   { label: 'replacement behaviour',                   exampleId: 'replacement-and-removal' },
@@ -41,8 +50,13 @@ export const buildStandardisationGuide = (repoRoot: string): string => {
 
   const capabilityLines = CAPABILITY_EXAMPLES.map(({ label, exampleId }) => {
     const manifestRow = manifest.rows.find(r => r.id === exampleId)!
-    return `- [${label}](${manifestRow.docTarget})`
+    const exampleLink = markdownRelativeLinkFromGuide(repoRoot, manifestRow.docTarget)
+    return `- [${label}](${exampleLink})`
   })
+  const precedenceLink = markdownRelativeLinkFromGuide(repoRoot, 'docs/architecture/precedence.md')
+  const fastRedactMigrationLink = markdownRelativeLinkFromGuide(repoRoot, 'docs/migration/from-fast-redact.md')
+  const v3MigrationLink = markdownRelativeLinkFromGuide(repoRoot, 'docs/migration/from-v3.md')
+  const oneWayRedactionLink = markdownRelativeLinkFromGuide(repoRoot, 'docs/architecture/one-way-redaction.md')
 
   return [
     '# Deep Redact Standardisation Guide',
@@ -69,7 +83,7 @@ export const buildStandardisationGuide = (repoRoot: string): string => {
     '',
     'When `retainStructure: true` is set on a matched rule, descendant nodes remain traversable for lower-precedence rules. Without it, the matched node and all descendants are replaced as a unit.',
     '',
-    'For the canonical precedence contract and full matrix, see [docs/architecture/precedence.md](docs/architecture/precedence.md).',
+    `For the canonical precedence contract and full matrix, see [docs/architecture/precedence.md](${precedenceLink}).`,
     '',
     '## Migration expectations',
     '',
@@ -83,13 +97,13 @@ export const buildStandardisationGuide = (repoRoot: string): string => {
           '',
         ]
       : []),
-    'For the complete migration matrix and fixture-verified examples, see [docs/migration/from-fast-redact.md](docs/migration/from-fast-redact.md).',
+    `For the complete migration matrix and fixture-verified examples, see [docs/migration/from-fast-redact.md](${fastRedactMigrationLink}).`,
     '',
     '### Deep Redact v3 migration',
     '',
     'Deep Redact v4 introduces a factory API (`deepRedact(config)`) to replace the v3 class instantiation pattern (`new DeepRedact(config)`). The redaction method is unchanged.',
     '',
-    'For the complete v3 migration matrix and fixture-verified examples, see [docs/migration/from-v3.md](docs/migration/from-v3.md).',
+    `For the complete v3 migration matrix and fixture-verified examples, see [docs/migration/from-v3.md](${v3MigrationLink}).`,
     '',
     '## Verification evidence',
     '',
@@ -120,7 +134,7 @@ export const buildStandardisationGuide = (repoRoot: string): string => {
     '- Reversible redaction, restore, or unredact operations',
     '- Broader platform work beyond this library',
     '',
-    'For the canonical one-way redaction contract, see [docs/architecture/one-way-redaction.md](docs/architecture/one-way-redaction.md).',
+    `For the canonical one-way redaction contract, see [docs/architecture/one-way-redaction.md](${oneWayRedactionLink}).`,
     '',
   ].join('\n')
 }

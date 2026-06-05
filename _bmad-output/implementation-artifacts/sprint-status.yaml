@@ -1,5 +1,5 @@
 # generated: 2026-04-13T09:43:13+0100
-# last_updated: 2026-06-05T11:57:07+0100
+# last_updated: 2026-06-05T13:19:31+0100
 # project: deep-redact
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Scrum Master typically creates the next story after the previous one is 'done'
 
 generated: 2026-04-13T09:43:13+0100
-last_updated: 2026-06-05T11:57:07+0100
+last_updated: 2026-06-05T13:19:31+0100
 project: deep-redact
 project_key: NOKEY
 tracking_system: file-system
@@ -89,7 +89,7 @@ development_status:
   5-9-produce-canonical-benchmark-runs-and-publish-benchmark-artefacts: done
   5-10-enforce-the-release-benchmark-gate-and-benchmark-documentation-lockstep: done
   5-11-publish-platform-adoption-guidance-through-a-canonical-standardisation-guide: done
-  5-12-add-worked-examples-for-fuzzy-key-matching-case-insensitive-key-matching-and-path-segment-ignore-selectors: ready-for-dev
+  5-12-add-worked-examples-for-fuzzy-key-matching-case-insensitive-key-matching-and-path-segment-ignore-selectors: done
   epic-5-retrospective: optional
 
   epic-6: done

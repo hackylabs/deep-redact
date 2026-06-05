@@ -25,6 +25,24 @@
       "expectedResultFile": "expected.json"
     },
     {
+      "id": "fuzzy-key-matching",
+      "category": "targeting",
+      "docTarget": "docs/examples/fuzzy-key-matching.md",
+      "sourceFile": "docs/examples/examples/fuzzy-key-matching.ts",
+      "fixtureDir": "docs/examples/fixtures/fuzzy-key-matching",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "case-insensitive-key-matching",
+      "category": "targeting",
+      "docTarget": "docs/examples/case-insensitive-key-matching.md",
+      "sourceFile": "docs/examples/examples/case-insensitive-key-matching.ts",
+      "fixtureDir": "docs/examples/fixtures/case-insensitive-key-matching",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
       "id": "regex-property-matching",
       "category": "targeting",
       "docTarget": "docs/examples/regex-property-matching.md",
@@ -48,6 +66,15 @@
       "docTarget": "docs/examples/regex-path-segment-matching.md",
       "sourceFile": "docs/examples/examples/regex-path-segment-matching.ts",
       "fixtureDir": "docs/examples/fixtures/regex-path-segment-matching",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "path-segment-ignore",
+      "category": "targeting",
+      "docTarget": "docs/examples/path-segment-ignore.md",
+      "sourceFile": "docs/examples/examples/path-segment-ignore.ts",
+      "fixtureDir": "docs/examples/fixtures/path-segment-ignore",
       "assertionMode": "structured-output",
       "expectedResultFile": "expected.json"
     },
