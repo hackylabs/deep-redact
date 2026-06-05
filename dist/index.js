@@ -1484,7 +1484,8 @@ const noContext = Object.freeze({
 });
 const shallowCopyContainer = (container) => {
 	if (Array.isArray(container)) {
-		const copy = new Array(container.length);
+		const copy = [];
+		copy.length = container.length;
 		for (let index = 0; index < container.length; index += 1) if (index in container) copy[index] = container[index];
 		return copy;
 	}
@@ -2406,7 +2407,7 @@ const validateConfig = (options) => {
 //#region src/core/replacement/serialise-output.ts
 const bareIdentifierPattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const buildObjectChildPath = (parentPath, key) => {
-	if (!bareIdentifierPattern.test(key)) return `${parentPath ?? ""}["${key.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"]`;
+	if (!bareIdentifierPattern.test(key)) return `${parentPath ?? ""}["${key.replaceAll("\\", "\\\\").replaceAll("\"", String.raw`\"`)}"]`;
 	return parentPath === void 0 ? key : `${parentPath}.${key}`;
 };
 const buildArrayChildPath = (parentPath, index) => {
@@ -2418,11 +2419,11 @@ const isStrictDescendantPath = (ancestor, path) => {
 	return path.startsWith(`${ancestor}.`) || path.startsWith(`${ancestor}[`);
 };
 const buildSafeGraph = (value, transformers, seen, identityPaths, currentPath, cycleRegistry) => {
-	if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean" || typeof value === "undefined") return value;
+	if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === void 0) return value;
 	if (typeof value === "function" || typeof value === "symbol") return "[UNSUPPORTED]";
 	const supportedKind = resolveSupportedTransformableValueKind(value);
 	if (supportedKind !== void 0) {
-		const runtimeIdentity = supportedKind !== "bigint" ? value : void 0;
+		const runtimeIdentity = supportedKind === "bigint" ? void 0 : value;
 		if (runtimeIdentity !== void 0) {
 			if (seen.has(runtimeIdentity)) return {
 				_transformer: "circular",
@@ -2440,7 +2441,7 @@ const buildSafeGraph = (value, transformers, seen, identityPaths, currentPath, c
 		} catch {
 			return "[UNSUPPORTED]";
 		} finally {
-			runtimeIdentity !== void 0 && seen.delete(runtimeIdentity);
+			if (runtimeIdentity !== void 0) seen.delete(runtimeIdentity);
 		}
 	}
 	const identity = value;
@@ -2462,7 +2463,8 @@ const buildSafeGraph = (value, transformers, seen, identityPaths, currentPath, c
 	seen.add(identity);
 	try {
 		if (Array.isArray(value)) {
-			const result = new Array(value.length);
+			const result = [];
+			result.length = value.length;
 			for (let index = 0; index < value.length; index += 1) {
 				if (!(index in value)) continue;
 				result[index] = buildSafeGraph(value[index], transformers, seen, identityPaths, buildArrayChildPath(currentPath, index), cycleRegistry);

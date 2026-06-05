@@ -89,12 +89,13 @@ interface InheritedRetain {
 }
 
 // Lazily shallow-copies a container, preserving sparse array holes (mirrors the general
-// traversal's `new Array(length)` + `if (!(index in value)) continue`). Non-targeted sibling
-// slots are carried over by reference, so a non-configured transformable / circular value is
-// preserved untouched — never visited, never transformed.
+// traversal's length-sized sparse result + `if (!(index in value)) continue`). Non-targeted
+// sibling slots are carried over by reference, so a non-configured transformable / circular
+// value is preserved untouched — never visited, never transformed.
 const shallowCopyContainer = (container: Record<string, unknown> | unknown[]): Record<string, unknown> | unknown[] => {
   if (Array.isArray(container)) {
-    const copy = new Array<unknown>(container.length)
+    const copy: unknown[] = []
+    copy.length = container.length
 
     for (let index = 0; index < container.length; index += 1) {
       if (index in container) {

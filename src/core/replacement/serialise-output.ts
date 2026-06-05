@@ -10,7 +10,7 @@ const bareIdentifierPattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 
 const buildObjectChildPath = (parentPath: string | undefined, key: string): string => {
   if (!bareIdentifierPattern.test(key)) {
-    return `${parentPath ?? ''}["${key.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`
+    return `${parentPath ?? ''}["${key.replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)}"]`
   }
 
   return parentPath === undefined ? key : `${parentPath}.${key}`
@@ -39,7 +39,7 @@ const buildSafeGraph = (
 ): unknown => {
   // Primitives (except bigint) pass through unchanged.
   if (value === null || typeof value === 'string' || typeof value === 'number'
-    || typeof value === 'boolean' || typeof value === 'undefined') {
+    || typeof value === 'boolean' || value === undefined) {
     return value
   }
 
@@ -60,7 +60,7 @@ const buildSafeGraph = (
     // cause unbounded recursion: the transformed plain-object representation contains a
     // reference back to the original Map, which is never found in `seen` and gets
     // transformed again indefinitely.
-    const runtimeIdentity = supportedKind !== 'bigint' ? value as object : undefined
+    const runtimeIdentity = supportedKind === 'bigint' ? undefined : (value as object)
 
     if (runtimeIdentity !== undefined) {
       if (seen.has(runtimeIdentity)) {
@@ -87,7 +87,9 @@ const buildSafeGraph = (
     } catch {
       return '[UNSUPPORTED]'
     } finally {
-      runtimeIdentity !== undefined && seen.delete(runtimeIdentity)
+      if (runtimeIdentity !== undefined) {
+        seen.delete(runtimeIdentity)
+      }
     }
   }
 
@@ -125,7 +127,8 @@ const buildSafeGraph = (
 
   try {
     if (Array.isArray(value)) {
-      const result: unknown[] = new Array(value.length)
+      const result: unknown[] = []
+      result.length = value.length
 
       for (let index = 0; index < value.length; index += 1) {
         if (!(index in value)) {
