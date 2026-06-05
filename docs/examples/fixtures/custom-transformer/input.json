@@ -1,1 +1,1 @@
-{ "status": 200, "body": { "token": "tok-1234", "data": "user-data" } }
+{ "id": "acct-1", "token": "tok-1234" }

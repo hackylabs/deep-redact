@@ -2,6 +2,7 @@ import { createRedactor as createReusableRedactor } from './core/create-redactor
 
 export type {
   Censor,
+  CustomConstructorTransformerRegistration,
   DiagnosticEvent,
   DiagnosticsOptions,
   DiagnosticSink,

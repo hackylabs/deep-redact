@@ -147,8 +147,8 @@
       "docTarget": "docs/examples/custom-transformer.md",
       "sourceFile": "docs/examples/examples/custom-transformer.ts",
       "fixtureDir": "docs/examples/fixtures/custom-transformer",
-      "assertionMode": "structured-output",
-      "expectedResultFile": "expected.json"
+      "assertionMode": "serialised-output",
+      "expectedResultFile": "expected.txt"
     },
     {
       "id": "graceful-error-replacement",

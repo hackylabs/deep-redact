@@ -15,6 +15,7 @@ export type {
 } from './config.js'
 export type { IgnoredValueTypesOption } from './ignored-value-types.js'
 export type {
+  CustomConstructorTransformerRegistration,
   Transformer,
   TransformersByConstructor,
   TransformersByType,

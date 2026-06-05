@@ -64,6 +64,7 @@ const transformerByConstructorOptionNames = new Set<keyof TransformersByConstruc
   'RegExp',
   'Set',
   'URL',
+  'custom',
 ])
 
 const ignoredValueTypeOptionNames = new Set<keyof IgnoredValueTypesOption>([
@@ -80,7 +81,24 @@ const diagnosticsOptionNames = new Set([
   'sink',
 ])
 
+const customConstructorRegistrationOptionNames = new Set([
+  'constructor',
+  'transformers',
+])
+
 type ConfigRecord = Record<string, unknown>
+type Constructable = abstract new (...args: never[]) => object
+
+const disallowedCustomConstructors = new Set<unknown>([
+  Object,
+  Array,
+  Date,
+  Error,
+  Map,
+  RegExp,
+  Set,
+  URL,
+])
 
 const isPlainObject = (value: unknown): value is ConfigRecord => {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -404,6 +422,90 @@ const validateTransformerEntries = (
   }
 }
 
+const isConstructable = (value: unknown): value is Constructable => {
+  if (typeof value !== 'function') {
+    return false
+  }
+
+  try {
+    Reflect.construct(Object, [], value)
+
+    return true
+  } catch {
+    return false
+  }
+}
+
+const isArraySubclassConstructor = (value: Constructable): boolean => {
+  const prototype = value.prototype
+
+  return typeof prototype === 'object'
+    && prototype !== null
+    && Object.prototype.isPrototypeOf.call(Array.prototype, prototype)
+}
+
+const validateCustomConstructorRegistrations = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): void => {
+  if (value === undefined) {
+    return
+  }
+
+  if (!Array.isArray(value)) {
+    pushIssue(issues, path, 'custom must be an array.')
+    return
+  }
+
+  const seenConstructors = new Set<Constructable>()
+
+  for (const [index, registration] of value.entries()) {
+    const registrationPath = `${path}[${index}]`
+
+    if (!isPlainObject(registration)) {
+      pushIssue(issues, registrationPath, 'Custom constructor registrations must be objects.')
+      continue
+    }
+
+    validateAllowedOptions(registration, customConstructorRegistrationOptionNames, registrationPath, issues)
+
+    const constructor = Object.hasOwn(registration, 'constructor')
+      ? registration.constructor
+      : undefined
+
+    if (!isConstructable(constructor)) {
+      pushIssue(issues, `${registrationPath}.constructor`, 'Custom constructor must be constructable.')
+    } else if (disallowedCustomConstructors.has(constructor)) {
+      pushIssue(
+        issues,
+        `${registrationPath}.constructor`,
+        'Custom constructor must not be Object, Array, or a built-in constructor.',
+      )
+    } else if (constructor === Function || isArraySubclassConstructor(constructor)) {
+      pushIssue(
+        issues,
+        `${registrationPath}.constructor`,
+        'Custom constructor must not be Object, Array, or a built-in constructor; Function and Array subclasses are also unsupported.',
+      )
+    } else if (seenConstructors.has(constructor)) {
+      pushIssue(
+        issues,
+        `${registrationPath}.constructor`,
+        'Custom constructor registrations must not repeat the same constructor.',
+      )
+    } else {
+      seenConstructors.add(constructor)
+    }
+
+    if (Array.isArray(registration.transformers)) {
+      validateTransformerEntries(registration.transformers, `${registrationPath}.transformers`, issues)
+    } else {
+      pushIssue(issues, `${registrationPath}.transformers`, 'transformers must be an array.')
+    }
+  }
+}
+
 const validateTransformerBuckets = (
   value: unknown,
   path: string,
@@ -420,8 +522,15 @@ const validateTransformerBuckets = (
   }
 
   validateAllowedOptions(value, allowedOptions, path, issues)
+  if (allowedOptions.has('custom')) {
+    validateCustomConstructorRegistrations(value.custom, `${path}.custom`, issues)
+  }
 
   for (const [bucketName, entries] of Object.entries(value)) {
+    if (bucketName === 'custom') {
+      continue
+    }
+
     if (!allowedOptions.has(bucketName)) {
       continue
     }

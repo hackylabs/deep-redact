@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createRedactor,
   deepRedact,
+  type CustomConstructorTransformerRegistration,
   type DeepRedactOptions,
   type DiagnosticEvent,
   type FunctionCensorContext,
@@ -380,6 +381,80 @@ describe('Reusable redactor factory contract', () => {
       'unsupported transformer constructor bucket',
       { transformers: { byConstructor: { Promise: [(_value: unknown) => _value] } } },
       /unsupported option "Promise"/i,
+    ],
+    [
+      'non-array custom constructor registrations',
+      { transformers: { byConstructor: { custom: { constructor: class Account {}, transformers: [] } } } },
+      /custom must be an array/i,
+    ],
+    [
+      'non-object custom constructor registration',
+      { transformers: { byConstructor: { custom: [null] } } },
+      /custom constructor registrations must be objects/i,
+    ],
+    [
+      'missing custom constructor',
+      { transformers: { byConstructor: { custom: [{ transformers: [] }] } } },
+      /custom constructor must be constructable/i,
+    ],
+    [
+      'non-constructable custom constructor',
+      { transformers: { byConstructor: { custom: [{ constructor: () => ({}), transformers: [] }] } } },
+      /custom constructor must be constructable/i,
+    ],
+    [
+      'object custom constructor',
+      { transformers: { byConstructor: { custom: [{ constructor: Object, transformers: [] }] } } },
+      /custom constructor must not be Object, Array, or a built-in constructor/i,
+    ],
+    [
+      'built-in custom constructor',
+      { transformers: { byConstructor: { custom: [{ constructor: Date, transformers: [] }] } } },
+      /custom constructor must not be Object, Array, or a built-in constructor/i,
+    ],
+    [
+      'duplicate custom constructor',
+      {
+        transformers: {
+          byConstructor: {
+            custom: [
+              { constructor: StoryTransformerError, transformers: [] },
+              { constructor: StoryTransformerError, transformers: [] },
+            ],
+          },
+        },
+      },
+      /custom constructor registrations must not repeat the same constructor/i,
+    ],
+    [
+      'missing custom constructor transformer array',
+      { transformers: { byConstructor: { custom: [{ constructor: StoryTransformerError }] } } },
+      /transformers must be an array/i,
+    ],
+    [
+      'undefined custom constructor transformer array',
+      { transformers: { byConstructor: { custom: [{ constructor: StoryTransformerError, transformers: undefined }] } } },
+      /transformers must be an array/i,
+    ],
+    [
+      'invalid custom constructor transformer entry',
+      { transformers: { byConstructor: { custom: [{ constructor: StoryTransformerError, transformers: [null] }] } } },
+      /transformer entries must be functions/i,
+    ],
+    [
+      'unsupported custom constructor registration option',
+      { transformers: { byConstructor: { custom: [{ constructor: StoryTransformerError, transformers: [], transform: [] }] } } },
+      /unsupported option "transform"/i,
+    ],
+    [
+      'array subclass custom constructor',
+      { transformers: { byConstructor: { custom: [{ constructor: class StoryArray extends Array {}, transformers: [] }] } } },
+      /function and array subclasses are also unsupported/i,
+    ],
+    [
+      'function custom constructor',
+      { transformers: { byConstructor: { custom: [{ constructor: Function, transformers: [] }] } } },
+      /function and array subclasses are also unsupported/i,
     ],
     [
       'invalid fallback transformer entry',
@@ -3454,6 +3529,25 @@ describe('serialise: false preserves FR23 runtime values and circular references
 })
 
 describe('Built-in and custom transformer resolution', () => {
+  it('exports the custom constructor registration type from the package root', () => {
+    class AccountRecord {}
+
+    const registration = {
+      constructor: AccountRecord,
+      transformers: [(value: unknown) => value],
+    } satisfies CustomConstructorTransformerRegistration
+
+    expect(registration.constructor).toBe(AccountRecord)
+  })
+
+  it('returns deterministic unsupported JSON strings for root undefined, function, and symbol values', () => {
+    const redact = deepRedact({ serialise: true })
+
+    expect(redact(undefined)).toBe(JSON.stringify('[UNSUPPORTED]'))
+    expect(redact(function secretFunction() { return 'token=secret' })).toBe(JSON.stringify('[UNSUPPORTED]'))
+    expect(redact(Symbol('token=secret'))).toBe(JSON.stringify('[UNSUPPORTED]'))
+  })
+
   it('returns the public built-in output shapes for supported root runtime values', () => {
     const bigintValue = 42n
     const dateValue = new Date('2026-01-02T03:04:05.000Z')
@@ -3632,6 +3726,267 @@ describe('Built-in and custom transformer resolution', () => {
     expect(byType).toHaveBeenCalledTimes(1)
     expect(byConstructor).toHaveBeenCalledTimes(1)
     expect(fallback).not.toHaveBeenCalled()
+  })
+
+  it('does not evaluate custom constructor registrations after a higher-precedence transformer changes the value', () => {
+    class HostileMatcher {
+      public static [Symbol.hasInstance](): boolean {
+        throw createStoryError('token=secret')
+      }
+    }
+
+    const dateValue = new Date('2026-01-02T03:04:05.000Z')
+    const byType = vi.fn((value: unknown) => {
+      if (!(value instanceof Date)) {
+        return value
+      }
+
+      return {
+        bucket: 'byType',
+        iso: value.toISOString(),
+      }
+    })
+    const custom = vi.fn((value: unknown) => value)
+    const redact = deepRedact({
+      serialise: true,
+      transformers: {
+        byType: {
+          object: [byType],
+        },
+        byConstructor: {
+          custom: [
+            { constructor: HostileMatcher, transformers: [custom] },
+          ],
+        },
+      },
+    })
+
+    expect(redact(dateValue)).toBe(JSON.stringify({
+      bucket: 'byType',
+      iso: dateValue.toISOString(),
+    }))
+    expect(byType).toHaveBeenCalledTimes(1)
+    expect(custom).not.toHaveBeenCalled()
+  })
+
+  it('dispatches two unrelated custom constructors by constructor identity', () => {
+    class CustomerRecord {
+      public readonly id = 'customer-1'
+    }
+    class ProjectRecord {
+      public readonly id = 'project-1'
+    }
+
+    const customerTransformer = vi.fn((value: unknown) => {
+      if (!(value instanceof CustomerRecord)) {
+        return value
+      }
+
+      return {
+        id: value.id,
+        type: 'customer',
+      }
+    })
+    const projectTransformer = vi.fn((value: unknown) => {
+      if (!(value instanceof ProjectRecord)) {
+        return value
+      }
+
+      return {
+        id: value.id,
+        type: 'project',
+      }
+    })
+    const redact = deepRedact({
+      serialise: true,
+      transformers: {
+        byConstructor: {
+          custom: [
+            { constructor: CustomerRecord, transformers: [customerTransformer] },
+            { constructor: ProjectRecord, transformers: [projectTransformer] },
+          ],
+        },
+      },
+    })
+
+    expect(redact({
+      customer: new CustomerRecord(),
+      project: new ProjectRecord(),
+    })).toBe(JSON.stringify({
+      customer: {
+        id: 'customer-1',
+        type: 'customer',
+      },
+      project: {
+        id: 'project-1',
+        type: 'project',
+      },
+    }))
+    expect(customerTransformer).toHaveBeenCalledTimes(1)
+    expect(projectTransformer).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses custom constructor declaration order when inheritance makes multiple registrations match', () => {
+    class ParentRecord {
+      public readonly id = 'parent'
+    }
+    class ChildRecord extends ParentRecord {
+      public readonly child = true
+    }
+
+    const parentTransformer = vi.fn((value: unknown) => {
+      if (!(value instanceof ParentRecord)) {
+        return value
+      }
+
+      return {
+        bucket: 'parent',
+        id: value.id,
+      }
+    })
+    const childTransformer = vi.fn((value: unknown) => {
+      if (!(value instanceof ChildRecord)) {
+        return value
+      }
+
+      return {
+        bucket: 'child',
+        child: value.child,
+        id: value.id,
+      }
+    })
+    const parentFirst = deepRedact({
+      serialise: true,
+      transformers: {
+        byConstructor: {
+          custom: [
+            { constructor: ParentRecord, transformers: [parentTransformer] },
+            { constructor: ChildRecord, transformers: [childTransformer] },
+          ],
+        },
+      },
+    })
+    const childFirst = deepRedact({
+      serialise: true,
+      transformers: {
+        byConstructor: {
+          custom: [
+            { constructor: ChildRecord, transformers: [childTransformer] },
+            { constructor: ParentRecord, transformers: [parentTransformer] },
+          ],
+        },
+      },
+    })
+
+    expect(parentFirst(new ChildRecord())).toBe(JSON.stringify({
+      bucket: 'parent',
+      id: 'parent',
+    }))
+    expect(childFirst(new ChildRecord())).toBe(JSON.stringify({
+      bucket: 'child',
+      child: true,
+      id: 'parent',
+    }))
+  })
+
+  it('matches custom constructors by identity rather than constructor name', () => {
+    const FirstCollision = class Collision {
+      public readonly id = 'first'
+    }
+    const SecondCollision = class Collision {
+      public readonly id = 'second'
+    }
+    const secondTransformer = vi.fn((value: unknown) => {
+      if (!(value instanceof SecondCollision)) {
+        return value
+      }
+
+      return {
+        id: value.id,
+        type: 'second',
+      }
+    })
+    const redact = deepRedact({
+      serialise: true,
+      transformers: {
+        byConstructor: {
+          custom: [
+            { constructor: SecondCollision, transformers: [secondTransformer] },
+          ],
+        },
+      },
+    })
+
+    expect(FirstCollision.name).toBe(SecondCollision.name)
+    expect(redact({
+      first: new FirstCollision(),
+      second: new SecondCollision(),
+    })).toBe(JSON.stringify({
+      first: '[UNSUPPORTED]',
+      second: {
+        id: 'second',
+        type: 'second',
+      },
+    }))
+    expect(secondTransformer).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses fallback transformers for arbitrary class instances that return safe plain objects', () => {
+    class SessionRecord {
+      public readonly id = 'session-1'
+      public readonly secret = 'token=secret'
+    }
+
+    const fallback = vi.fn((value: unknown) => {
+      if (!(value instanceof SessionRecord)) {
+        return value
+      }
+
+      return {
+        id: value.id,
+        type: 'session',
+      }
+    })
+    const redact = deepRedact({
+      serialise: true,
+      transformers: {
+        fallback: [fallback],
+      },
+    })
+    const result = redact({ record: new SessionRecord() }) as string
+
+    expect(result).toBe(JSON.stringify({
+      record: {
+        id: 'session-1',
+        type: 'session',
+      },
+    }))
+    expect(result).not.toContain('token=secret')
+    expect(fallback).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses fallback transformers for arbitrary class instances that return supported runtime values', () => {
+    class TimestampRecord {
+      public readonly timestamp = new Date('2026-06-05T10:11:12.000Z')
+    }
+
+    const record = new TimestampRecord()
+    const fallback = vi.fn((value: unknown) => {
+      if (!(value instanceof TimestampRecord)) {
+        return value
+      }
+
+      return value.timestamp
+    })
+    const redact = deepRedact({
+      serialise: true,
+      transformers: {
+        fallback: [fallback],
+      },
+    })
+
+    expect(redact(record)).toBe(JSON.stringify(buildDate(record.timestamp)))
+    expect(fallback).toHaveBeenCalledTimes(1)
   })
 
   it('uses declaration order within a bucket and short-circuits after the first custom transformer that changes the value', () => {
@@ -4628,11 +4983,74 @@ describe('serialise: true never throws and never leaks non-plain objects (AC 6 /
 })
 
 describe('[UNSUPPORTED] isolation under serialise: true (AC 6)', () => {
+  it('evaluates a plain-object getter at most once when serialising unchanged output', () => {
+    let reads = 0
+    const payload: Record<string, unknown> = {
+      safe: 'visible',
+    }
+
+    Object.defineProperty(payload, 'token', {
+      enumerable: true,
+      get() {
+        reads += 1
+
+        return 'captured'
+      },
+    })
+
+    const redact = deepRedact({ serialise: true })
+    const result = redact({ nested: payload }) as string
+
+    expect(result).toBe(JSON.stringify({
+      nested: {
+        safe: 'visible',
+        token: 'captured',
+      },
+    }))
+    expect(reads).toBe(1)
+  })
+
+  it('uses the traversal-captured getter value when a second read would throw or change value', () => {
+    let reads = 0
+    const payload: Record<string, unknown> = {
+      safe: 'visible',
+    }
+
+    Object.defineProperty(payload, 'token', {
+      enumerable: true,
+      get() {
+        reads += 1
+
+        if (reads > 1) {
+          throw createStoryError('token=secret')
+        }
+
+        return 'first-read'
+      },
+    })
+
+    const redact = deepRedact({ serialise: true })
+    const result = redact({ nested: payload, sibling: 'ok' }) as string
+
+    expect(result).toBe(JSON.stringify({
+      nested: {
+        safe: 'visible',
+        token: 'first-read',
+      },
+      sibling: 'ok',
+    }))
+    expect(reads).toBe(1)
+    expect(result).not.toContain('token=secret')
+  })
+
   it('replaces only the failing value with [UNSUPPORTED] when a getter throws', () => {
+    let reads = 0
     const payload: Record<string, unknown> = { safe: 'visible' }
+
     Object.defineProperty(payload, 'broken', {
       enumerable: true,
       get() {
+        reads += 1
         throw new Error('getter explodes')
       },
     })
@@ -4641,9 +5059,17 @@ describe('[UNSUPPORTED] isolation under serialise: true (AC 6)', () => {
 
     expect(typeof result).toBe('string')
     expect(() => JSON.parse(result)).not.toThrow()
+    expect(JSON.parse(result)).toStrictEqual({
+      nested: {
+        broken: '[UNSUPPORTED]',
+        safe: 'visible',
+      },
+      sibling: 'ok',
+    })
     expect(result).toContain('[UNSUPPORTED]')
     expect(result).toContain('"sibling":"ok"')
     expect(result).toContain('"safe":"visible"')
+    expect(reads).toBe(1)
     expect(() => redact({ nested: payload })).not.toThrow()
   })
 

@@ -93,13 +93,20 @@ const compileByType = (configured) => {
 	});
 };
 const compileByConstructor = (configured) => {
+	const customRegistrations = configured?.custom ?? [];
 	return Object.freeze({
 		Date: mergeTransformers(configured?.Date, Object.freeze([dateTransformer])),
 		Error: mergeTransformers(configured?.Error, Object.freeze([errorTransformer])),
 		Map: mergeTransformers(configured?.Map, Object.freeze([mapTransformer])),
 		RegExp: mergeTransformers(configured?.RegExp, Object.freeze([regexTransformer])),
 		Set: mergeTransformers(configured?.Set, Object.freeze([setTransformer])),
-		URL: mergeTransformers(configured?.URL, Object.freeze([urlTransformer]))
+		URL: mergeTransformers(configured?.URL, Object.freeze([urlTransformer])),
+		custom: Object.freeze(customRegistrations.map((registration) => {
+			return Object.freeze({
+				constructor: registration.constructor,
+				transformers: mergeTransformers(registration.transformers)
+			});
+		}))
 	});
 };
 const compileTransformers = (configured) => {
@@ -732,15 +739,24 @@ const applyFirstChangingTransformer = (value, transformers) => {
 		if (transformed !== value) return transformed;
 	}
 };
+const resolveCustomConstructorTransformers = (value, plan) => {
+	if (value === null || typeof value !== "object" || Array.isArray(value)) return;
+	for (const registration of plan.byConstructor.custom) if (value instanceof registration.constructor) return registration.transformers;
+};
 const resolveTransformedValue = (value, plan) => {
 	const supportedValueKind = resolveSupportedTransformableValueKind(value);
-	if (supportedValueKind === void 0) return;
 	if (supportedValueKind === "bigint") return applyFirstChangingTransformer(value, [...plan.byType.bigint, ...plan.fallback]);
-	return applyFirstChangingTransformer(value, [
-		...plan.byType.object,
-		...plan.byConstructor[supportedValueKind],
-		...plan.fallback
-	]);
+	if (supportedValueKind === void 0) {
+		if (value === null || typeof value !== "object" || Array.isArray(value)) return;
+		const byTypeResult = applyFirstChangingTransformer(value, plan.byType.object);
+		if (byTypeResult !== void 0) return byTypeResult;
+		return applyFirstChangingTransformer(value, [...resolveCustomConstructorTransformers(value, plan) ?? [], ...plan.fallback]);
+	}
+	const byTypeResult = applyFirstChangingTransformer(value, plan.byType.object);
+	if (byTypeResult !== void 0) return byTypeResult;
+	const byConstructorResult = applyFirstChangingTransformer(value, plan.byConstructor[supportedValueKind]);
+	if (byConstructorResult !== void 0) return byConstructorResult;
+	return applyFirstChangingTransformer(value, [...resolveCustomConstructorTransformers(value, plan) ?? [], ...plan.fallback]);
 };
 //#endregion
 //#region src/core/diagnostics/sanitise-diagnostics.ts
@@ -832,6 +848,11 @@ const emitDiagnosticEvent = (plan, event) => {
 //#endregion
 //#region src/core/runtime/redact-value.ts
 const unsupportedValue$1 = "[UNSUPPORTED]";
+const createCircularMarker = (path, value) => ({
+	_transformer: "circular",
+	path,
+	value
+});
 const isPlainObject$1 = (value) => {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
 	const prototype = Object.getPrototypeOf(value);
@@ -1124,6 +1145,15 @@ const transformTrackedIdentity = (identity, plan, context, activePolicy, state, 
 	const originalPath = branchState.activePaths.get(identity);
 	if (originalPath !== void 0) {
 		state.cycleRegistry?.set(identity, originalPath);
+		if (plan.serialise) {
+			const marker = createCircularMarker(canonicalPath, originalPath);
+			return {
+				cacheValue: marker,
+				changed: true,
+				pathStable: false,
+				value: marker
+			};
+		}
 		return {
 			cacheValue: identity,
 			changed: false,
@@ -1219,7 +1249,8 @@ const transformArray = (value, plan, inheritedPolicy, canonicalPath, pathSegment
 		items: snapshotItems,
 		kind: "array"
 	});
-	if (!changed) return {
+	const serialiseSnapshotOnly = !changed && Boolean(plan.serialise);
+	if (!changed && !serialiseSnapshotOnly) return {
 		cacheValue,
 		changed: false,
 		pathStable,
@@ -1227,8 +1258,8 @@ const transformArray = (value, plan, inheritedPolicy, canonicalPath, pathSegment
 	};
 	if (removedIndexes.length === 0) return {
 		cacheValue,
-		changed,
-		pathStable,
+		changed: changed || serialiseSnapshotOnly,
+		pathStable: serialiseSnapshotOnly ? false : pathStable,
 		value: transformedValue
 	};
 	const compactedValue = transformedValue.slice();
@@ -1324,11 +1355,12 @@ const transformObject = (value, plan, inheritedPolicy, canonicalPath, pathSegmen
 		entries: snapshotEntries,
 		kind: "object"
 	});
+	const serialiseSnapshotOnly = !changed && Boolean(plan.serialise);
 	return {
 		cacheValue,
-		changed,
-		pathStable,
-		value: changed ? transformedValue : value
+		changed: changed || serialiseSnapshotOnly,
+		pathStable: serialiseSnapshotOnly ? false : pathStable,
+		value: changed || serialiseSnapshotOnly ? transformedValue : value
 	};
 };
 const transformCompletedArray = (snapshot, plan, inheritedPolicy, canonicalPath, pathSegments, rootInput, suppressDescendantRedaction, state, branchState) => {
@@ -2137,7 +2169,8 @@ const transformerByConstructorOptionNames = new Set([
 	"Map",
 	"RegExp",
 	"Set",
-	"URL"
+	"URL",
+	"custom"
 ]);
 const ignoredValueTypeOptionNames = new Set([
 	"bigint",
@@ -2149,6 +2182,17 @@ const ignoredValueTypeOptionNames = new Set([
 	"URL"
 ]);
 const diagnosticsOptionNames = new Set(["sink"]);
+const customConstructorRegistrationOptionNames = new Set(["constructor", "transformers"]);
+const disallowedCustomConstructors = new Set([
+	Object,
+	Array,
+	Date,
+	Error,
+	Map,
+	RegExp,
+	Set,
+	URL
+]);
 const isPlainObject = (value) => {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
 	const prototype = Object.getPrototypeOf(value);
@@ -2295,6 +2339,43 @@ const validateTransformerEntries = (value, path, issues) => {
 	}
 	for (const [index, entry] of value.entries()) if (typeof entry !== "function") pushIssue(issues, `${path}[${index}]`, "Transformer entries must be functions.");
 };
+const isConstructable = (value) => {
+	if (typeof value !== "function") return false;
+	try {
+		Reflect.construct(Object, [], value);
+		return true;
+	} catch {
+		return false;
+	}
+};
+const isArraySubclassConstructor = (value) => {
+	const prototype = value.prototype;
+	return typeof prototype === "object" && prototype !== null && Object.prototype.isPrototypeOf.call(Array.prototype, prototype);
+};
+const validateCustomConstructorRegistrations = (value, path, issues) => {
+	if (value === void 0) return;
+	if (!Array.isArray(value)) {
+		pushIssue(issues, path, "custom must be an array.");
+		return;
+	}
+	const seenConstructors = /* @__PURE__ */ new Set();
+	for (const [index, registration] of value.entries()) {
+		const registrationPath = `${path}[${index}]`;
+		if (!isPlainObject(registration)) {
+			pushIssue(issues, registrationPath, "Custom constructor registrations must be objects.");
+			continue;
+		}
+		validateAllowedOptions(registration, customConstructorRegistrationOptionNames, registrationPath, issues);
+		const constructor = Object.hasOwn(registration, "constructor") ? registration.constructor : void 0;
+		if (!isConstructable(constructor)) pushIssue(issues, `${registrationPath}.constructor`, "Custom constructor must be constructable.");
+		else if (disallowedCustomConstructors.has(constructor)) pushIssue(issues, `${registrationPath}.constructor`, "Custom constructor must not be Object, Array, or a built-in constructor.");
+		else if (constructor === Function || isArraySubclassConstructor(constructor)) pushIssue(issues, `${registrationPath}.constructor`, "Custom constructor must not be Object, Array, or a built-in constructor; Function and Array subclasses are also unsupported.");
+		else if (seenConstructors.has(constructor)) pushIssue(issues, `${registrationPath}.constructor`, "Custom constructor registrations must not repeat the same constructor.");
+		else seenConstructors.add(constructor);
+		if (Array.isArray(registration.transformers)) validateTransformerEntries(registration.transformers, `${registrationPath}.transformers`, issues);
+		else pushIssue(issues, `${registrationPath}.transformers`, "transformers must be an array.");
+	}
+};
 const validateTransformerBuckets = (value, path, allowedOptions, issues) => {
 	if (value === void 0) return;
 	if (!isPlainObject(value)) {
@@ -2302,7 +2383,9 @@ const validateTransformerBuckets = (value, path, allowedOptions, issues) => {
 		return;
 	}
 	validateAllowedOptions(value, allowedOptions, path, issues);
+	if (allowedOptions.has("custom")) validateCustomConstructorRegistrations(value.custom, `${path}.custom`, issues);
 	for (const [bucketName, entries] of Object.entries(value)) {
+		if (bucketName === "custom") continue;
 		if (!allowedOptions.has(bucketName)) continue;
 		validateTransformerEntries(entries, `${path}.${bucketName}`, issues);
 	}
@@ -2496,10 +2579,8 @@ const buildSafeGraph = (value, transformers, seen, identityPaths, currentPath, c
 			return result;
 		}
 		try {
-			for (const transformer of transformers.fallback) {
-				const transformed = transformer(value);
-				if (transformed !== value) return buildSafeGraph(transformed, transformers, seen, identityPaths, currentPath, cycleRegistry);
-			}
+			const transformed = resolveTransformedValue(value, transformers);
+			if (transformed !== void 0) return buildSafeGraph(transformed, transformers, seen, identityPaths, currentPath, cycleRegistry);
 		} catch {
 			return "[UNSUPPORTED]";
 		}
@@ -2510,7 +2591,7 @@ const buildSafeGraph = (value, transformers, seen, identityPaths, currentPath, c
 };
 const serialiseOutput = (value, transformers, serialise, cycleRegistry) => {
 	if (!serialise) return value;
-	const safeGraph = buildSafeGraph(value, transformers, /* @__PURE__ */ new WeakSet(), /* @__PURE__ */ new WeakMap(), void 0, cycleRegistry);
+	const safeGraph = value === void 0 ? "[UNSUPPORTED]" : buildSafeGraph(value, transformers, /* @__PURE__ */ new WeakSet(), /* @__PURE__ */ new WeakMap(), void 0, cycleRegistry);
 	if (serialise === true) return JSON.stringify(safeGraph);
 	return serialise(safeGraph);
 };

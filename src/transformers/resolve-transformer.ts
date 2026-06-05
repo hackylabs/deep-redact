@@ -77,15 +77,28 @@ const applyFirstChangingTransformer = (
   return undefined
 }
 
+const resolveCustomConstructorTransformers = (
+  value: unknown,
+  plan: CompiledTransformersPlan,
+): readonly ((value: unknown) => unknown)[] | undefined => {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+
+  for (const registration of plan.byConstructor.custom) {
+    if (value instanceof registration.constructor) {
+      return registration.transformers
+    }
+  }
+
+  return undefined
+}
+
 export const resolveTransformedValue = (
   value: unknown,
   plan: CompiledTransformersPlan,
 ): unknown | undefined => {
   const supportedValueKind = resolveSupportedTransformableValueKind(value)
-
-  if (supportedValueKind === undefined) {
-    return undefined
-  }
 
   if (supportedValueKind === 'bigint') {
     return applyFirstChangingTransformer(value, [
@@ -94,9 +107,41 @@ export const resolveTransformedValue = (
     ])
   }
 
+  if (supportedValueKind === undefined) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      return undefined
+    }
+
+    const byTypeResult = applyFirstChangingTransformer(value, plan.byType.object)
+
+    if (byTypeResult !== undefined) {
+      return byTypeResult
+    }
+
+    const customConstructorTransformers = resolveCustomConstructorTransformers(value, plan) ?? []
+
+    return applyFirstChangingTransformer(value, [
+      ...customConstructorTransformers,
+      ...plan.fallback,
+    ])
+  }
+
+  const byTypeResult = applyFirstChangingTransformer(value, plan.byType.object)
+
+  if (byTypeResult !== undefined) {
+    return byTypeResult
+  }
+
+  const byConstructorResult = applyFirstChangingTransformer(value, plan.byConstructor[supportedValueKind])
+
+  if (byConstructorResult !== undefined) {
+    return byConstructorResult
+  }
+
+  const customConstructorTransformers = resolveCustomConstructorTransformers(value, plan) ?? []
+
   return applyFirstChangingTransformer(value, [
-    ...plan.byType.object,
-    ...plan.byConstructor[supportedValueKind],
+    ...customConstructorTransformers,
     ...plan.fallback,
   ])
 }

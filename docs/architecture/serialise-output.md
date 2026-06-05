@@ -74,6 +74,11 @@ for every (type × position) combination of the supported runtime types:
 The supported runtime types and their adapter treatment are listed in
 [Transformer Marker Shapes](#transformer-marker-shapes) below.
 
+Root `undefined`, function, and symbol values are normalised to the deterministic
+JSON string `"[UNSUPPORTED]"`. This is intentionally stricter than native
+`JSON.stringify(undefined)`, because `serialise: true` is a string-output
+contract.
+
 The adapter does not expand redaction coverage. Alias branches that were not
 selected by the configured policy remain unredacted values in the already-redacted
 structured result, then are serialised like any other non-redacted value. See
@@ -101,6 +106,41 @@ are canonical and unchanged across versions. The built-in shapes are:
 Custom transformers registered via `transformers.byConstructor` or
 `transformers.byType` are applied first and can override these shapes.
 
+Custom constructor dispatch is supported through an explicit `custom` registration
+array:
+
+```typescript
+interface CustomConstructorTransformerRegistration {
+  readonly constructor: abstract new (...args: never[]) => object;
+  readonly transformers: readonly Transformer[];
+}
+
+interface TransformersByConstructor {
+  readonly Date?: readonly Transformer[];
+  readonly Error?: readonly Transformer[];
+  readonly Map?: readonly Transformer[];
+  readonly RegExp?: readonly Transformer[];
+  readonly Set?: readonly Transformer[];
+  readonly URL?: readonly Transformer[];
+  readonly custom?: readonly CustomConstructorTransformerRegistration[];
+}
+```
+
+Dispatch order is deterministic:
+
+1. `byType.object`
+2. matching built-in constructor bucket, when the value is a built-in runtime type
+3. `byConstructor.custom` registrations in declaration order
+4. `fallback`
+
+Custom registrations match by constructor identity using `instanceof`, not by
+constructor name. If inheritance makes multiple custom registrations match, the
+first matching registration wins. `Object`, `Array`, and the built-in constructor
+types that already have first-class buckets cannot be registered through
+`custom`. The `custom` option must be an array of registration objects, each with
+a constructable `constructor` and a transformer array; duplicate constructors
+and non-function transformer entries are rejected during validation.
+
 ---
 
 ## Circular-Reference Neutralisation In The Adapter
@@ -126,6 +166,12 @@ container and removed in a `finally` block, so **aliased objects** (the same
 identity reachable via two unrelated paths) are processed independently rather
 than being mis-identified as cycles.
 
+The cosmetic path wording for bare-root array, `Set`, and `Map` self-cycles is
+not normalised here. Root arrays report the direct index path (for example `0`),
+while root `Set`/`Map` markers are relative to their transformed marker payload
+(for example `value.0` or `value.me`). All forms remain valid circular markers;
+normalising this presentation is tracked separately from the safety contract.
+
 ---
 
 ## `[UNSUPPORTED]` Semantics Under Serialise (FR24/FR25/FR27)
@@ -136,6 +182,12 @@ via a throwing `toJSON` or a throwing accessor on the source object — only tha
 value is replaced with the string `'[UNSUPPORTED]'`. The rest of the output is
 intact and correctly serialised. The adapter call does not throw, and no source
 detail from the failed value leaks into the output (security NFR).
+
+For plain-object getters, the adapter consumes the traversal-captured value (or
+the traversal-captured local failure) rather than reading the getter again. A
+getter that succeeds on first read and would throw or change value on a second
+read is still evaluated once; a getter that fails during traversal is not
+re-read by the adapter, and only that property degrades to `'[UNSUPPORTED]'`.
 
 ---
 

@@ -116,6 +116,12 @@ interface TraversalBranchState {
 
 const unsupportedValue = '[UNSUPPORTED]'
 
+const createCircularMarker = (path: string, value: string): Record<string, string> => ({
+  _transformer: 'circular',
+  path,
+  value,
+})
+
 export const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return false
@@ -738,6 +744,18 @@ const transformTrackedIdentity = (
     // Record the mapping so the adapter can detect cycle back-references that point
     // to the original identity rather than the in-progress result object.
     state.cycleRegistry?.set(identity, originalPath)
+
+    if (plan.serialise) {
+      const marker = createCircularMarker(canonicalPath, originalPath)
+
+      return {
+        cacheValue: marker,
+        changed: true,
+        pathStable: false,
+        value: marker,
+      }
+    }
+
     return {
       cacheValue: identity,
       changed: false,
@@ -880,7 +898,9 @@ const transformArray = (
 
   storeCompletedSnapshot(state, value, { items: snapshotItems, kind: 'array' })
 
-  if (!changed) {
+  const serialiseSnapshotOnly = !changed && Boolean(plan.serialise)
+
+  if (!changed && !serialiseSnapshotOnly) {
     return {
       cacheValue,
       changed: false,
@@ -892,8 +912,8 @@ const transformArray = (
   if (removedIndexes.length === 0) {
     return {
       cacheValue,
-      changed,
-      pathStable,
+      changed: changed || serialiseSnapshotOnly,
+      pathStable: serialiseSnapshotOnly ? false : pathStable,
       value: transformedValue,
     }
   }
@@ -1012,11 +1032,13 @@ const transformObject = (
 
   storeCompletedSnapshot(state, value, { entries: snapshotEntries, kind: 'object' })
 
+  const serialiseSnapshotOnly = !changed && Boolean(plan.serialise)
+
   return {
     cacheValue,
-    changed,
-    pathStable,
-    value: changed ? transformedValue : value,
+    changed: changed || serialiseSnapshotOnly,
+    pathStable: serialiseSnapshotOnly ? false : pathStable,
+    value: changed || serialiseSnapshotOnly ? transformedValue : value,
   }
 }
 

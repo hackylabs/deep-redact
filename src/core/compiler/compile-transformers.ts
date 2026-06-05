@@ -1,4 +1,5 @@
 import type {
+  CustomConstructorTransformerRegistration,
   Transformer,
   TransformersByConstructor,
   TransformersByType,
@@ -28,6 +29,12 @@ export interface CompiledTransformersByConstructor {
   readonly RegExp: readonly Transformer[];
   readonly Set: readonly Transformer[];
   readonly URL: readonly Transformer[];
+  readonly custom: readonly CompiledCustomConstructorTransformers[];
+}
+
+export interface CompiledCustomConstructorTransformers {
+  readonly constructor: CustomConstructorTransformerRegistration['constructor'];
+  readonly transformers: readonly Transformer[];
 }
 
 export interface CompiledTransformersPlan {
@@ -58,6 +65,8 @@ const compileByType = (
 const compileByConstructor = (
   configured: TransformersByConstructor | undefined,
 ): CompiledTransformersByConstructor => {
+  const customRegistrations = configured?.custom ?? []
+
   return Object.freeze({
     Date: mergeTransformers(configured?.Date, Object.freeze([dateTransformer])),
     Error: mergeTransformers(configured?.Error, Object.freeze([errorTransformer])),
@@ -65,6 +74,12 @@ const compileByConstructor = (
     RegExp: mergeTransformers(configured?.RegExp, Object.freeze([regexTransformer])),
     Set: mergeTransformers(configured?.Set, Object.freeze([setTransformer])),
     URL: mergeTransformers(configured?.URL, Object.freeze([urlTransformer])),
+    custom: Object.freeze(customRegistrations.map((registration) => {
+      return Object.freeze({
+        constructor: registration.constructor,
+        transformers: mergeTransformers(registration.transformers),
+      })
+    })),
   })
 }
 

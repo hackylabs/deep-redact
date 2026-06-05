@@ -165,17 +165,14 @@ const buildSafeGraph = (
       return result
     }
 
-    // Non-plain, non-transformable object (e.g. a class instance). A user-supplied fallback
-    // transformer may still handle it; otherwise it cannot be guaranteed JSON-safe — a throwing
-    // toJSON or accessor would defeat the no-throw guarantee (FR26) once it reached JSON.stringify,
-    // and its raw fields must never leak — so substitute the unsupported marker (FR24/FR26).
+    // Non-plain objects (for example class instances) can only reach JSON output through
+    // configured constructor/fallback transformers. Otherwise a throwing toJSON or accessor would
+    // defeat the no-throw guarantee (FR26), and raw fields must never leak.
     try {
-      for (const transformer of transformers.fallback) {
-        const transformed = transformer(value)
+      const transformed = resolveTransformedValue(value, transformers)
 
-        if (transformed !== value) {
-          return buildSafeGraph(transformed, transformers, seen, identityPaths, currentPath, cycleRegistry)
-        }
+      if (transformed !== undefined) {
+        return buildSafeGraph(transformed, transformers, seen, identityPaths, currentPath, cycleRegistry)
       }
     } catch {
       return '[UNSUPPORTED]'
@@ -197,14 +194,16 @@ export const serialiseOutput = (
     return value
   }
 
-  const safeGraph = buildSafeGraph(
-    value,
-    transformers,
-    new WeakSet<object>(),
-    new WeakMap<object, string>(),
-    undefined,
-    cycleRegistry,
-  )
+  const safeGraph = value === undefined
+    ? '[UNSUPPORTED]'
+    : buildSafeGraph(
+      value,
+      transformers,
+      new WeakSet<object>(),
+      new WeakMap<object, string>(),
+      undefined,
+      cycleRegistry,
+    )
 
   if (serialise === true) {
     return JSON.stringify(safeGraph)
