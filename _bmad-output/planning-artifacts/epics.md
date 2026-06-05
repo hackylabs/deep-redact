@@ -169,18 +169,28 @@ Teams can understand redaction outcomes, trust deterministic one-way behaviour, 
 Teams can migrate existing usage, verify cross-environment support, evaluate performance, and standardise Deep Redact with strong examples and guidance.
 **FRs covered:** FR28, FR29, FR30, FR31, FR34, FR37, FR38
 
+### Epic 6: Make Release Evidence Reliable Under Failure Cases
+Release-critical scripts, examples, benchmarks, migration checks, and edge-case tests fail closed when their evidence drifts or encounters known failure modes.
+**FRs supported:** FR24, FR25, FR26, FR27, FR28, FR30, FR31, FR37, FR38
+**NFRs supported:** reliability of release verification, deterministic failure evidence, and release-gate maintainability
+
 ### Epic 7: Runtime Performance — Pass the Benchmark Gate
 Address the open performance gate and traversal safety controls.
 **Technical Constraints covered:** Story 7.1 — compiled path executor; Story 7.2 — equivalence proof; Story 7.3 — general traversal allocation; Story 7.4 — traversal safety limits, hostile-input protection, security corpus; Story 7.5 — cancelled (superseded by Epic 8)
 **Status:** Stories 7.1–7.4 complete. Story 7.5 cancelled — the trie-extension approach is superseded by Epic 8's rule-driven traversal engine, which eliminates the need for a separate fast lane entirely. Stories 7.1–7.4 work products remain load-bearing: 7.4's safety limits are mandatory requirements for the Epic 8 engine; 7.3's allocation optimisations informed Epic 8's design principles; 7.2's equivalence corpus provides the baseline for Epic 8's equivalence proof; 7.1's compiled executor is replaced by Epic 8 Story 8.2.
 
-### Epic 8: Rule-Driven Traversal Engine
-Replace the O(N) payload-walk with a rule-driven engine that navigates directly to configured targets, achieving O(P) for exact-path-only configurations and O(P + Σ K_wildcard_levels) for single-wildcard configurations. The compiled path executor fast lane from Story 7.1 is superseded.
+### Epic 8: Keep Path-Driven Redaction Fast, Deterministic, and Safe
+Replace the O(N) payload-walk for path-driven configurations with a rule-driven engine, and close the remaining contract, performance, cleanup, alias, serialise-output, and retained-structure gaps required before v4 release.
 **FRs covered:** FR11 (performance for single-level wildcard paths)
+**FRs supported:** FR23, FR24, FR25, FR26, FR27
+**Technical constraints supported:** traversal safety budgets, deterministic output contracts, release benchmark credibility
 
-### Epic 9: Remaining Deferred Work
-Address gaps and deferred items identified after the main epic sequence was finalised but before v4 release. Stories are added to this epic as gaps are discovered.
-**Known stories:** Story 9.1 — missing worked examples for fuzzy key matching, case-insensitive key matching, and path-segment ignore selectors (FR6, FR7, FR13)
+### Late-Epic Dependency Matrix
+
+- Story 7.5 is cancelled and remains historical context only; no future work should extend the superseded compiled fast lane.
+- Epic 8 depends on Epic 7 Stories 7.1 to 7.4 as completed evidence for equivalence, allocation, and traversal-safety constraints.
+- Story 5.12 absorbs the former Epic 9 worked-example gap so FR31 remains in the rollout and documentation epic.
+- Stories 8.7 to 8.12 are pre-release hardening stories for the rule-driven engine; they must not reopen completed Stories 8.1 to 8.6 except by adding focused follow-up evidence.
 
 ## Epic 1: Enable Service-Wide Redaction with One Configuration
 
@@ -1832,9 +1842,61 @@ So that I can decide whether to standardise the library at service root before r
   **Then** the guide is generated from or validated directly against those same artefacts
   **And** guidance drift causes documentation verification to fail
 
-## Epic 6: Pre-Release Hardening
+### Story 5.12: Add Worked Examples for Fuzzy Key Matching, Case-Insensitive Key Matching, and Path-Segment Ignore Selectors
 
-Address all items deferred from code reviews of Stories 2.2, 4.2, 4.3, 5.5, 5.6, 5.8, 5.9, 5.10, and 5.11, resolving runtime correctness gaps, test corpus coverage gaps, and script robustness issues before the v4.0.0 release.
+Implements: FR31
+Supports example evidence for: FR6, FR7, FR13
+
+As a backend engineer,
+I want verified worked examples for fuzzy key matching, case-insensitive key matching, and path-segment ignore selectors,
+so that these three implemented and tested features are documented with the same rigour as the rest of the Deep Redact feature surface.
+
+**Background:** All three features are fully implemented in source and covered by unit and contract tests, but none appear in the `docs/examples/` worked-example system. Story 5.7's required coverage matrix does not list them, so the gap was not caught by that story. This story closes that gap with three separate manifest rows, example source files, fixture directories, and doc files — one per feature.
+
+**Acceptance Criteria:**
+
+**Fuzzy key matching example**
+- **Given** the canonical example manifest at `docs/examples/manifest.json`
+  **When** Story 5.12 is complete
+  **Then** a row with `id: "fuzzy-key-matching"`, `category: "targeting"` is present in the manifest
+  **And** the `sourceFile` at `docs/examples/examples/fuzzy-key-matching.ts` demonstrates a redactor configured with `fuzzyKeyMatch: true` and a literal key rule
+  **And** the fixture at `docs/examples/fixtures/fuzzy-key-matching/` contains an input payload where a payload key contains the configured literal as a substring (not an exact match) and an `expected.json` asserting the matched value is redacted
+  **And** the doc file at `docs/examples/fuzzy-key-matching.md` is generated from or validated against the same fixture and source
+  **And** example validation runs the source against its fixture and asserts the structured output matches `expected.json`
+
+**Case-insensitive key matching example**
+- **Given** the canonical example manifest at `docs/examples/manifest.json`
+  **When** Story 5.12 is complete
+  **Then** a row with `id: "case-insensitive-key-matching"`, `category: "targeting"` is present in the manifest
+  **And** the `sourceFile` at `docs/examples/examples/case-insensitive-key-matching.ts` demonstrates a redactor configured with `caseSensitiveKeyMatch: false` and a literal key rule
+  **And** the fixture at `docs/examples/fixtures/case-insensitive-key-matching/` contains an input payload where the payload key differs in case from the configured key and an `expected.json` asserting the matched value is redacted
+  **And** the doc file at `docs/examples/case-insensitive-key-matching.md` is generated from or validated against the same fixture and source
+  **And** example validation runs the source against its fixture and asserts the structured output matches `expected.json`
+
+**Path-segment ignore selector example**
+- **Given** the canonical example manifest at `docs/examples/manifest.json`
+  **When** Story 5.12 is complete
+  **Then** a row with `id: "path-segment-ignore"`, `category: "targeting"` is present in the manifest
+  **And** the `sourceFile` at `docs/examples/examples/path-segment-ignore.ts` demonstrates a redactor configured with a structured path selector containing an `{ ignore: '<key>' }` segment (e.g. `['users', { ignore: 'admin' }, 'email']`)
+  **And** the fixture at `docs/examples/fixtures/path-segment-ignore/` contains an input payload with sibling branches where the ignored branch value is NOT redacted and a non-ignored sibling IS redacted, and an `expected.json` asserting this difference
+  **And** the doc file at `docs/examples/path-segment-ignore.md` is generated from or validated against the same fixture and source
+  **And** example validation runs the source against its fixture and asserts the structured output matches `expected.json`
+
+**Manifest validation**
+- **Given** the three new manifest rows
+  **When** the example validation harness from Story 5.6 runs
+  **Then** all three new rows pass schema validation, fixture resolution, example execution, and expected-result comparison
+  **And** no existing manifest row is broken by the additions
+
+**Scope guard**
+- **Given** this story's scope
+  **When** the implementation is reviewed
+  **Then** it covers the three new manifest rows, source files, fixture directories, expected output files, and doc files only
+  **And** no changes to the example validation harness, manifest schema, or existing examples are required
+
+## Epic 6: Make Release Evidence Reliable Under Failure Cases
+
+Make release-critical runtime checks, documentation generation, migration validation, benchmark gates, and edge-case evidence fail closed under known failure cases before the v4.0.0 release. This epic is limited to the named review deferrals already captured in Stories 6.1 to 6.7; it is not a general bucket for future hardening work.
 
 ### Story 6.1: Fix Inherited Key-Rule Policy Override Under retainStructure
 
@@ -2335,64 +2397,13 @@ So that production services are protected from memory exhaustion, stack overflow
 
 ### Story 7.5: Extend the Fast Lane to Support Single-Level Wildcard Path Segments
 
-Implements: NFR1–NFR2 (performance targets), FR11 (single-level wildcard targeting)
+Status: cancelled
 
-As a backend engineer,
-I want the compiled fast lane to handle configurations that combine exact path segments with single-level wildcard (`*`) path segments,
-So that the most common real-world path policies — such as `user.password` alongside `*.email` — remain in the low-allocation fast lane rather than falling back to the general traversal, and the benchmark overhead versus `fast-redact` for these workloads approaches the aspirational 25–50% band.
+Cancellation reason: superseded by Epic 8's rule-driven traversal engine. The trie-extension approach described by this historical story must not be used as future implementation guidance. Stories 7.1 to 7.4 remain load-bearing evidence for equivalence, allocation, and traversal-safety constraints; Epic 8 owns the replacement path-driven executor and wildcard performance work.
 
-**Motivation:**
-The current `isExactPathOnly` candidacy condition rejects any configuration that contains a `*` segment, routing mixed exact + wildcard configs entirely to the general traversal. A path-targeted fast lane for exact paths runs in O(P), visiting only the nodes along each configured path rather than the full payload. A two-pass approach — path-targeted fast lane first, then general traversal for wildcards — can short-circuit the general pass over any exact-path terminal already handled by the first pass; however, those terminals are the only nodes eligible for short-circuiting, since only exact-path segments were visited. The general traversal must still descend into every branch at every depth level to resolve wildcard matches, making the short-circuit saving O(P_terminals) — negligible for any realistic payload where exact paths are sparse. The combined cost is O(P) + O(N − P_terminals) ≈ O(N), which exceeds a single-pass O(N) and also introduces cross-pass coordination overhead. The only net-win strategy is to extend the fast lane's prefix trie so that a single pass handles both exact and `*.field` paths. This story delivers that extension.
+## Epic 8: Keep Path-Driven Redaction Fast, Deterministic, and Safe
 
-**Acceptance Criteria:**
-
-**Trie node extension**
-- **Given** the `PathTreeNode` interface used by the fast-lane trie builder
-  **When** this story is complete
-  **Then** the interface includes a `wildcardChild?: PathTreeNode` field alongside the existing `propertyChildren` and `indexChildren` maps
-  **And** the trie builder populates `wildcardChild` for any `*` segment encountered in a compiled path rule
-  **And** existing exact-segment and index-segment construction is unchanged
-
-**Single-pass wildcard traversal**
-- **Given** the fast-lane traversal logic
-  **When** a trie node has **no** `wildcardChild`
-  **Then** the traversal navigates directly to known child keys via the node's `propertyChildren` and `indexChildren` maps — no full key iteration occurs, and values at non-configured sibling keys are not visited during navigation
-  **And** when a container is about to be shallow-copied (because a configured descendant is being redacted), its own properties are scanned for transformable runtime values (Date, BigInt, Map, Set, Symbol, etc.) at non-configured positions; if any are found, the call is delegated — because the shallow copy would otherwise propagate untransformed values that the general traversal would have transformed
-  **When** a trie node **has** a `wildcardChild`
-  **Then** for each property or array index encountered at that depth, the traversal follows the `wildcardChild` branch in addition to any matching exact child, and this check adds one null-guard per depth level with no heap allocation
-  **And** in both cases: at positions where a rule matches and the censor is applied, transformable value types do not trigger delegation — the censor replaces the value wholesale; at non-configured, non-matched positions, transformable runtime values trigger delegation; non-plain prototypes at any traversed intermediate node trigger delegation (prototype pollution guard); circular references do not trigger delegation
-
-**Broadened fast-lane candidacy**
-- **Given** the `isFastLaneEligible` compile-time flag (renamed from `isExactPathOnly`)
-  **When** a configuration contains only exact path segments and/or single-level `*` path segments, with no `**` recursive wildcards, no regex path segments, no ignore rules on paths, no key rules, no substring tests, no fuzzy key matching, and case-sensitive matching enabled
-  **Then** the candidacy flag is `true` and the fast lane is selected
-- **Given** a configuration that includes any `**` segment, regex path segment, key rule, substring test, fuzzy match option, or case-insensitive match option
-  **When** the candidacy flag is evaluated
-  **Then** it is `false` and the general traversal is selected, unchanged from current behaviour
-
-**Behavioural equivalence**
-- **Given** a configuration containing a mix of exact and `*.field` paths
-  **When** the fast lane processes a payload
-  **Then** the redacted output is byte-for-byte identical to the output produced by the general traversal for the same input and configuration
-  **And** this equivalence is covered by an automated test that runs both lanes against the same fixtures and asserts output equality
-
-**Benchmark regression**
-- **Given** the `wildcard-single-object-*` benchmark rows in the manifest
-  **When** this story is complete and benchmarks are re-run
-  **Then** the recorded overhead for the wildcard workload versus `fast-redact` is materially lower than the pre-story baseline (986.43%)
-  **And** the threshold policy for `wildcard-single-object-fast-redact-node24` in `test/bench/manifest.json` is tightened to reflect the new achievable overhead
-  **And** the `wildcard-single-object-v3-node24` and `wildcard-single-object-json-stringify-regex-node24` thresholds are reviewed and tightened accordingly
-
-**Scope guard**
-- **Given** this story's scope
-  **When** the implementation is reviewed
-  **Then** it covers `PathTreeNode` wildcard extension, trie builder update, `applyExactNodes` direct-navigation helper, fast-lane traversal wildcard handling, `isFastLaneEligible` condition broadening, equivalence tests, and benchmark threshold updates only
-  **And** recursive wildcard (`**`) support in the fast lane is explicitly out of scope and remains a candidate for a future story
-  **And** general traversal allocation reductions remain governed by Story 7.3
-
-## Epic 8: Rule-Driven Traversal Engine
-
-Replace the current O(N) payload-walk with a rule-driven engine that navigates directly to configured targets. For path-based configurations, this achieves O(P) for exact paths and O(P + Σ K_wildcard_levels) for single-wildcard paths — compared to O(N) always for the current general traversal. The compiled path executor fast lane from Story 7.1 is superseded and deprecated.
+Replace the current O(N) payload-walk with a rule-driven engine that navigates directly to configured targets, then close the remaining pre-release gaps that could undermine determinism, safety, or release evidence. For path-based configurations, this achieves O(P) for exact paths and O(P + Σ K_wildcard_levels) for single-wildcard paths — compared to O(N) always for the previous general traversal. The compiled path executor fast lane from Story 7.1 is superseded and deprecated.
 
 **Context:** v4 has not been publicly released. No backwards-compatibility bridge is required. The rule-driven engine replaces the general traversal as the primary runtime for path-driven configurations. A full O(N) traversal mode remains for configurations containing key-based or substring rules that inherently require visiting every node.
 
@@ -2732,57 +2743,139 @@ so that the rule-driven engine is feature-complete across all supported targetin
   **Then** it covers substring test traversal mode routing, traversal mode boundary documentation, final equivalence verification, and safety limit integration confirmation only
   **And** no new targeting modes or output behaviour changes are introduced in this story
 
-## Epic 9: Remaining Deferred Work
+### Story 8.7: Clean Up Dead Source, Tests, Scripts, and Stale Traversal Artefacts
 
-Address gaps and deferred items identified after the main epic sequence was finalised but before v4 release. This epic is a running collector for pre-release gaps that do not fit cleanly into a completed or in-progress epic.
-
-### Story 9.1: Add Worked Examples for Fuzzy Key Matching, Case-Insensitive Key Matching, and Path-Segment Ignore Selectors
-
-Implements: FR6, FR7, FR13
-
-As a backend engineer,
-I want verified worked examples for fuzzy key matching, case-insensitive key matching, and path-segment ignore selectors,
-so that these three implemented and tested features are documented with the same rigour as the rest of the Deep Redact feature surface.
-
-**Background:** All three features are fully implemented in source and covered by unit and contract tests, but none appear in the `docs/examples/` worked-example system. Story 5.7's required coverage matrix does not list them, so the gap was not caught by that story. This story closes that gap with three separate manifest rows, example source files, fixture directories, and doc files — one per feature.
+As a Deep Redact maintainer,
+I want dead source code, obsolete tests, stale scripts, v3-era leftovers, and misleading traversal artefact references cleaned up after the rule-driven engine replacement,
+so that future Epic 8 work starts from the current v4 engine contract rather than from superseded fast-lane or legacy v3 assumptions.
 
 **Acceptance Criteria:**
 
-**Fuzzy key matching example**
-- **Given** the canonical example manifest at `docs/examples/manifest.json`
-  **When** Story 9.1 is complete
-  **Then** a row with `id: "fuzzy-key-matching"`, `category: "targeting"` is present in the manifest
-  **And** the `sourceFile` at `docs/examples/examples/fuzzy-key-matching.ts` demonstrates a redactor configured with `fuzzyKeyMatch: true` and a literal key rule
-  **And** the fixture at `docs/examples/fixtures/fuzzy-key-matching/` contains an input payload where a payload key contains the configured literal as a substring (not an exact match) and an `expected.json` asserting the matched value is redacted
-  **And** the doc file at `docs/examples/fuzzy-key-matching.md` is generated from or validated against the same fixture and source
-  **And** example validation runs the source against its fixture and asserts the structured output matches `expected.json`
+- **Given** active source, tests, scripts, and generated-input artefacts are searched for obsolete traversal terms
+  **When** this story is complete
+  **Then** no future-facing source/test/script comment or helper name describes the current rule-driven executor as the old compiled fast lane
+  **And** legitimate `fast-redact` migration and benchmark references are preserved.
+- **Given** active source, tests, scripts, and fixtures are searched for v3-era leftovers
+  **When** this story is complete
+  **Then** obsolete `DeepRedact` class tests, `blacklistedKeys` runtime usage, legacy load tests, stale v3 utility modules, and unreachable helper imports are removed or rewritten
+  **And** intentional v3 migration fixtures, generated migration-guide inputs, and negative type/API assertions are preserved.
+- **Given** any candidate dead helper, fixture, script, or import is found
+  **When** it is removed or renamed
+  **Then** reference analysis proves no live reference is broken
+  **And** focused tests still pass.
+- **Given** this story is cleanup-only
+  **When** implementation is reviewed
+  **Then** no runtime behaviour, public API, benchmark threshold, lint rule, or generated documentation output changes unless directly required by a rename.
+- **Given** reference analysis finds a candidate that requires runtime behaviour, benchmark threshold, lint-rule, or generated-output changes
+  **When** the candidate is classified
+  **Then** it is recorded for a separate follow-up story rather than expanding Story 8.7.
 
-**Case-insensitive key matching example**
-- **Given** the canonical example manifest at `docs/examples/manifest.json`
-  **When** Story 9.1 is complete
-  **Then** a row with `id: "case-insensitive-key-matching"`, `category: "targeting"` is present in the manifest
-  **And** the `sourceFile` at `docs/examples/examples/case-insensitive-key-matching.ts` demonstrates a redactor configured with `caseSensitiveKeyMatch: false` and a literal key rule
-  **And** the fixture at `docs/examples/fixtures/case-insensitive-key-matching/` contains an input payload where the payload key differs in case from the configured key and an `expected.json` asserting the matched value is redacted
-  **And** the doc file at `docs/examples/case-insensitive-key-matching.md` is generated from or validated against the same fixture and source
-  **And** example validation runs the source against its fixture and asserts the structured output matches `expected.json`
+### Story 8.8: Resolve Alias-Aware Redaction Conflicts in Rule-Driven Output
 
-**Path-segment ignore selector example**
-- **Given** the canonical example manifest at `docs/examples/manifest.json`
-  **When** Story 9.1 is complete
-  **Then** a row with `id: "path-segment-ignore"`, `category: "targeting"` is present in the manifest
-  **And** the `sourceFile` at `docs/examples/examples/path-segment-ignore.ts` demonstrates a redactor configured with a structured path selector containing an `{ ignore: '<key>' }` segment (e.g. `['users', { ignore: 'admin' }, 'email']`)
-  **And** the fixture at `docs/examples/fixtures/path-segment-ignore/` contains an input payload with sibling branches where the ignored branch value is NOT redacted and a non-ignored sibling IS redacted, and an `expected.json` asserting this difference
-  **And** the doc file at `docs/examples/path-segment-ignore.md` is generated from or validated against the same fixture and source
-  **And** example validation runs the source against its fixture and asserts the structured output matches `expected.json`
+As a security-conscious backend engineer,
+I want alias-aware redaction conflicts to be detected, documented, and resolved consistently,
+so that rule-driven output cannot silently apply the wrong retain policy or leak a sensitive value through another branch of the same object graph.
 
-**Manifest validation**
-- **Given** the three new manifest rows
-  **When** the example validation harness from Story 5.6 runs
-  **Then** all three new rows pass schema validation, fixture resolution, example execution, and expected-result comparison
-  **And** no existing manifest row is broken by the additions
+**Acceptance Criteria:**
 
-**Scope guard**
-- **Given** this story's scope
-  **When** the implementation is reviewed
-  **Then** it covers the three new manifest rows, source files, fixture directories, expected output files, and doc files only
-  **And** no changes to the example validation harness, manifest schema, or existing examples are required
+- **Given** two configured retain paths resolve to the same object identity at runtime
+  **When** the payload is processed under structured output
+  **Then** each configured path is resolved path-correctly and applies its own configured policy
+  **And** the second rule's policy is not silently dropped
+  **And** if preserving both configured policies requires breaking source identity sharing in the returned structure, the release-facing contract documents that structured output is path-correct rather than identity-preserving
+  **And** the observed result is pinned by a named regression test.
+- **Given** a configured exact path redacts `a.secret` and another branch aliases `a`
+  **When** the payload is redacted under structured output
+  **Then** the configured path `a.secret` is redacted
+  **And** unconfigured alias paths are not silently relied upon for identity-wide secrecy
+  **And** release-facing documentation states that identity-wide secrecy requires key-based rules or explicit coverage for every alias path
+  **And** focused tests pin both the configured path and the unconfigured alias path.
+- **Given** alias semantics are resolved under the path-correct contract
+  **When** docs and tests are reviewed
+  **Then** `docs/architecture/rule-driven-traversal.md` describes the structured-output alias boundary
+  **And** runtime redaction still throws only `BudgetExceededError`.
+
+### Story 8.9: Enforce Rule-Driven Budget Accounting for Exact-Path Hops
+
+As a platform engineer,
+I want rule-driven exact-path navigation to honour configured traversal budgets,
+so that hostile or excessively deep configured paths cannot bypass `maxDepth` or `maxNodes` limits.
+
+**Acceptance Criteria:**
+
+- **Given** a `pathDrivenOnly: true` exact-path configuration whose configured path depth exceeds `maxDepth`
+  **When** the redactor processes a matching payload
+  **Then** it throws `BudgetExceededError` with code `'BUDGET_EXCEEDED'`
+  **And** it does not delegate to generic traversal.
+- **Given** a `pathDrivenOnly: true` exact-path configuration whose configured path hops exceed `maxNodes`
+  **When** the redactor processes a matching payload
+  **Then** it throws `BudgetExceededError` with code `'BUDGET_EXCEEDED'`.
+- **Given** budget semantics are updated
+  **When** architecture docs are reviewed
+  **Then** they describe the rule-driven cost model accurately without claiming identical node totals to the generic traversal.
+
+### Story 8.10: Restore Lint and Benchmark Guardrail Hygiene
+
+As a release maintainer,
+I want lint and benchmark guardrails to be green and meaningful,
+so that Epic 8 performance claims and release gates can be trusted before v4 ships.
+
+**Acceptance Criteria:**
+
+- **Given** the repository is bootstrapped with the pinned Node and pnpm versions
+  **When** `pnpm lint` runs
+  **Then** it exits successfully
+  **And** any intentional sparse-array exception is documented with a narrow code-local suppression rather than a broad lint disable.
+- **Given** benchmark rows compare Deep Redact with `fast-redact`, Deep Redact v3, or JSON-stringify-regex competitors
+  **When** lower-overhead threshold policies are reviewed
+  **Then** every `minOverheadPct` value is either meaningful for that row or explicitly justified in test-covered metadata.
+- **Given** benchmark batch execution is measured
+  **When** benchmark payload clones are prepared
+  **Then** the runner avoids unrealistic simultaneous clone pre-allocation unless a focused benchmark-methodology test proves the bias is acceptable.
+
+### Story 8.11: Harden Serialise Output Transformer Edge Cases
+
+As a backend engineer using serialised output,
+I want `serialise: true` transformer edge cases to be explicit and safe,
+so that getter side effects, root non-JSON values, and custom-constructor transformer expectations do not create hidden contract gaps.
+
+**Acceptance Criteria:**
+
+- **Given** a payload with a side-effecting plain-object getter
+  **When** the redactor runs with `serialise: true`
+  **Then** the getter is evaluated at most once
+  **And** if getter evaluation throws, only that value degrades to `[UNSUPPORTED]`
+  **And** diagnostics remain sanitised and do not include the source value.
+- **Given** root `undefined`, function, symbol, and other non-JSON values are serialised
+  **When** `serialise: true` is used
+  **Then** the return value is a deterministic JSON string containing the documented `[UNSUPPORTED]` representation
+  **And** the contract is tested and documented for each named root value type.
+- **Given** a caller configures arbitrary class constructor transformers
+  **When** validation and serialise output are reviewed
+  **Then** first-class constructor dispatch is implemented for registered constructors
+  **And** dispatch order is deterministic
+  **And** invalid constructor registrations are rejected with public documentation and tests.
+
+### Story 8.12: Reduce Retain-Structure Debt and Complete Coverage
+
+As a maintainer of the rule-driven traversal engine,
+I want retained-structure traversal debt reduced and its coverage completed,
+so that retain-heavy configurations are correct, bounded, and not misleadingly classified as fast path work when they mostly delegate.
+
+**Acceptance Criteria:**
+
+- **Given** a retained plain object has inherited enumerable properties
+  **When** retained traversal runs
+  **Then** inherited properties are not materialised as own redacted properties
+  **And** sparse arrays still preserve holes.
+- **Given** a deeply nested retained subtree
+  **When** function-censor context paths are produced
+  **Then** matched-path construction avoids O(n squared) array copying while preserving exact context values.
+- **Given** the named case `shared-ancestor-exact-and-wildcard` where an exact path and wildcard path redact below the same ancestor
+  **When** both rules redact within that ancestor
+  **Then** tests directly assert the shared ancestor is copied once
+  **And** both redactions are applied.
+- **Given** the named case `retained-parent-with-wildcard-descendant` where a retained parent container has a wildcard descendant rule such as `users.*.email`
+  **When** redaction runs
+  **Then** focused byte-identity tests prove delegation remains correct
+  **And** the retained parent container is not misleadingly classified as fully path-driven work.

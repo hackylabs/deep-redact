@@ -326,6 +326,7 @@ The v4 API surface must support:
 - optional structured or serialised output
 - optional ignored-value-type rules
 - configurable transformers, including standard handling for circular references, `BigInt`, `Date`, `Error`, `Map`, `RegExp`, `Set`, and `URL`
+- an explicit output-stage contract: structured output (`serialise: false`) preserves unredacted runtime values and circular references at unredacted positions, while serialised output (`serialise: true`) owns transformer application, circular-reference neutralisation, and serialisable string emission
 - graceful replacement of problematic nested values with `[UNSUPPORTED]` when redaction cannot complete normally
 - optional use of Deep Redact for `console.*` calls, with safeguards to prevent recursive redaction loops during Deep Redact’s own diagnostic logging
 - one-way deterministic behaviour with no restore capability

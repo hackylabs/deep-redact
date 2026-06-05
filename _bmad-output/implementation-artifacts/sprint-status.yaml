@@ -1,5 +1,5 @@
 # generated: 2026-04-13T09:43:13+0100
-# last_updated: 2026-06-05T10:00:01+0100
+# last_updated: 2026-06-05T11:57:07+0100
 # project: deep-redact
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Scrum Master typically creates the next story after the previous one is 'done'
 
 generated: 2026-04-13T09:43:13+0100
-last_updated: 2026-06-05T10:00:01+0100
+last_updated: 2026-06-05T11:57:07+0100
 project: deep-redact
 project_key: NOKEY
 tracking_system: file-system
@@ -77,7 +77,7 @@ development_status:
   4-6-provide-optional-console-redaction-through-an-explicit-guarded-adapter: done
   epic-4-retrospective: optional
 
-  epic-5: done
+  epic-5: in-progress
   5-1-define-the-canonical-installation-verification-matrix-and-baseline-fixtures: done
   5-2-execute-node-package-manager-installation-verification-across-supported-node-runtimes: done
   5-3-verify-the-deno-baseline-path-and-installation-documentation-lockstep: done
@@ -89,6 +89,7 @@ development_status:
   5-9-produce-canonical-benchmark-runs-and-publish-benchmark-artefacts: done
   5-10-enforce-the-release-benchmark-gate-and-benchmark-documentation-lockstep: done
   5-11-publish-platform-adoption-guidance-through-a-canonical-standardisation-guide: done
+  5-12-add-worked-examples-for-fuzzy-key-matching-case-insensitive-key-matching-and-path-segment-ignore-selectors: ready-for-dev
   epic-5-retrospective: optional
 
   epic-6: done
@@ -116,8 +117,10 @@ development_status:
   8-4-extend-rule-driven-engine-for-single-level-wildcard-paths: done
   8-5-extend-rule-driven-engine-for-double-wildcard-paths-and-key-based-rules: done
   8-6-integrate-substring-matching-and-finalise-rule-driven-engine: done
+  8-7-clean-up-dead-source-tests-scripts-and-stale-traversal-artefacts: ready-for-dev
+  8-8-resolve-alias-aware-redaction-conflicts-in-rule-driven-output: ready-for-dev
+  8-9-enforce-rule-driven-budget-accounting-for-exact-path-hops: ready-for-dev
+  8-10-restore-lint-and-benchmark-guardrail-hygiene: ready-for-dev
+  8-11-harden-serialise-output-transformer-edge-cases: ready-for-dev
+  8-12-reduce-retain-structure-debt-and-complete-coverage: ready-for-dev
   epic-8-retrospective: optional
-
-  epic-9: backlog
-  9-1-add-worked-examples-for-fuzzy-key-matching-case-insensitive-key-matching-and-path-segment-ignore-selectors: backlog
-  epic-9-retrospective: optional
