@@ -77,7 +77,7 @@ development_status:
   4-6-provide-optional-console-redaction-through-an-explicit-guarded-adapter: done
   epic-4-retrospective: optional
 
-  epic-5: in-progress
+  epic-5: done
   5-1-define-the-canonical-installation-verification-matrix-and-baseline-fixtures: done
   5-2-execute-node-package-manager-installation-verification-across-supported-node-runtimes: done
   5-3-verify-the-deno-baseline-path-and-installation-documentation-lockstep: done
