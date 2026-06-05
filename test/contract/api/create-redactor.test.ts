@@ -5494,6 +5494,109 @@ describe('Rule-driven engine vs. general traversal equivalence', () => {
       )
     })
   })
+
+  it('applies each exact retain policy when configured paths alias the same source object', () => {
+    const shared = { secret: 'raw-secret', safe: 'raw-safe' }
+    const payload = { first: shared, second: shared }
+    const original = structuredClone(payload)
+    const options = {
+      paths: [
+        { path: 'first', retainStructure: true, censor: 'FIRST' },
+        { path: 'second', retainStructure: true, censor: 'SECOND' },
+      ],
+    } satisfies DeepRedactOptions
+    const plan = compileRedactorPlan(options)
+
+    expect(plan.pathDrivenOnly).toBe(true)
+
+    const result = buildPathDrivenExecutor(plan, failOnDelegation)(payload) as {
+      first: Record<string, unknown>;
+      second: Record<string, unknown>;
+    }
+
+    expect(result).toStrictEqual({
+      first: { secret: 'FIRST', safe: 'FIRST' },
+      second: { secret: 'SECOND', safe: 'SECOND' },
+    })
+    expect(result.first).not.toBe(result.second)
+    expect(result.first).not.toBe(shared)
+    expect(result.second).not.toBe(shared)
+    expect(payload).toStrictEqual(original)
+  })
+
+  it('keeps unconfigured alias branches outside exact-path coverage in structured and serialised output', () => {
+    const createPayload = () => {
+      const shared = { secret: 'raw-secret', safe: 'keep' }
+
+      return { a: shared, b: { ref: shared } }
+    }
+    const options = { paths: ['a.secret'] } satisfies DeepRedactOptions
+    const plan = compileRedactorPlan(options)
+
+    expect(plan.pathDrivenOnly).toBe(true)
+
+    const payload = createPayload()
+    const structured = createRedactor(options)(payload) as {
+      a: { secret: string; safe: string };
+      b: { ref: { secret: string; safe: string } };
+    }
+
+    expect(structured.a).toStrictEqual({ secret: '[REDACTED]', safe: 'keep' })
+    expect(structured.b.ref).toBe(payload.b.ref)
+    expect(structured.b.ref).toStrictEqual({ secret: 'raw-secret', safe: 'keep' })
+    expect(payload.a.secret).toBe('raw-secret')
+
+    const serialised = createRedactor({ ...options, serialise: true })(createPayload()) as string
+
+    expect(JSON.parse(serialised)).toStrictEqual({
+      a: { secret: '[REDACTED]', safe: 'keep' },
+      b: { ref: { secret: 'raw-secret', safe: 'keep' } },
+    })
+  })
+
+  it('redacts each alias branch when every exact alias path is configured', () => {
+    const shared = { secret: 'raw-secret', safe: 'keep' }
+    const payload = { a: shared, b: { ref: shared } }
+    const options = { paths: ['a.secret', 'b.ref.secret'] } satisfies DeepRedactOptions
+    const plan = compileRedactorPlan(options)
+
+    expect(plan.pathDrivenOnly).toBe(true)
+
+    const result = createRedactor(options)(payload) as {
+      a: { secret: string; safe: string };
+      b: { ref: { secret: string; safe: string } };
+    }
+
+    expect(result.a).toStrictEqual({ secret: '[REDACTED]', safe: 'keep' })
+    expect(result.b.ref).toStrictEqual({ secret: '[REDACTED]', safe: 'keep' })
+    expect(payload.a.secret).toBe('raw-secret')
+  })
+
+  it('redacts aliases through key targeting when identity-wide secret keys are required', () => {
+    const createPayload = () => {
+      const shared = { secret: 'raw-secret', safe: 'keep' }
+
+      return { a: shared, b: { ref: shared } }
+    }
+    const options = { keys: ['secret'] } satisfies DeepRedactOptions
+    const plan = compileRedactorPlan(options)
+
+    expect(plan.pathDrivenOnly).toBe(false)
+
+    const structured = createRedactor(options)(createPayload())
+
+    expect(structured).toStrictEqual({
+      a: { secret: '[REDACTED]', safe: 'keep' },
+      b: { ref: { secret: '[REDACTED]', safe: 'keep' } },
+    })
+
+    const serialised = createRedactor({ ...options, serialise: true })(createPayload()) as string
+
+    expect(JSON.parse(serialised)).toStrictEqual({
+      a: { secret: '[REDACTED]', safe: 'keep' },
+      b: { ref: { secret: '[REDACTED]', safe: 'keep' } },
+    })
+  })
 })
 
 describe('Wildcard rule-driven engine vs. general traversal equivalence (Story 8.4)', () => {
@@ -5569,6 +5672,142 @@ describe('Wildcard rule-driven engine vs. general traversal equivalence (Story 8
     const byMatchedPath = (contexts: FunctionCensorContext[]) =>
       [...contexts].sort((left, right) => left.matchedPath.join('.').localeCompare(right.matchedPath.join('.')))
     expect(byMatchedPath(pathDrivenContexts)).toStrictEqual(byMatchedPath(genericContexts))
+  })
+
+  it('applies each wildcard retain policy when concrete matches alias the same source object', () => {
+    const shared = { secret: 'raw-secret', nested: { safe: 'raw-safe' } }
+    const payload = {
+      aliases: { backup: shared },
+      groups: { primary: shared },
+    }
+    const original = structuredClone(payload)
+    const options = {
+      paths: [
+        { path: 'groups.*', retainStructure: true, censor: 'GROUP' },
+        { path: 'aliases.*', retainStructure: true, censor: 'ALIAS' },
+      ],
+    } satisfies DeepRedactOptions
+    const plan = compileRedactorPlan(options)
+
+    expect(plan.pathDrivenOnly).toBe(true)
+
+    const result = buildPathDrivenExecutor(plan, failOnDelegation)(payload) as {
+      aliases: { backup: Record<string, unknown> };
+      groups: { primary: Record<string, unknown> };
+    }
+
+    expect(result).toStrictEqual({
+      aliases: { backup: { secret: 'ALIAS', nested: { safe: 'ALIAS' } } },
+      groups: { primary: { secret: 'GROUP', nested: { safe: 'GROUP' } } },
+    })
+    expect(result.groups.primary).not.toBe(result.aliases.backup)
+    expect(result.groups.primary).not.toBe(shared)
+    expect(result.aliases.backup).not.toBe(shared)
+    expect(payload).toStrictEqual(original)
+  })
+
+  it('uses each concrete wildcard retain matched path for function censors on aliased source objects', () => {
+    const pathDrivenContexts: FunctionCensorContext[] = []
+    const genericContexts: FunctionCensorContext[] = []
+    const createPayload = () => {
+      const shared = { secret: 'raw-secret', nested: { safe: 'raw-safe' } }
+
+      return { users: { alice: shared, bob: shared } }
+    }
+
+    const buildOptions = (contexts: FunctionCensorContext[]) => ({
+      paths: [{
+        path: 'users.*',
+        retainStructure: true,
+        censor: (_value: unknown, ctx: FunctionCensorContext) => {
+          contexts.push(ctx)
+          return ctx.matchedPath.join('.')
+        },
+      }],
+    }) satisfies DeepRedactOptions
+
+    const pathDrivenPlan = compileRedactorPlan(buildOptions(pathDrivenContexts))
+    const genericPlan = compileRedactorPlan(buildOptions(genericContexts))
+
+    expect(pathDrivenPlan.pathDrivenOnly).toBe(true)
+
+    const pathDriven = buildPathDrivenExecutor(pathDrivenPlan, failOnDelegation)(createPayload())
+    const generic = redactValue(createPayload(), genericPlan)
+
+    expect(pathDriven).toStrictEqual({
+      users: {
+        alice: {
+          secret: 'users.alice.secret',
+          nested: { safe: 'users.alice.nested.safe' },
+        },
+        bob: {
+          secret: 'users.bob.secret',
+          nested: { safe: 'users.bob.nested.safe' },
+        },
+      },
+    })
+    expect(pathDriven).toStrictEqual(generic)
+
+    const contextSignature = (contexts: FunctionCensorContext[]) => contexts
+      .map((ctx) => ({
+        matchedPath: ctx.matchedPath,
+        rulePath: ctx.rulePath,
+        terminalKey: ctx.terminalKey,
+      }))
+      .sort((left, right) => left.matchedPath.join('.').localeCompare(right.matchedPath.join('.')))
+
+    expect(contextSignature(pathDrivenContexts)).toStrictEqual(contextSignature(genericContexts))
+    expect(contextSignature(pathDrivenContexts)).toStrictEqual([
+      {
+        matchedPath: ['users', 'alice', 'nested', 'safe'],
+        rulePath: ['users', { any: true }],
+        terminalKey: 'safe',
+      },
+      {
+        matchedPath: ['users', 'alice', 'secret'],
+        rulePath: ['users', { any: true }],
+        terminalKey: 'secret',
+      },
+      {
+        matchedPath: ['users', 'bob', 'nested', 'safe'],
+        rulePath: ['users', { any: true }],
+        terminalKey: 'safe',
+      },
+      {
+        matchedPath: ['users', 'bob', 'secret'],
+        rulePath: ['users', { any: true }],
+        terminalKey: 'secret',
+      },
+    ])
+  })
+
+  it('distinguishes wildcard retain concrete paths whose keys contain cache delimiters', () => {
+    const shared = { secret: 'raw-secret' }
+    const payload = {
+      users: {
+        'a\nstring:b': { c: shared },
+        a: { 'b\nstring:c': shared },
+      },
+    }
+    const options = {
+      paths: [{
+        path: 'users.*.*',
+        retainStructure: true,
+        censor: (_value: unknown, ctx: FunctionCensorContext) => ctx.matchedPath.join('|'),
+      }],
+    } satisfies DeepRedactOptions
+    const plan = compileRedactorPlan(options)
+
+    expect(plan.pathDrivenOnly).toBe(true)
+
+    expect(buildPathDrivenExecutor(plan, failOnDelegation)(payload)).toStrictEqual({
+      users: {
+        'a\nstring:b': { c: { secret: 'users|a\nstring:b|c|secret' } },
+        a: { 'b\nstring:c': { secret: 'users|a|b\nstring:c|secret' } },
+      },
+    })
+    expect(payload.users['a\nstring:b'].c).toBe(shared)
+    expect(payload.users.a['b\nstring:c']).toBe(shared)
   })
 
   it('routes a wildcard censor-failure diagnostic to the concrete matched path, matching the general traversal (AC 3)', () => {

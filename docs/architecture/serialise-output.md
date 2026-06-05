@@ -66,12 +66,19 @@ for every (type × position) combination of the supported runtime types:
 - The output is a string.
 - The call does not throw (FR26).
 - The string is `JSON.parse`-able.
-- The string contains no raw source value (one-way redaction).
+- The string contains no raw source value selected by the configured redaction
+  policy (one-way redaction).
 - The string is byte-identical across repeated runs on structurally-equal inputs
   (FR19 determinism).
 
 The supported runtime types and their adapter treatment are listed in
 [Transformer Marker Shapes](#transformer-marker-shapes) below.
+
+The adapter does not expand redaction coverage. Alias branches that were not
+selected by the configured policy remain unredacted values in the already-redacted
+structured result, then are serialised like any other non-redacted value. See
+[Alias Boundaries And Path-Correct Output](./rule-driven-traversal.md#alias-boundaries-and-path-correct-output)
+for the rule-driven traversal contract.
 
 ---
 

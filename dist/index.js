@@ -1504,6 +1504,36 @@ const renderConcreteCanonicalPath = (matchedPath) => {
 	});
 	return path ?? "";
 };
+const renderAncestorCopyMatchedPath = (matchedPath) => {
+	if (matchedPath === void 0) return;
+	return JSON.stringify(matchedPath.map((segment) => [typeof segment, segment]));
+};
+const getAncestorCopy = (ancestorCopies, source, level, matchedPath) => {
+	const records = ancestorCopies.get(source);
+	if (records === void 0) return;
+	const matchedPathKey = renderAncestorCopyMatchedPath(matchedPath);
+	return records.find((candidate) => {
+		return candidate.level === level && candidate.matchedPathKey === matchedPathKey;
+	})?.copy;
+};
+const storeAncestorCopy = (ancestorCopies, source, level, matchedPath, copy) => {
+	const matchedPathKey = renderAncestorCopyMatchedPath(matchedPath);
+	const records = ancestorCopies.get(source);
+	if (records === void 0) {
+		ancestorCopies.set(source, [{
+			copy,
+			level,
+			matchedPathKey
+		}]);
+		return;
+	}
+	if (records.some((candidate) => candidate.level === level && candidate.matchedPathKey === matchedPathKey)) return;
+	records.push({
+		copy,
+		level,
+		matchedPathKey
+	});
+};
 const insertRule = (root, segments, rule) => {
 	let level = root;
 	for (let index = 0; index < segments.length; index += 1) {
@@ -1744,11 +1774,11 @@ const isDescendable = (value) => {
 };
 const resolveRetainTerminal = (value, childNode, plan, rootInput, ancestorCopies, budget) => {
 	if (isDescendable(value)) {
-		const existing = ancestorCopies.get(value);
+		const existing = getAncestorCopy(ancestorCopies, value, childNode, void 0);
 		if (existing !== void 0) return existing;
 		const descended = redactRetained(value, childNode, enterRetain(childNode.rule), plan, rootInput, budget);
 		if (descended === delegate) return delegate;
-		if (descended !== value) ancestorCopies.set(value, descended);
+		if (descended !== value) storeAncestorCopy(ancestorCopies, value, childNode, void 0, descended);
 		return descended;
 	}
 	if (requiresDelegation(value)) return delegate;
@@ -1757,18 +1787,18 @@ const resolveRetainTerminal = (value, childNode, plan, rootInput, ancestorCopies
 const resolveRetainTerminalWildcard = (value, childNode, plan, rootInput, ancestorCopies, budget, matchedPath) => {
 	const rule = childNode.rule;
 	if (isDescendable(value)) {
-		const existing = ancestorCopies.get(value);
+		const existing = getAncestorCopy(ancestorCopies, value, childNode, matchedPath);
 		if (existing !== void 0) return existing;
 		const descended = redactRetained(value, childNode, enterRetainWildcard(rule, matchedPath), plan, rootInput, budget);
 		if (descended === delegate) return delegate;
-		if (descended !== value) ancestorCopies.set(value, descended);
+		if (descended !== value) storeAncestorCopy(ancestorCopies, value, childNode, matchedPath, descended);
 		return descended;
 	}
 	if (requiresDelegation(value)) return delegate;
 	return applyWildcardTerminalRule(value, rule, plan, rootInput, matchedPath);
 };
 const navigateNode = (container, level, plan, rootInput, ancestorCopies, compactedArrayCopies, budget, matchedPath) => {
-	let copy = ancestorCopies.get(container);
+	let copy = getAncestorCopy(ancestorCopies, container, level, matchedPath);
 	let removedIndices;
 	if (level.indexChildren !== void 0) for (const [index, childNode] of level.indexChildren) {
 		if (!(index in container)) continue;
@@ -1781,7 +1811,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 				if (retained !== value) {
 					if (copy === void 0) {
 						copy = shallowCopyContainer(container);
-						ancestorCopies.set(container, copy);
+						storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
 					}
 					if (isRemovedValue(retained)) (removedIndices ??= []).push(index);
 					else copy[index] = retained;
@@ -1790,7 +1820,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 				const redacted = applyWildcardTerminalRule(value, childNode.rule, plan, rootInput, concreteMatchedPath);
 				if (copy === void 0) {
 					copy = shallowCopyContainer(container);
-					ancestorCopies.set(container, copy);
+					storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
 				}
 				if (isRemovedValue(redacted)) (removedIndices ??= []).push(index);
 				else copy[index] = redacted;
@@ -1801,7 +1831,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 			const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput);
 			if (copy === void 0) {
 				copy = shallowCopyContainer(container);
-				ancestorCopies.set(container, copy);
+				storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
 			}
 			if (isRemovedValue(redacted)) (removedIndices ??= []).push(index);
 			else copy[index] = redacted;
@@ -1813,7 +1843,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 			if (retained !== value) {
 				if (copy === void 0) {
 					copy = shallowCopyContainer(container);
-					ancestorCopies.set(container, copy);
+					storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
 				}
 				if (isRemovedValue(retained)) (removedIndices ??= []).push(index);
 				else copy[index] = retained;
@@ -1826,7 +1856,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 			if (child !== value) {
 				if (copy === void 0) {
 					copy = shallowCopyContainer(container);
-					ancestorCopies.set(container, copy);
+					storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
 				}
 				copy[index] = child;
 			}
@@ -1845,7 +1875,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 				if (retained !== value) {
 					if (copy === void 0) {
 						copy = shallowCopyContainer(container);
-						ancestorCopies.set(container, copy);
+						storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
 					}
 					if (isRemovedValue(retained)) delete copy[key];
 					else setObjectEntry(copy, key, retained);
@@ -1854,7 +1884,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 				const redacted = applyWildcardTerminalRule(value, childNode.rule, plan, rootInput, concreteMatchedPath);
 				if (copy === void 0) {
 					copy = shallowCopyContainer(container);
-					ancestorCopies.set(container, copy);
+					storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
 				}
 				if (isRemovedValue(redacted)) delete copy[key];
 				else setObjectEntry(copy, key, redacted);
@@ -1865,7 +1895,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 			const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput);
 			if (copy === void 0) {
 				copy = shallowCopyContainer(container);
-				ancestorCopies.set(container, copy);
+				storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
 			}
 			if (isRemovedValue(redacted)) delete copy[key];
 			else setObjectEntry(copy, key, redacted);
@@ -1877,7 +1907,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 			if (retained !== value) {
 				if (copy === void 0) {
 					copy = shallowCopyContainer(container);
-					ancestorCopies.set(container, copy);
+					storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
 				}
 				if (isRemovedValue(retained)) delete copy[key];
 				else setObjectEntry(copy, key, retained);
@@ -1890,7 +1920,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 			if (child !== value) {
 				if (copy === void 0) {
 					copy = shallowCopyContainer(container);
-					ancestorCopies.set(container, copy);
+					storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
 				}
 				setObjectEntry(copy, key, child);
 			}
@@ -1913,7 +1943,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 				if (result !== value) {
 					if (copy === void 0) {
 						copy = shallowCopyContainer(container);
-						ancestorCopies.set(container, copy);
+						storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
 					}
 					if (isRemovedValue(result)) (removedIndices ??= []).push(index);
 					else copy[index] = result;
@@ -1929,7 +1959,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 			if (result !== value) {
 				if (copy === void 0) {
 					copy = shallowCopyContainer(container);
-					ancestorCopies.set(container, copy);
+					storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy);
 				}
 				if (isRemovedValue(result)) delete copy[key];
 				else setObjectEntry(copy, key, result);

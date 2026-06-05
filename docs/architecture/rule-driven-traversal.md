@@ -100,6 +100,30 @@ The engine navigates to that terminal and applies the censor before any descent,
 so the cycle is never followed and the configured terminal is redacted as
 specified.
 
+### Alias Boundaries And Path-Correct Output
+
+Redaction coverage is path-based, not identity-wide. If two runtime branches
+point at the same source object, an exact path such as `a.secret` selects only
+that configured position. It does not imply that every other alias of `a` is
+also covered. For example, with `{ a: shared, b: { ref: shared } }` and
+`paths: ['a.secret']`, the structured result redacts `a.secret` and leaves
+`b.ref.secret` outside the configured target set. The same boundary applies when
+`serialise: true` is enabled: the serialise adapter makes the result safe to
+stringify, but it does not widen the caller's redaction policy.
+
+When callers need identity-wide secrecy for a property name, they must either
+configure every alias path explicitly, such as `['a.secret', 'b.ref.secret']`,
+or use a breadth-visiting targeting mode such as `keys: ['secret']`. Key-based
+rules route to the generic `O(N)` traversal and apply wherever that key is
+encountered.
+
+Structured output is therefore **path-correct rather than identity-preserving**.
+If two configured exact retain paths, or two concrete wildcard retain matches,
+resolve to the same source object identity, each configured path applies its own
+policy and function-censor context. The returned graph may contain distinct
+copies for those alias branches so that a retain policy from one path cannot be
+replayed for another path.
+
 ### Serialised Output
 
 Callers using `serialise: true` or a custom `serialise` function receive fully safe,

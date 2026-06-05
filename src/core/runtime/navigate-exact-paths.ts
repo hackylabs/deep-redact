@@ -67,6 +67,16 @@ interface PathTreeNode {
   subtreeHasWildcard?: boolean;
 }
 
+type ContainerCopy = Record<string, unknown> | unknown[]
+
+interface AncestorCopyRecord {
+  readonly level: PathTreeNode;
+  readonly matchedPathKey: string | undefined;
+  readonly copy: ContainerCopy;
+}
+
+type AncestorCopies = Map<object, AncestorCopyRecord[]>
+
 // An inherited `retainStructure` policy flowing down from a retained ancestor. While active,
 // every leaf beneath the ancestor is redacted with `policy`, unless a more-specific exact
 // path rule overrides it. `matchedPath`/`canonicalPrefix` track the position so function
@@ -123,6 +133,58 @@ const renderConcreteCanonicalPath = (matchedPath: readonly (string | number)[]):
   }
 
   return path ?? ''
+}
+
+const renderAncestorCopyMatchedPath = (
+  matchedPath: readonly (string | number)[] | undefined,
+): string | undefined => {
+  if (matchedPath === undefined) {
+    return undefined
+  }
+
+  return JSON.stringify(matchedPath.map((segment) => [typeof segment, segment]))
+}
+
+const getAncestorCopy = (
+  ancestorCopies: AncestorCopies,
+  source: object,
+  level: PathTreeNode,
+  matchedPath: readonly (string | number)[] | undefined,
+): ContainerCopy | undefined => {
+  const records = ancestorCopies.get(source)
+
+  if (records === undefined) {
+    return undefined
+  }
+
+  const matchedPathKey = renderAncestorCopyMatchedPath(matchedPath)
+  const record = records.find((candidate) => {
+    return candidate.level === level && candidate.matchedPathKey === matchedPathKey
+  })
+
+  return record?.copy
+}
+
+const storeAncestorCopy = (
+  ancestorCopies: AncestorCopies,
+  source: object,
+  level: PathTreeNode,
+  matchedPath: readonly (string | number)[] | undefined,
+  copy: ContainerCopy,
+): void => {
+  const matchedPathKey = renderAncestorCopyMatchedPath(matchedPath)
+  const records = ancestorCopies.get(source)
+
+  if (records === undefined) {
+    ancestorCopies.set(source, [{ copy, level, matchedPathKey }])
+    return
+  }
+
+  if (records.some((candidate) => candidate.level === level && candidate.matchedPathKey === matchedPathKey)) {
+    return
+  }
+
+  records.push({ copy, level, matchedPathKey })
 }
 
 const insertRule = (
@@ -627,19 +689,19 @@ const isDescendable = (value: unknown): value is Record<string, unknown> | unkno
 
 // Resolves a `retainStructure: true` terminal (AC 10). Returns the value to write at the
 // terminal slot — the descended (leaf-redacted) subtree, the censored primitive, the same
-// reference when nothing changed, or the `delegate` sentinel. The retained root is shallow
-// copied at most once per source via `ancestorCopies`, so a subtree reached through an alias
-// reuses the same copy.
+// reference when nothing changed, or the `delegate` sentinel. Context-aware ancestor copies
+// can be reused for the same trie context, but aliases reached through a different retain rule
+// must be processed independently so each configured path applies its own policy.
 const resolveRetainTerminal = (
   value: unknown,
   childNode: PathTreeNode,
   plan: CompiledRedactorPlan,
   rootInput: unknown,
-  ancestorCopies: Map<object, Record<string, unknown> | unknown[]>,
+  ancestorCopies: AncestorCopies,
   budget: TraversalBudget,
 ): unknown => {
   if (isDescendable(value)) {
-    const existing = ancestorCopies.get(value)
+    const existing = getAncestorCopy(ancestorCopies, value, childNode, undefined)
 
     if (existing !== undefined) {
       return existing
@@ -652,7 +714,7 @@ const resolveRetainTerminal = (
     }
 
     if (descended !== value) {
-      ancestorCopies.set(value, descended as Record<string, unknown> | unknown[])
+      storeAncestorCopy(ancestorCopies, value, childNode, undefined, descended as ContainerCopy)
     }
 
     return descended
@@ -675,14 +737,14 @@ const resolveRetainTerminalWildcard = (
   childNode: PathTreeNode,
   plan: CompiledRedactorPlan,
   rootInput: unknown,
-  ancestorCopies: Map<object, Record<string, unknown> | unknown[]>,
+  ancestorCopies: AncestorCopies,
   budget: TraversalBudget,
   matchedPath: readonly (string | number)[],
 ): unknown => {
   const rule = childNode.rule as WildcardTerminalRule
 
   if (isDescendable(value)) {
-    const existing = ancestorCopies.get(value)
+    const existing = getAncestorCopy(ancestorCopies, value, childNode, matchedPath)
 
     if (existing !== undefined) {
       return existing
@@ -695,7 +757,7 @@ const resolveRetainTerminalWildcard = (
     }
 
     if (descended !== value) {
-      ancestorCopies.set(value, descended as Record<string, unknown> | unknown[])
+      storeAncestorCopy(ancestorCopies, value, childNode, matchedPath, descended as ContainerCopy)
     }
 
     return descended
@@ -728,14 +790,16 @@ const navigateNode = (
   level: PathTreeNode,
   plan: CompiledRedactorPlan,
   rootInput: unknown,
-  ancestorCopies: Map<object, Record<string, unknown> | unknown[]>,
+  ancestorCopies: AncestorCopies,
   compactedArrayCopies: Set<object>,
   budget: TraversalBudget,
   matchedPath: readonly (string | number)[] | undefined,
 ): unknown => {
   // A container reached via two trie branches (aliasing) is shallow-copied exactly once: reuse
-  // the stored copy and continue applying this node's edges to it.
-  let copy = ancestorCopies.get(container) as Record<string | number, unknown> | undefined
+  // the stored copy for the same traversal context and continue applying this node's edges to it.
+  let copy = getAncestorCopy(ancestorCopies, container, level, matchedPath) as
+    | Record<string | number, unknown>
+    | undefined
   let removedIndices: number[] | undefined
 
   if (level.indexChildren !== undefined) {
@@ -762,7 +826,7 @@ const navigateNode = (
           if (retained !== value) {
             if (copy === undefined) {
               copy = shallowCopyContainer(container) as Record<string | number, unknown>
-              ancestorCopies.set(container, copy)
+              storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
             }
 
             if (isRemovedValue(retained)) {
@@ -776,7 +840,7 @@ const navigateNode = (
 
           if (copy === undefined) {
             copy = shallowCopyContainer(container) as Record<string | number, unknown>
-            ancestorCopies.set(container, copy)
+            storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
           }
 
           if (isRemovedValue(redacted)) {
@@ -796,7 +860,7 @@ const navigateNode = (
 
         if (copy === undefined) {
           copy = shallowCopyContainer(container) as Record<string | number, unknown>
-          ancestorCopies.set(container, copy)
+          storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
         }
 
         if (isRemovedValue(redacted)) {
@@ -819,7 +883,7 @@ const navigateNode = (
         if (retained !== value) {
           if (copy === undefined) {
             copy = shallowCopyContainer(container) as Record<string | number, unknown>
-            ancestorCopies.set(container, copy)
+            storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
           }
 
           if (isRemovedValue(retained)) {
@@ -845,7 +909,7 @@ const navigateNode = (
         if (child !== value) {
           if (copy === undefined) {
             copy = shallowCopyContainer(container) as Record<string | number, unknown>
-            ancestorCopies.set(container, copy)
+            storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
           }
           copy[index] = child
         }
@@ -887,7 +951,7 @@ const navigateNode = (
           if (retained !== value) {
             if (copy === undefined) {
               copy = shallowCopyContainer(container) as Record<string | number, unknown>
-              ancestorCopies.set(container, copy)
+              storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
             }
 
             if (isRemovedValue(retained)) {
@@ -901,7 +965,7 @@ const navigateNode = (
 
           if (copy === undefined) {
             copy = shallowCopyContainer(container) as Record<string | number, unknown>
-            ancestorCopies.set(container, copy)
+            storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
           }
 
           if (isRemovedValue(redacted)) {
@@ -919,7 +983,7 @@ const navigateNode = (
 
         if (copy === undefined) {
           copy = shallowCopyContainer(container) as Record<string | number, unknown>
-          ancestorCopies.set(container, copy)
+          storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
         }
 
         if (isRemovedValue(redacted)) {
@@ -941,7 +1005,7 @@ const navigateNode = (
         if (retained !== value) {
           if (copy === undefined) {
             copy = shallowCopyContainer(container) as Record<string | number, unknown>
-            ancestorCopies.set(container, copy)
+            storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
           }
 
           if (isRemovedValue(retained)) {
@@ -967,7 +1031,7 @@ const navigateNode = (
         if (child !== value) {
           if (copy === undefined) {
             copy = shallowCopyContainer(container) as Record<string | number, unknown>
-            ancestorCopies.set(container, copy)
+            storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
           }
           setObjectEntry(copy as Record<string, unknown>, key, child)
         }
@@ -1036,7 +1100,7 @@ const navigateNode = (
         if (result !== value) {
           if (copy === undefined) {
             copy = shallowCopyContainer(container) as Record<string | number, unknown>
-            ancestorCopies.set(container, copy)
+            storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
           }
 
           if (isRemovedValue(result)) {
@@ -1078,7 +1142,7 @@ const navigateNode = (
         if (result !== value) {
           if (copy === undefined) {
             copy = shallowCopyContainer(container) as Record<string | number, unknown>
-            ancestorCopies.set(container, copy)
+            storeAncestorCopy(ancestorCopies, container, level, matchedPath, copy as ContainerCopy)
           }
 
           if (isRemovedValue(result)) {
@@ -1097,9 +1161,9 @@ const navigateNode = (
 
   if (removedIndices !== undefined && Array.isArray(copy) && !compactedArrayCopies.has(copy)) {
     // Guard against double-compaction on an aliased array copy. If `copy` was pre-loaded from
-    // `ancestorCopies` (the same array object reached via a second trie branch), it may already
-    // have been spliced by the first branch's pass. Applying original-source indices a second
-    // time would splice wrong positions. The first-wins pass is sufficient; skip compaction here.
+    // `ancestorCopies` for the same traversal context, it may already have been spliced by an
+    // earlier pass. Applying original-source indices a second time would splice wrong positions.
+    // The first pass for that context is sufficient; skip compaction here.
     const compacted = copy
     let removedCount = 0
 
@@ -1126,7 +1190,7 @@ const applyWildcardEdge = (
   matchedPath: readonly (string | number)[],
   plan: CompiledRedactorPlan,
   rootInput: unknown,
-  ancestorCopies: Map<object, Record<string, unknown> | unknown[]>,
+  ancestorCopies: AncestorCopies,
   compactedArrayCopies: Set<object>,
   budget: TraversalBudget,
 ): unknown => {
@@ -1184,7 +1248,7 @@ export const buildPathDrivenExecutor = (
         root,
         plan,
         input,
-        new Map<object, Record<string, unknown> | unknown[]>(),
+        new Map<object, AncestorCopyRecord[]>(),
         compactedArrayCopies,
         budget,
         undefined,
