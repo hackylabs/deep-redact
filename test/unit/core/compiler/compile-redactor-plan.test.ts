@@ -497,6 +497,44 @@ describe('compiled exact-selector rule plan', () => {
     it.each(genericTraversalBoundaryCases)('sets pathDrivenOnly: false for %s', (_label, options) => {
       expect(compileRedactorPlan(options).pathDrivenOnly).toBe(false)
     })
+
+    // `pathDrivenOnly` eligibility takes NO `retainStructure` input: a config is selected purely by
+    // path-rule shape (exact / single-level wildcard, no unsafe overlap, no key/regex/substring
+    // rules, no key-matching mode flags). Retain-heavy configs therefore compile
+    // `pathDrivenOnly: true` and pay prefix-tree setup cost even when they delegate at call time
+    // (e.g. a retain rule sitting above a wildcard). This trade-off is deliberate and accepted:
+    // the eligibility decision stays retain-agnostic. Excluding unprofitable near-100%-delegation
+    // retain patterns is tracked as separate deferred follow-up work (the `pathDrivenOnly`
+    // eligibility entry in deferred-work-audit.md) and is intentionally NOT implemented here.
+    const retainHeavyPathDrivenCases: ReadonlyArray<readonly [string, DeepRedactOptions]> = [
+      [
+        'a single exact retain path',
+        { paths: [{ path: 'a', retainStructure: true }] },
+      ],
+      [
+        'multiple exact retain paths',
+        { paths: [{ path: 'a', retainStructure: true }, { path: 'b', retainStructure: true }] },
+      ],
+      [
+        'a single-level wildcard retain path',
+        { paths: [{ path: 'a.*', retainStructure: true }] },
+      ],
+      [
+        'a retain rule above a wildcard (delegates wholesale at call time)',
+        { paths: [{ path: 'a', retainStructure: true }, 'a.*'] },
+      ],
+      [
+        'a retain wildcard terminal above a further wildcard (delegates wholesale at call time)',
+        { paths: [{ path: 'a.*', retainStructure: true }, 'a.*.b'] },
+      ],
+    ]
+
+    it.each(retainHeavyPathDrivenCases)(
+      'sets pathDrivenOnly: true for retain-heavy config (retain-agnostic eligibility): %s',
+      (_label, options) => {
+        expect(compileRedactorPlan(options).pathDrivenOnly).toBe(true)
+      },
+    )
   })
 
   it('rejects exact structured selectors that duplicate canonical string selectors', () => {

@@ -77,15 +77,29 @@ interface AncestorCopyRecord {
 
 type AncestorCopies = Map<object, AncestorCopyRecord[]>
 
+// A persistent, append-only chain of the concrete keys descended below a retain entry, stored
+// leaf-to-root. `descendRetain` conses one node in O(1); the concrete matched-path array and the
+// canonical-path string are materialised once, lazily, only when a function censor or a failure
+// diagnostic at a leaf actually reads them. Descending a deep retained subtree is therefore
+// O(depth) total rather than the previous O(depth^2) per-level array spread + canonical
+// concatenation (AC 2).
+interface RetainKeyChain {
+  readonly parent: RetainKeyChain | undefined;
+  readonly key: string | number;
+}
+
 // An inherited `retainStructure` policy flowing down from a retained ancestor. While active,
-// every leaf beneath the ancestor is redacted with `policy`, unless a more-specific exact
-// path rule overrides it. `matchedPath`/`canonicalPrefix` track the position so function
-// censor contexts and failure diagnostics mirror the general traversal exactly.
+// every leaf beneath the ancestor is redacted with `policy`, unless a more-specific exact path
+// rule overrides it. The position is tracked lazily: `basePath`/`baseCanonical` capture the
+// retain entry point, and `descended` conses each container key traversed since, so function
+// censor contexts and failure diagnostics can mirror the general traversal exactly without
+// rebuilding the path on every descent level.
 interface InheritedRetain {
   readonly policy: CompiledRedactionPolicy;
   readonly rulePath: PathSegments;
-  readonly canonicalPrefix: string;
-  readonly matchedPath: readonly (string | number)[];
+  readonly basePath: readonly (string | number)[];
+  readonly baseCanonical: string;
+  readonly descended: RetainKeyChain | undefined;
 }
 
 // Lazily shallow-copies a container, preserving sparse array holes (mirrors the general
@@ -111,7 +125,10 @@ const shallowCopyContainer = (container: Record<string, unknown> | unknown[]): R
 
 // Extends the concrete matched-key path by one enumerated key. Allocates a fresh array, so it is
 // only ever called within the wildcard branch (or while descending toward one) — never on the
-// exact-only hot path, where `matchedPath` stays `undefined`.
+// exact-only hot path, where `matchedPath` stays `undefined`. Unlike retained-subtree descent
+// (which is bounded by payload depth and so uses the lazy RetainKeyChain to stay O(depth) total,
+// AC 2), the wildcard matched path grows only with the compiled rule's wildcard depth — a small
+// compile-time constant — so a per-enumerated-key spread here is bounded, not quadratic in N.
 const appendMatchedKey = (
   matchedPath: readonly (string | number)[] | undefined,
   key: string | number,
@@ -375,6 +392,47 @@ const applyWildcardTerminalRule = (
   }
 }
 
+// Walks the leaf-to-root retain key chain into a root-to-leaf key array. Called only at a leaf
+// where the concrete path is actually read, so its O(depth) cost is paid once per consuming leaf
+// rather than once per descent level.
+const collectDescendedKeys = (chain: RetainKeyChain | undefined): (string | number)[] => {
+  if (chain === undefined) {
+    return []
+  }
+
+  const keys: (string | number)[] = []
+  for (let node: RetainKeyChain | undefined = chain; node !== undefined; node = node.parent) {
+    keys.push(node.key)
+  }
+  keys.reverse()
+  return keys
+}
+
+// Materialises the concrete matched-path array for a leaf reached under an inherited retain: the
+// entry base path, every descended container key, then the leaf key. Equivalent to the previous
+// eager `[...inherited.matchedPath, key]`, but built once at the leaf instead of at every hop.
+const materialiseRetainMatchedPath = (
+  inherited: InheritedRetain,
+  leafKey: string | number,
+): (string | number)[] => {
+  return [...inherited.basePath, ...collectDescendedKeys(inherited.descended), leafKey]
+}
+
+// Materialises the concrete canonical-path string for a leaf reached under an inherited retain,
+// reproducing descendRetain's previous per-level `appendCanonicalPathSegment` chain. Each key's
+// segment kind is derived from its runtime type (number -> index, string -> property), exactly as
+// renderConcreteCanonicalPath does, so the rendered path is identical to the eager construction.
+const materialiseRetainCanonical = (
+  inherited: InheritedRetain,
+  leafSegment: ExactPathSegment,
+): string => {
+  let path: string | undefined = inherited.baseCanonical
+  for (const key of collectDescendedKeys(inherited.descended)) {
+    path = appendCanonicalPathSegment(path, buildSegment(typeof key === 'number' ? 'index' : 'property', key))
+  }
+  return appendCanonicalPathSegment(path, leafSegment)
+}
+
 // Applies an inherited retain policy to a leaf reached during retained-structure traversal.
 const applyInheritedLeaf = (
   value: unknown,
@@ -387,7 +445,7 @@ const applyInheritedLeaf = (
   try {
     if (typeof inherited.policy.censor === 'function') {
       return applyRedaction(value, inherited.policy, {
-        matchedPath: [...inherited.matchedPath, key] as PathSegments,
+        matchedPath: materialiseRetainMatchedPath(inherited, key) as PathSegments,
         rootInput,
         rulePath: inherited.rulePath,
         terminalKey: key,
@@ -396,42 +454,46 @@ const applyInheritedLeaf = (
 
     return applyRedaction(value, inherited.policy, noContext)
   } catch (error) {
-    emitCensorFailure(plan, appendCanonicalPathSegment(inherited.canonicalPrefix, segment), value, error)
+    emitCensorFailure(plan, materialiseRetainCanonical(inherited, segment), value, error)
     return unsupportedValue
   }
 }
 
 const enterRetain = (rule: ExactTerminalRule): InheritedRetain => {
   return {
-    canonicalPrefix: rule.canonicalPath,
-    matchedPath: rule.rulePath as readonly (string | number)[],
+    basePath: rule.rulePath as readonly (string | number)[],
+    baseCanonical: rule.canonicalPath,
+    descended: undefined,
     policy: rule.policy,
     rulePath: rule.rulePath,
   }
 }
 
-// Enters a retained subtree at a wildcard terminal: the canonical prefix and matched path are
-// the concrete keys traversed to reach the terminal, not the configured wildcard signature.
+// Enters a retained subtree at a wildcard terminal: the base path and canonical prefix are the
+// concrete keys traversed to reach the terminal, not the configured wildcard signature.
 const enterRetainWildcard = (
   rule: { readonly policy: CompiledRedactionPolicy; readonly rulePath: PathSegments },
   matchedPath: readonly (string | number)[],
 ): InheritedRetain => {
   return {
-    canonicalPrefix: renderConcreteCanonicalPath(matchedPath),
-    matchedPath,
+    basePath: matchedPath,
+    baseCanonical: renderConcreteCanonicalPath(matchedPath),
+    descended: undefined,
     policy: rule.policy,
     rulePath: rule.rulePath,
   }
 }
 
+// Advances an inherited retain by one descended container key in O(1) — a single cons onto the
+// key chain, with no per-level array or canonical-string allocation (AC 2).
 const descendRetain = (
   inherited: InheritedRetain,
-  segment: ExactPathSegment,
   key: string | number,
 ): InheritedRetain => {
   return {
-    canonicalPrefix: appendCanonicalPathSegment(inherited.canonicalPrefix, segment),
-    matchedPath: [...inherited.matchedPath, key],
+    basePath: inherited.basePath,
+    baseCanonical: inherited.baseCanonical,
+    descended: { key, parent: inherited.descended },
     policy: inherited.policy,
     rulePath: inherited.rulePath,
   }
@@ -470,7 +532,6 @@ const leaveExactHop = (budget: TraversalBudget): void => {
 const resolveChildInherited = (
   node: PathTreeNode | undefined,
   inherited: InheritedRetain | undefined,
-  kind: 'property' | 'index',
   key: string | number,
 ): InheritedRetain | undefined => {
   if (node?.rule?.kind === 'exact') {
@@ -481,7 +542,7 @@ const resolveChildInherited = (
     return undefined
   }
 
-  return descendRetain(inherited, buildSegment(kind, key), key)
+  return descendRetain(inherited, key)
 }
 
 const emptyLevel: PathTreeNode = {}
@@ -576,7 +637,7 @@ const redactRetained = (
       }
 
       if (Array.isArray(value) || isPlainObject(value)) {
-        const childInherited = resolveChildInherited(node, inherited, 'index', index)
+        const childInherited = resolveChildInherited(node, inherited, index)
         const child = redactRetained(value, node ?? emptyLevel, childInherited, plan, rootInput, budget)
 
         if (child === delegate) {
@@ -627,7 +688,10 @@ const redactRetained = (
     return copy
   }
 
-  for (const key in container) {
+  // Own enumerable keys only — `Object.keys`, never `for...in`. Mirrors the general traversal
+  // (redact-value.ts), so inherited enumerable properties (e.g. under Object.prototype pollution)
+  // are not materialised as own redacted keys in the retained copy (AC 1).
+  for (const key of Object.keys(container)) {
     const node = level.propertyChildren?.get(key)
 
     budget.nodesVisited += 1
@@ -657,7 +721,7 @@ const redactRetained = (
     }
 
     if (Array.isArray(value) || isPlainObject(value)) {
-      const childInherited = resolveChildInherited(node, inherited, 'property', key)
+      const childInherited = resolveChildInherited(node, inherited, key)
       const child = redactRetained(value, node ?? emptyLevel, childInherited, plan, rootInput, budget)
 
       if (child === delegate) {

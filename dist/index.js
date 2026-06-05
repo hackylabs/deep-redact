@@ -1663,40 +1663,65 @@ const applyWildcardTerminalRule = (value, rule, plan, rootInput, matchedPath) =>
 		return unsupportedValue;
 	}
 };
+const collectDescendedKeys = (chain) => {
+	if (chain === void 0) return [];
+	const keys = [];
+	for (let node = chain; node !== void 0; node = node.parent) keys.push(node.key);
+	keys.reverse();
+	return keys;
+};
+const materialiseRetainMatchedPath = (inherited, leafKey) => {
+	return [
+		...inherited.basePath,
+		...collectDescendedKeys(inherited.descended),
+		leafKey
+	];
+};
+const materialiseRetainCanonical = (inherited, leafSegment) => {
+	let path = inherited.baseCanonical;
+	for (const key of collectDescendedKeys(inherited.descended)) path = appendCanonicalPathSegment(path, buildSegment(typeof key === "number" ? "index" : "property", key));
+	return appendCanonicalPathSegment(path, leafSegment);
+};
 const applyInheritedLeaf = (value, inherited, segment, key, plan, rootInput) => {
 	try {
 		if (typeof inherited.policy.censor === "function") return applyRedaction(value, inherited.policy, {
-			matchedPath: [...inherited.matchedPath, key],
+			matchedPath: materialiseRetainMatchedPath(inherited, key),
 			rootInput,
 			rulePath: inherited.rulePath,
 			terminalKey: key
 		});
 		return applyRedaction(value, inherited.policy, noContext);
 	} catch (error) {
-		emitCensorFailure(plan, appendCanonicalPathSegment(inherited.canonicalPrefix, segment), value, error);
+		emitCensorFailure(plan, materialiseRetainCanonical(inherited, segment), value, error);
 		return unsupportedValue;
 	}
 };
 const enterRetain = (rule) => {
 	return {
-		canonicalPrefix: rule.canonicalPath,
-		matchedPath: rule.rulePath,
+		basePath: rule.rulePath,
+		baseCanonical: rule.canonicalPath,
+		descended: void 0,
 		policy: rule.policy,
 		rulePath: rule.rulePath
 	};
 };
 const enterRetainWildcard = (rule, matchedPath) => {
 	return {
-		canonicalPrefix: renderConcreteCanonicalPath(matchedPath),
-		matchedPath,
+		basePath: matchedPath,
+		baseCanonical: renderConcreteCanonicalPath(matchedPath),
+		descended: void 0,
 		policy: rule.policy,
 		rulePath: rule.rulePath
 	};
 };
-const descendRetain = (inherited, segment, key) => {
+const descendRetain = (inherited, key) => {
 	return {
-		canonicalPrefix: appendCanonicalPathSegment(inherited.canonicalPrefix, segment),
-		matchedPath: [...inherited.matchedPath, key],
+		basePath: inherited.basePath,
+		baseCanonical: inherited.baseCanonical,
+		descended: {
+			key,
+			parent: inherited.descended
+		},
 		policy: inherited.policy,
 		rulePath: inherited.rulePath
 	};
@@ -1719,10 +1744,10 @@ const enterExactHop = (budget, plan) => {
 const leaveExactHop = (budget) => {
 	budget.depth -= 1;
 };
-const resolveChildInherited = (node, inherited, kind, key) => {
+const resolveChildInherited = (node, inherited, key) => {
 	if (node?.rule?.kind === "exact") return enterRetain(node.rule);
 	if (inherited === void 0) return;
-	return descendRetain(inherited, buildSegment(kind, key), key);
+	return descendRetain(inherited, key);
 };
 const emptyLevel = {};
 const delegate = Symbol("deep-redact.rule-driven.delegate");
@@ -1753,7 +1778,7 @@ const redactRetained = (container, level, inherited, plan, rootInput, budget) =>
 					continue;
 				}
 				if (Array.isArray(value) || isPlainObject$1(value)) {
-					const childInherited = resolveChildInherited(node, inherited, "index", index);
+					const childInherited = resolveChildInherited(node, inherited, index);
 					const child = redactRetained(value, node ?? emptyLevel, childInherited, plan, rootInput, budget);
 					if (child === delegate) return delegate;
 					if (child !== value) (copy ??= shallowCopyContainer(container))[index] = child;
@@ -1778,7 +1803,7 @@ const redactRetained = (container, level, inherited, plan, rootInput, budget) =>
 			}
 			return copy;
 		}
-		for (const key in container) {
+		for (const key of Object.keys(container)) {
 			const node = level.propertyChildren?.get(key);
 			budget.nodesVisited += 1;
 			if (isNodeBudgetExceeded(budget, plan.maxNodes)) throw createBudgetExceededError("nodes", plan.maxNodes);
@@ -1792,7 +1817,7 @@ const redactRetained = (container, level, inherited, plan, rootInput, budget) =>
 				continue;
 			}
 			if (Array.isArray(value) || isPlainObject$1(value)) {
-				const childInherited = resolveChildInherited(node, inherited, "property", key);
+				const childInherited = resolveChildInherited(node, inherited, key);
 				const child = redactRetained(value, node ?? emptyLevel, childInherited, plan, rootInput, budget);
 				if (child === delegate) return delegate;
 				if (child !== value) setObjectEntry(copy ??= shallowCopyContainer(container), key, child);

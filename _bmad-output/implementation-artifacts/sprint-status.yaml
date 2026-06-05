@@ -35,7 +35,7 @@
 # - Scrum Master typically creates the next story after the previous one is 'done'
 
 generated: 2026-04-13T09:43:13+0100
-last_updated: 2026-06-05T17:06:17+0100
+last_updated: 2026-06-05T20:28:00+0100
 project: deep-redact
 project_key: NOKEY
 tracking_system: file-system
@@ -122,5 +122,5 @@ development_status:
   8-9-enforce-rule-driven-budget-accounting-for-exact-path-hops: done
   8-10-restore-lint-and-benchmark-guardrail-hygiene: done
   8-11-harden-serialise-output-transformer-edge-cases: done
-  8-12-reduce-retain-structure-debt-and-complete-coverage: ready-for-dev
+  8-12-reduce-retain-structure-debt-and-complete-coverage: done
   epic-8-retrospective: optional

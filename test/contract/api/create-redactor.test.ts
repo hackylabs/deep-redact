@@ -6023,6 +6023,150 @@ describe('Rule-driven engine vs. general traversal equivalence', () => {
       b: { ref: { secret: '[REDACTED]', safe: 'keep' } },
     })
   })
+
+  it('does not materialise inherited enumerable properties as own redacted keys under retain (AC 1)', () => {
+    // Prototype pollution: an enumerable data property on Object.prototype is inherited by every
+    // plain object. A `for...in` walk of the retained subtree would visit it and promote it to an
+    // own redacted key in the copy; own-key iteration (mirroring the general traversal's
+    // Object.keys) must not. The audit reproduced this exact divergence (extra redacted keys).
+    Object.defineProperty(Object.prototype, 'pollutedKey', {
+      configurable: true,
+      enumerable: true,
+      value: 'inherited-secret',
+      writable: true,
+    })
+
+    try {
+      const options = { paths: [{ path: 'a', retainStructure: true }] } satisfies DeepRedactOptions
+      const plan = compileRedactorPlan(options)
+      expect(plan.pathDrivenOnly).toBe(true)
+
+      const result = buildPathDrivenExecutor(plan, failOnDelegation)({ a: { own: 'value' } }) as {
+        a: Record<string, unknown>;
+      }
+
+      // The inherited property is not promoted to an own key of the redacted copy …
+      expect(Object.prototype.hasOwnProperty.call(result.a, 'pollutedKey')).toBe(false)
+      expect(Object.keys(result.a)).toStrictEqual(['own'])
+      // … and the output matches the general traversal exactly (which uses Object.keys).
+      expect(result).toStrictEqual(redactValue({ a: { own: 'value' } }, plan))
+    } finally {
+      delete (Object.prototype as Record<string, unknown>).pollutedKey
+    }
+  })
+
+  it('preserves sparse array holes during retained-structure traversal (AC 1)', () => {
+    const options = { paths: [{ path: 'a', retainStructure: true }] } satisfies DeepRedactOptions
+    const plan = compileRedactorPlan(options)
+
+    const createPayload = () => ({ a: ['x', , 'z'] as unknown[] })
+
+    const result = buildPathDrivenExecutor(plan, failOnDelegation)(createPayload()) as { a: unknown[] }
+
+    // The hole at index 1 is never materialised as an own index …
+    expect(1 in result.a).toBe(false)
+    expect(result.a.length).toBe(3)
+    expect(result.a[0]).toBe('[REDACTED]')
+    expect(result.a[2]).toBe('[REDACTED]')
+    // … and the output matches the general traversal exactly.
+    expect(result).toStrictEqual(redactValue(createPayload(), plan))
+  })
+
+  it('produces exact function-censor context paths for a deeply nested retained subtree (AC 2)', () => {
+    // A deeply nested retained chain root -> n0 -> … -> n59 -> leaf. The inherited-retain matched
+    // path is constructed lazily down the chain, so descent must not allocate a fresh array per
+    // level (O(n^2)); the concrete context path delivered at the single leaf must still be exact.
+    const depth = 60
+    const expectedPath = ['root', ...Array.from({ length: depth }, (_, index) => `n${index}`), 'leaf']
+
+    const createPayload = () => {
+      let node: Record<string, unknown> = { leaf: 'secret' }
+      for (let index = depth - 1; index >= 0; index -= 1) {
+        node = { [`n${index}`]: node }
+      }
+      return { root: node }
+    }
+
+    const makePlan = (sink: FunctionCensorContext[]) => compileRedactorPlan({
+      paths: [{
+        path: 'root',
+        retainStructure: true,
+        censor: (_value: unknown, ctx: FunctionCensorContext) => {
+          sink.push({ ...ctx, matchedPath: [...ctx.matchedPath] })
+          return '[FN]'
+        },
+      }],
+    })
+
+    const ruleDrivenContexts: FunctionCensorContext[] = []
+    const ruleDrivenPlan = makePlan(ruleDrivenContexts)
+    const result = buildPathDrivenExecutor(ruleDrivenPlan, failOnDelegation)(createPayload())
+
+    // Exactly one leaf is reached, and it reports the full concrete path, not the rule signature.
+    expect(ruleDrivenContexts).toHaveLength(1)
+    expect(ruleDrivenContexts[0]!.matchedPath).toStrictEqual(expectedPath)
+    expect(ruleDrivenContexts[0]!.terminalKey).toBe('leaf')
+
+    // The general traversal delivers the identical concrete path and produces identical output.
+    const generalContexts: FunctionCensorContext[] = []
+    const generalPlan = makePlan(generalContexts)
+    expect(result).toStrictEqual(redactValue(createPayload(), generalPlan))
+    expect(generalContexts).toHaveLength(1)
+    expect(generalContexts[0]!.matchedPath).toStrictEqual(expectedPath)
+  })
+
+  it('emits an identical canonical failure-path diagnostic for a deeply nested retained subtree when the censor throws (AC 2)', () => {
+    // Companion to the succeeding-censor test above. The lazy canonical-path reconstruction
+    // (`materialiseRetainCanonical`) is reached ONLY on a censor *failure* — the success path uses
+    // `materialiseRetainMatchedPath` instead — so a throwing censor is required to exercise it. The
+    // canonical failure path the rule-driven engine emits must equal the general traversal's
+    // byte-for-byte, proving the lazy cons-list canonical rebuild (and its `typeof`-derived segment
+    // kinds) reproduces the eager per-level construction it replaced down a deep retained chain.
+    const depth = 60
+
+    const createPayload = () => {
+      let node: Record<string, unknown> = { leaf: 'secret' }
+      for (let index = depth - 1; index >= 0; index -= 1) {
+        node = { [`n${index}`]: node }
+      }
+      return { root: node }
+    }
+
+    const makePlan = (emittedPaths: string[]) => compileRedactorPlan({
+      diagnostics: {
+        sink: (event: DiagnosticEvent) => {
+          emittedPaths.push(event.path)
+        },
+      },
+      paths: [{
+        path: 'root',
+        retainStructure: true,
+        censor: () => {
+          throw new Error('censor boom')
+        },
+      }],
+    })
+
+    const ruleDrivenPaths: string[] = []
+    const ruleDrivenPlan = makePlan(ruleDrivenPaths)
+    const ruleDrivenResult = buildPathDrivenExecutor(ruleDrivenPlan, failOnDelegation)(createPayload())
+
+    const generalPaths: string[] = []
+    const generalPlan = makePlan(generalPaths)
+    const generalResult = redactValue(createPayload(), generalPlan)
+
+    // Exactly one censor failure is emitted, at the full concrete leaf path (not the rule
+    // signature 'root') — proving the lazy canonical chain was walked to the leaf, not truncated.
+    expect(ruleDrivenPaths).toHaveLength(1)
+    expect(ruleDrivenPaths[0]).toContain('root')
+    expect(ruleDrivenPaths[0]).toContain('n59')
+    expect(ruleDrivenPaths[0]).toContain('leaf')
+
+    // The rule-driven canonical failure path is byte-identical to the general traversal's, and the
+    // failed leaf degrades to [UNSUPPORTED] in both — the direct materialiseRetainCanonical proof.
+    expect(ruleDrivenPaths).toStrictEqual(generalPaths)
+    expect(ruleDrivenResult).toStrictEqual(generalResult)
+  })
 })
 
 describe('Wildcard rule-driven engine vs. general traversal equivalence (Story 8.4)', () => {
@@ -6329,23 +6473,73 @@ describe('Wildcard rule-driven engine vs. general traversal equivalence (Story 8
     expect(wired).toStrictEqual(redactValue(createPayload(), plan))
   })
 
-  it('shallow-copies a shared ancestor exactly once across an exact and a wildcard redaction (AC 5)', () => {
+  it('shallow-copies a shared ancestor exactly once across an exact and a wildcard redaction (AC 4)', () => {
     // `data` is the common ancestor of the exact `data.token` and the wildcard `data.*.email`.
     const plan = compileRedactorPlan({ paths: ['data.token', 'data.*.email'] })
     const payload = { data: { token: 'T', users: { email: 'e1' }, admins: { email: 'e2' } } }
 
     const result = buildPathDrivenExecutor(plan, failOnDelegation)(payload) as {
-      data: Record<string, unknown>;
+      data: { token: unknown; users: { email: unknown }; admins: { email: unknown } };
     }
 
-    // Both redactions landed on a single copy of `data` (not two competing copies).
+    // Direct copy-once proof via a shared-reference identity probe. `shallowCopyContainer` is
+    // module-private (not spy-able without a test-only export), so instead of counting copies we
+    // capture the single `data` reference and assert BOTH passes wrote into it. The exact pass
+    // (`data.token`) shallow-copies `data` once; the wildcard pass (`data.*.email`) must reuse
+    // that same copy via the ancestor-copy cache. A second, competing copy would be shallow-copied
+    // from the original `data` and therefore carry a RAW `token` ('T'), and whichever copy was
+    // stored last would win — dropping one pass's redaction. Observing the exact `token` redaction
+    // and both wildcard `email` redactions coexisting on this one captured reference is the direct
+    // copy-once assertion (not merely correct merged output).
+    const sharedData = result.data
+    expect(sharedData.token).toBe('[REDACTED]')
+    expect(sharedData.users.email).toBe('[REDACTED]')
+    expect(sharedData.admins.email).toBe('[REDACTED]')
+
+    // The merged structural output is still pinned, and the original input is never mutated.
     expect(result.data).toStrictEqual({
       token: '[REDACTED]',
       users: { email: '[REDACTED]' },
       admins: { email: '[REDACTED]' },
     })
-    // The original input is never mutated.
     expect(payload.data.token).toBe('T')
     expect(result.data).not.toBe(payload.data)
+  })
+
+  it('delegates a retained parent container above a wildcard descendant rule, output matches the general traversal (AC 5)', () => {
+    // The audit's first retain-above-wildcard shape, deeper variant: a retained concrete parent
+    // (`users`) sitting above a wildcard descendant rule (`users.*.email`). The retained subtree
+    // delegates wholesale rather than re-deriving concrete-path retain/wildcard precedence here.
+    const plan = compileRedactorPlan({ paths: [{ path: 'users', retainStructure: true }, 'users.*.email'] })
+    expect(plan.pathDrivenOnly).toBe(true)
+
+    const createPayload = () => ({
+      users: { alice: { email: 'a@x', name: 'Alice' }, bob: { email: 'b@x', name: 'Bob' } },
+    })
+
+    // A throwing fallback proves the retained parent is not classified as fully path-driven work:
+    // the engine delegates the whole call to the general traversal.
+    expect(() => buildPathDrivenExecutor(plan, failOnDelegation)(createPayload())).toThrow(/delegated/)
+
+    // With the real fallback, the delegated output is byte-identical to the general traversal.
+    const wired = buildPathDrivenExecutor(plan, (value) => redactValue(value, plan))(createPayload())
+    expect(wired).toStrictEqual(redactValue(createPayload(), plan))
+  })
+
+  it('delegates a retain wildcard terminal sitting above a further wildcard segment, output matches the general traversal (AC 5)', () => {
+    // The audit's second retain-above-wildcard shape (previously untested for byte identity): a
+    // retain policy on a wildcard terminal (`a.*`) that itself sits above a further segment
+    // (`a.*.b`). Existing `a.*.b` coverage lacks retain and existing wildcard-retain coverage uses
+    // a different `*.profile` shape, so this closes the gap. The retained subtree delegates when it
+    // meets the `a.*.b` wildcard terminal child.
+    const plan = compileRedactorPlan({ paths: [{ path: 'a.*', retainStructure: true }, 'a.*.b'] })
+    expect(plan.pathDrivenOnly).toBe(true)
+
+    const createPayload = () => ({ a: { x: { b: 1, c: 2 }, y: { b: 3 } } })
+
+    expect(() => buildPathDrivenExecutor(plan, failOnDelegation)(createPayload())).toThrow(/delegated/)
+
+    const wired = buildPathDrivenExecutor(plan, (value) => redactValue(value, plan))(createPayload())
+    expect(wired).toStrictEqual(redactValue(createPayload(), plan))
   })
 })

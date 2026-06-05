@@ -343,6 +343,13 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
   // `*` enumeration depth coincides with another rule's non-terminal concrete segment on a shared
   // prefix (e.g. `a.b.c` + `a.*.d`): the engine's two-pass navigation cannot resolve that per-leaf
   // precedence, so such configs route to the O(N) general traversal instead.
+  //
+  // Eligibility is deliberately retain-agnostic: it takes no `retainStructure` input. A retain-heavy
+  // config (including one that delegates wholesale at call time, e.g. a retain rule above a wildcard)
+  // therefore still compiles `pathDrivenOnly: true` and pays prefix-tree setup cost. This trade-off
+  // is accepted; excluding unprofitable near-100%-delegation retain patterns is deferred follow-up
+  // work (see deferred-work-audit.md) and is intentionally not implemented here. The current
+  // behaviour is classifier-pinned in compile-redactor-plan.test.ts.
   const everyDynamicRuleIsSingleWildcard = compiledPathRules.dynamicPathRules
     .every((rule) => containsOnlySingleWildcardDynamics(rule.segments))
   const hasAnyPathRule = Object.keys(compiledPathRules.exactPathRules).length > 0
