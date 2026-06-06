@@ -31,7 +31,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 ### Requirements Overview
 
 **Functional Requirements:**
-Deep Redact v4 has 38 functional requirements across eight requirement groups. Configuration and policy-definition requirements cover singleton service-root setup, early configuration validation, replacement behaviour, fuzzy and case-insensitive matching, and typed API discoverability. Targeting requirements cover deep key matching, regex-based object property matching, explicit object paths, wildcard and ignore path segments, partial-string redaction, and root-primitive redaction across nested mixed payloads. Output requirements require deterministic one-way behaviour, preservation of non-targeted values, and clear precedence rules when matching strategies overlap.
+Deep Redact v4 has 40 functional requirements across nine requirement groups, including a v3 capability-parity group that restores the value-type allowlist (FR39) and full per-key rule parity (FR40). Configuration and policy-definition requirements cover singleton service-root setup, early configuration validation, replacement behaviour, fuzzy and case-insensitive matching, and typed API discoverability. Targeting requirements cover deep key matching, regex-based object property matching, explicit object paths, wildcard and ignore path segments, partial-string redaction, and root-primitive redaction across nested mixed payloads. Output requirements require deterministic one-way behaviour, preservation of non-targeted values, and clear precedence rules when matching strategies overlap.
 
 The remaining functional scope extends beyond the core engine. Runtime resilience requirements require safe handling of circular references, transformed values, ignored value types, and localised `[UNSUPPORTED]` replacement when a nested value cannot be processed cleanly. Migration and ecosystem requirements cover compatibility-minded migration from `fast-redact` and Deep Redact v3, plus broad example coverage. Distribution requirements add JavaScript and TypeScript support across `npm`, `pnpm`, `yarn`, `bun`, and `deno`. Console support and trust requirements add optional `console.*` redaction, benchmark artefacts, and platform-review guidance.
 
@@ -405,6 +405,44 @@ Frontend architecture is not applicable as an application concern.
 - Transformer contract tests must fix precedence, define behaviour on transformer failure, and prove no post-init throws for supported inputs.
 - Migration validation must cover representative `fast-redact` and v3 fixtures, including documented divergences, serialisation-option rewrites where needed, legacy `replacement` to `censor` rewrites where needed, and per-path rule-object cases.
 - Conflict tests must prove duplicate canonical selector rejection and unreachable-child-rule handling.
+
+## v3 Capability Parity Restoration (Epic 9)
+
+Two differentiated capabilities present in Deep Redact v3 were absent from the v4.0.0 surface and are restored here. Both are release-blocking for the public v4 release. Because v4 has not been publicly released, restoring v3 semantics — including v3 defaults — is not a breaking change and requires no compatibility bridge. Both decisions are **performance-neutral by construction**: each resolves at compile time, runs only at points where a rule has already matched a value, touches neither engine's navigation nor the benchmark hot loops, and therefore requires no change to any benchmark overhead threshold.
+
+### Decision: Value-Type Allowlist (`types`)
+
+- **Public option.** `types?: readonly ValueTypeName[]`, where `ValueTypeName` is the set of JavaScript `typeof` categories (`'string' | 'number' | 'bigint' | 'boolean' | 'object' | 'function' | 'symbol' | 'undefined'`). The option restricts which value types are eligible for redaction.
+- **Default.** When `types` is unset it defaults to `['string']` — redaction is limited to string values, matching v3. The compiled plan always carries a value-type plan (never absent); an unset option compiles the string-only default rather than an "allow all" plan.
+- **Compilation.** Compiled once at initialisation into an immutable, `typeof`-keyed O(1) lookup, mirroring `compileIgnoredValueTypes`. No array scan at runtime.
+- **Authority and placement.** The eligibility check is evaluated at the single leaf-replacement boundary shared by both engines, so it is authoritative over **every** redaction source — exact-key, regex-key, exact-path, dynamic-path, and whole-value substring rules — in both the rule-driven engine and the generic traversal. A configured target whose value type is not permitted is **not** redacted by any rule: type eligibility outranks rule match. This mirrors v3, where the type guard sat inside `redactValue` ahead of key-config handling. A path or key rule therefore cannot override the type allowlist; doing so would defeat the purpose of the allowlist.
+- **Veto semantics.** A type-vetoed value is returned raw and unmodified, routed exactly as an unmatched value of the same type. Scalars — including transformable runtime values such as `Date`, `BigInt`, and `Map` — pass through untouched. A vetoed container is traversed normally so descendant rules and descendant transformables are still handled. The veto never substitutes a placeholder and never marks the value redacted.
+- **Transformation is preserved and remains serialise-gated.** Because transformation and circular-reference neutralisation are an output-stage concern owned by the serialise adapter (Story 8.3) and applied only when `serialise: true`, a type-vetoed value is transformed when `serialise: true` and returned raw otherwise — identical to any non-configured value of the same type. The type allowlist suppresses **redaction** only; it never suppresses **transformation**. The invariant is: a matched-but-type-vetoed value is byte-identical to the same value had no rule matched it.
+- **Relationship to `ignoredValueTypes`.** Orthogonal and composable, with defined ordering. `types` governs redaction eligibility during traversal; `ignoredValueTypes` and transformer dispatch act later, at the serialise output stage. They never override each other.
+- **Performance.** A single O(1) lookup, evaluated only where a rule has already matched a value (bounded by match count, not payload size), on a path neither engine's navigation nor the benchmark hot loops touch. No new per-node work; no overhead-threshold change.
+
+### Decision: Full `KeyRule` Parity with the v3 `BlacklistKeyConfig`
+
+- **Public shape.** `KeyRule` gains `censor`, `remove`, `retainStructure`, and `replaceStringByLength`, and its `key` widens to `string | RegExp`. With the existing `fuzzyKeyMatch` and `caseSensitiveKeyMatch`, this reaches full parity with the v3 `BlacklistKeyConfig` object:
+
+  ```ts
+  interface KeyRule {
+    key: string | RegExp
+    fuzzyKeyMatch?: boolean
+    caseSensitiveKeyMatch?: boolean
+    censor?: string | ((value: unknown, context?: CensorContext) => unknown)
+    remove?: boolean
+    retainStructure?: boolean
+    replaceStringByLength?: boolean
+  }
+  ```
+
+- **Reuse, not new machinery.** Per-key overrides reuse the existing `CompiledRedactionPolicy` and `mergePolicy(defaults, overrides)` mechanism already used by path rules. A literal or regex key rule that specifies overrides compiles a per-rule policy merged over the compiled global defaults; a key rule with no overrides carries no per-rule policy and continues to use the shared key-rule policy, preserving current behaviour exactly.
+- **Runtime resolution.** When a key rule matches, the runtime applies the matched rule's per-rule policy if present, otherwise the shared key-rule policy. All downstream behaviour — censor, removal, retain-structure descent, same-length replacement — flows through the identical policy-application path used by path rules, so no new redaction semantics are introduced. This holds for both literal/string key rules and regex key rules.
+- **Regex key overrides.** Widening `key` to `string | RegExp` lets a regex key rule carry the same per-key overrides as a literal key rule, closing the last gap against `BlacklistKeyConfig`, whose `key` was already `string | RegExp`.
+- **Precedence is unchanged.** Per-key overrides change only the policy applied once a key rule wins; they do not change rule precedence. The published precedence contract (path rules outrank key rules; exact key rules outrank regex or matcher-object key rules; whole-value censor or removal outranks substring replacement) is unchanged. First-match-wins among literal key rules is retained, and must be documented and pinned by test.
+- **Invalid combinations.** The same invalid-combination rules that apply to global and per-path configuration apply per-key: `remove + censor` and `remove + retainStructure` must fail initialisation at the key-rule level.
+- **Performance.** Compile-time merge plus, at most, one policy selection per key match — off the per-node hot path and outside the path-driven fast lane, which by definition contains no key rules. No overhead-threshold change.
 
 ## Implementation Patterns & Consistency Rules
 

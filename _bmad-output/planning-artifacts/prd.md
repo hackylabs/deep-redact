@@ -32,7 +32,7 @@ classification:
   projectContext: "brownfield"
 workflowType: "prd"
 workflow: "edit"
-lastEdited: "2026-05-23T00:00:00+01:00"
+lastEdited: "2026-06-05T00:00:00+01:00"
 editHistory:
   - date: "2026-04-07T14:38:44Z"
     changes: "Tightened FR and NFR wording, added explicit out-of-scope scope language, and completed edit workflow metadata."
@@ -48,6 +48,8 @@ editHistory:
     changes: "Removed explicit Console API wording from the failure-handling NFR and compressed the scoping section to focus on delivery strategy, constraints, trade-offs, and risks."
   - date: "2026-05-23T00:00:00+01:00"
     changes: "Updated Performance NFR and Technical Risk sections to record the benchmark gate failure at v4.0.0 and the Epic 7 remediation plan. Overhead target unchanged."
+  - date: "2026-06-05T00:00:00+01:00"
+    changes: "Added FR39 (value-type allowlist `types`, restored with string-only default for v3 parity) and FR40 (full per-key rule parity with the v3 `BlacklistKeyConfig`, including string-or-regex key selectors and per-key censor, removal, retain-structure, and same-length overrides). Recorded these as release-blocking v3-parity gaps and added the Epic 9 remediation plan."
 ---
 
 # Product Requirements Document - deep-redact
@@ -66,9 +68,11 @@ Deep Redact already exists because real production data does not arrive in neat,
 - regex-based object property matching
 - whole-string redaction when a matching value is supplied as the root primitive input
 - configurable replacement behaviour, including custom replacers, removal, retain-structure handling, and same-length string replacement
+- per-key redaction overrides, expressed on string or regex key selectors, that set censor, removal, retain-structure, and same-length behaviour for individual keys
 - optional fuzzy matching
 - optional case-insensitive matching
 - support for optionally ignoring values of specified types
+- restriction of redaction to specified value types, defaulting to redacting string values only
 - optional structured or serialised output
 - configurable transformer support, with standard coverage for circular references, `BigInt`, `Date`, `Error`, `Map`, `RegExp`, `Set`, and `URL`
 
@@ -323,6 +327,8 @@ The v4 API surface must support:
 - partial-string targeting
 - whole-string redaction for matching root primitive inputs
 - configurable replacement behaviour, including removal, retain-structure handling, custom replacers, and same-length string replacement
+- per-key redaction overrides on string or regex key selectors, including per-key censor, removal, retain-structure handling, and same-length string replacement
+- optional restriction of redaction to specified value types, defaulting to string-only redaction
 - optional structured or serialised output
 - optional ignored-value-type rules
 - configurable transformers, including standard handling for circular references, `BigInt`, `Date`, `Error`, `Map`, `RegExp`, `Set`, and `URL`
@@ -343,6 +349,8 @@ Code examples are release-critical. The documentation set must include worked ex
 - object-path targeting, including regex-based object path segment matching
 - partial-string targeting and whole-string redaction for matching root primitive inputs
 - replacement, removal, retain-structure handling, and same-length string replacement
+- per-key rule overrides on string and regex key selectors
+- value-type allowlist configuration and the string-only default
 - structured versus serialised output
 - ignored-value-type configuration
 - custom transformer configuration and standard transformed values
@@ -451,6 +459,13 @@ If trade-offs become necessary, formal IDE integration may slip before core reda
 
 - FR37: Platform and security teams can review published benchmark artefacts when evaluating the library for standard use.
 - FR38: Platform and security teams can review published guidance on supported capabilities, targeting semantics, and migration expectations before standardising the library.
+
+### v3 Capability Parity Restoration
+
+These requirements restore two differentiated capabilities present in Deep Redact v3 that were absent from the v4.0.0 surface. Both are release-blocking for the public v4 release.
+
+- FR39: Developers can restrict redaction to specified JavaScript value types so that only values whose runtime type is permitted are eligible for redaction. When the option is unset, redaction is limited to string values by default, matching v3. The restriction is authoritative across every targeting mode — exact keys, regex-based object property matching, object paths, regex-based object path segments, and substring rules — so a configured target whose value type is not permitted is not redacted by any rule. A value excluded by type is left in place and continues through normal output handling, including transformer application when serialised output is produced.
+- FR40: Developers can configure per-key redaction behaviour on individual key rules, including per-key censor, removal, retain-structure handling, and same-length string replacement, and can express a key rule using either a string or a regular-expression selector. This reaches parity with the v3 per-key configuration object, so a key rule can override the global replacement and structure behaviour for the keys it matches without affecting other keys.
 
 ## Non-Functional Requirements
 

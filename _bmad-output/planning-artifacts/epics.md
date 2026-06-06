@@ -55,6 +55,8 @@ FR35: Developers can optionally apply Deep Redact to `console.*` calls in applic
 FR36: Developers can enable optional console redaction without triggering recursive redaction from Deep Redact’s own diagnostic logging.
 FR37: Platform and security teams can review published benchmark artefacts when evaluating the library for standard use.
 FR38: Platform and security teams can review published guidance on supported capabilities, targeting semantics, and migration expectations before standardising the library.
+FR39: Developers can restrict redaction to specified JavaScript value types so only permitted value types are eligible for redaction; when unset, redaction is limited to string values by default (v3 parity). The restriction is authoritative across every targeting mode, and a value excluded by type is left in place and continues through normal output handling, including transformer application when serialised output is produced.
+FR40: Developers can configure per-key redaction behaviour on individual key rules — per-key censor, removal, retain-structure handling, and same-length string replacement — and can express a key rule using either a string or a regular-expression selector, reaching parity with the v3 `BlacklistKeyConfig` object.
 
 ### NonFunctional Requirements
 
@@ -185,12 +187,20 @@ Replace the O(N) payload-walk for path-driven configurations with a rule-driven 
 **FRs supported:** FR23, FR24, FR25, FR26, FR27
 **Technical constraints supported:** traversal safety budgets, deterministic output contracts, release benchmark credibility
 
+### Epic 9: Restore v3 Capability Parity Before Public Release
+Restore two differentiated v3 capabilities that were absent from the v4.0.0 surface — the value-type allowlist and full per-key rule parity — without removing any v4 capability and without changing benchmark overhead thresholds.
+**FRs covered:** FR39, FR40
+**FRs supported:** FR5, FR9, FR16, FR23
+**Technical constraints supported:** performance-neutral restoration (no benchmark threshold change), deterministic output across both traversal engines, v3 migration fidelity
+**Status:** release-blocking for the public v4 release.
+
 ### Late-Epic Dependency Matrix
 
 - Story 7.5 is cancelled and remains historical context only; no future work should extend the superseded compiled fast lane.
 - Epic 8 depends on Epic 7 Stories 7.1 to 7.4 as completed evidence for equivalence, allocation, and traversal-safety constraints.
-- Story 5.12 absorbs the former Epic 9 worked-example gap so FR31 remains in the rollout and documentation epic.
+- Story 5.12 absorbs the *former* worked-example gap so FR31 remains in the rollout and documentation epic. This is unrelated to the current Epic 9, which is the v3 capability-parity epic (FR39, FR40); the worked-example concept was reabsorbed into Epic 5 and the Epic 9 number is now reused for capability parity.
 - Stories 8.7 to 8.12 are pre-release hardening stories for the rule-driven engine; they must not reopen completed Stories 8.1 to 8.6 except by adding focused follow-up evidence.
+- Epic 9 depends on the completed Epic 8 rule-driven engine and serialise-only output adapter (Story 8.3): the value-type allowlist (Story 9.1) must gate both the rule-driven and generic engines at the shared leaf-replacement boundary, and relies on transformation being a serialise-stage concern so a type-vetoed value still transforms when `serialise: true`. Story 9.3 depends on Stories 9.1 and 9.2 landing the engine capabilities before the v3 migration matrix and worked examples are updated.
 
 ## Epic 1: Enable Service-Wide Redaction with One Configuration
 
@@ -2879,3 +2889,118 @@ so that retain-heavy configurations are correct, bounded, and not misleadingly c
   **When** redaction runs
   **Then** focused byte-identity tests prove delegation remains correct
   **And** the retained parent container is not misleadingly classified as fully path-driven work.
+
+## Epic 9: Restore v3 Capability Parity Before Public Release
+
+Restore two differentiated capabilities present in Deep Redact v3 that were absent from the v4.0.0 surface: the value-type allowlist (`types`) and full per-key rule parity with the v3 `BlacklistKeyConfig`. Both gaps are release-blocking for the public v4 release.
+
+**Context:** v4 has not been publicly released, so restoring v3 semantics — including v3 defaults such as the string-only redaction default — is not a breaking change and requires no compatibility bridge. Both restorations must be **performance-neutral**: each resolves at compile time, runs only at points where a rule has already matched a value, touches neither traversal engine's navigation nor the benchmark hot loops, and must not require any change to a benchmark overhead threshold. Neither restoration may remove or regress any existing v4 capability.
+
+**Key design decision:** the value-type allowlist is authoritative over every redaction source and is enforced at the single leaf-replacement boundary shared by the rule-driven engine and the generic traversal; a value excluded by type is left raw and continues through normal output handling, so transformation (a serialise-stage concern owned by Story 8.3) still applies when `serialise: true`. Per-key overrides reuse the existing `CompiledRedactionPolicy` and `mergePolicy` machinery already used by path rules; no new redaction semantics are introduced.
+
+### Story 9.1: Restore the Value-Type Allowlist (`types`) with String-Only Default
+
+As a backend engineer,
+I want to restrict redaction to specified value types, defaulting to strings only,
+so that I can control which runtime value types are eligible for redaction exactly as I could in v3, without a configured rule forcing redaction of an ineligible type.
+
+**Acceptance Criteria:**
+
+- **Given** a redactor created with no `types` option
+  **When** a configured key or path targets a non-string value
+  **Then** string values at configured targets are redacted
+  **And** non-string values at configured targets are left unchanged (string-only default, matching v3).
+- **Given** `types: ['string', 'number']`
+  **When** redaction runs
+  **Then** string and number values at configured targets are redacted
+  **And** values of other types at configured targets are left unchanged.
+- **Given** any targeting mode — exact key, regex key, exact path, dynamic path, or whole-value substring rule — targeting a value whose type is not permitted by `types`
+  **When** redaction runs
+  **Then** the value is not redacted by that rule (type eligibility outranks rule match)
+  **And** no path or key rule can override the type allowlist.
+- **Given** an identical `types`-filtered configuration expressed once as a path-driven-eligible shape and once as a generic-traversal shape
+  **When** each redacts the same payload
+  **Then** the output is identical (both engines enforce the allowlist at the shared boundary).
+- **Given** `types` that excludes `object`/`Date` and a configured path targeting a `Date`
+  **When** `serialise: true`
+  **Then** the `Date` is not redacted but is transformed into its documented serialised marker
+  **And** when `serialise: false` the `Date` is returned raw, byte-identical to an unmatched `Date`.
+- **Given** `types` that excludes `object` and a key rule matching a plain-object value
+  **When** redaction runs
+  **Then** the object is not wholesale-redacted
+  **And** it is traversed so descendant string leaves are still redacted per their rules.
+- **Given** a `types` value that is not an array of supported type-name strings
+  **When** the redactor is created
+  **Then** initialisation fails with a structured validation error.
+- **Given** the benchmark suite at the default `types`
+  **When** benchmarks run
+  **Then** no benchmark overhead threshold is changed
+  **And** the existing `maxOverheadPct` rows still pass
+  **And** `types` is compiled once into an immutable `typeof`-keyed O(1) lookup with no runtime array scan.
+
+### Story 9.2: Restore Full `KeyRule` Parity with the v3 `BlacklistKeyConfig`
+
+As a backend engineer,
+I want per-key redaction overrides and string-or-regex key selectors on key rules,
+so that individual keys can override global replacement and structure behaviour exactly as the v3 `BlacklistKeyConfig` allowed.
+
+**Acceptance Criteria:**
+
+- **Given** the public `KeyRule` type
+  **When** reviewed
+  **Then** it accepts `key: string | RegExp` plus `fuzzyKeyMatch`, `caseSensitiveKeyMatch`, `censor`, `remove`, `retainStructure`, and `replaceStringByLength`, reaching parity with the v3 `BlacklistKeyConfig`.
+- **Given** a key rule with a per-key `censor`
+  **When** a matching key is redacted
+  **Then** that key uses the per-key censor
+  **And** keys matched by rules without an override use the global default censor.
+- **Given** a key rule with `remove: true`
+  **When** a matching key is redacted
+  **Then** the matched key is removed from the output.
+- **Given** a key rule with `retainStructure: true` matching a container value
+  **When** redaction runs
+  **Then** the container's structure is retained and its descendants are redacted under the inherited policy.
+- **Given** a key rule with `replaceStringByLength: true`
+  **When** a matching string value is redacted
+  **Then** it is replaced with a same-length censor.
+- **Given** a regex key rule (`key: /.../`) carrying per-key overrides
+  **When** a matching key is redacted
+  **Then** the regex key rule's per-key overrides apply (regex keys reach the same parity as literal keys).
+- **Given** a key rule (string or regex) with no overrides
+  **When** redaction runs
+  **Then** it behaves exactly as before, using the shared key-rule policy, with no change to existing output.
+- **Given** `remove + censor` or `remove + retainStructure` on a key rule
+  **When** the redactor is created
+  **Then** initialisation fails, matching the per-path invalid-combination rules.
+- **Given** overlapping path and key rules, and multiple literal key rules matching the same key
+  **When** redaction runs
+  **Then** existing precedence holds (path rules outrank key rules; exact key rules outrank regex key rules)
+  **And** first-match-wins among literal key rules is pinned by test.
+- **Given** the benchmark suite
+  **When** benchmarks run
+  **Then** no benchmark overhead threshold is changed
+  **And** the path-driven fast lane is unaffected (it contains no key rules)
+  **And** per-key overrides compile through the existing `CompiledRedactionPolicy` and `mergePolicy` path-rule machinery.
+
+### Story 9.3: Update v3 Migration Matrix, Generated Migration Doc, and Worked Examples for Restored Capabilities
+
+As a migration owner moving from Deep Redact v3,
+I want the v3 migration matrix, generated migration guide, and worked examples to reflect the restored `types` and `KeyRule` capabilities,
+so that the documented carry-over and parity match the actual v4 behaviour and the generated-file gate stays green.
+
+**Acceptance Criteria:**
+
+- **Given** `test/migration/v3/matrix.json` and its fixtures
+  **When** updated
+  **Then** `types` is recorded as an option that carries over to v4 unchanged
+  **And** the `blacklistedKeys` → `keys` row documents that a v3 `BlacklistKeyConfig` object maps to a v4 `KeyRule` with the same fields, with `replacement` mapped to `censor`.
+- **Given** the generated `docs/migration/from-v3.md`
+  **When** regenerated from the matrix and fixtures
+  **Then** it reflects the restored `types` carry-over and full `KeyRule` parity
+  **And** the generated-file verification (`pnpm run verify-generated-files`) passes.
+- **Given** the worked-example manifest and validation harness
+  **When** extended
+  **Then** there are validated worked examples for the value-type allowlist (including the string-only default) and for per-key rule overrides on both string and regex key selectors.
+- **Given** the v3-parity capabilities are delivered by Stories 9.1 and 9.2
+  **When** capability documentation and the deferred-work audit are reviewed
+  **Then** the value-type allowlist and full `KeyRule` parity are documented as supported
+  **And** any related deferred-work audit items are recorded as addressed.

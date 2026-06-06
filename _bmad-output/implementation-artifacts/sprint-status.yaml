@@ -1,5 +1,5 @@
 # generated: 2026-04-13T09:43:13+0100
-# last_updated: 2026-06-05T17:06:17+0100
+# last_updated: 2026-06-05T21:39:34+0100
 # project: deep-redact
 # project_key: NOKEY
 # tracking_system: file-system
@@ -124,3 +124,9 @@ development_status:
   8-11-harden-serialise-output-transformer-edge-cases: done
   8-12-reduce-retain-structure-debt-and-complete-coverage: done
   epic-8-retrospective: optional
+
+  epic-9: in-progress
+  9-1-restore-the-value-type-allowlist-types-with-string-only-default: ready-for-dev
+  9-2-restore-full-keyrule-parity-with-the-v3-blacklistkeyconfig: ready-for-dev
+  9-3-update-v3-migration-matrix-generated-doc-and-worked-examples-for-restored-capabilities: ready-for-dev
+  epic-9-retrospective: optional

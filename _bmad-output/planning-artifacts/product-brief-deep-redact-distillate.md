@@ -47,6 +47,8 @@ purpose: "Token-efficient context for downstream PRD creation"
 - Mitigate denial-of-service risk via memory exhaustion and traversal-safety controls.
 - Rework the public API so common use can be a practical drop-in replacement for `fast-redact`.
 - Preserve support for deep key matching, partial string redaction, per-match custom replacers, fuzzy matching, case-insensitive matching, and safe transformation of unsupported values.
+- Preserve per-key rule overrides (per-key censor, removal, retain-structure, and same-length replacement on string or regex key selectors) at full parity with the v3 `BlacklistKeyConfig`.
+- Preserve the value-type allowlist that restricts which value types are eligible for redaction, defaulting to string-only redaction to match v3.
 - Provide a documented major-version migration path from the existing class-based API to the new `fast-redact`-style API shape.
 
 ## Rejected Ideas

@@ -39,6 +39,8 @@ Deep Redact v4 will reframe the library as a singleton-safe redaction engine for
 - deep key matching without exhaustive per-level key declaration
 - partial string redaction via regex at root level or deep within a payload
 - custom replacers per match
+- per-key redaction overrides — censor, removal, retain-structure, and same-length replacement — on string or regex key selectors
+- restriction of redaction to specific value types, defaulting to redacting strings only
 - optional fuzzy and case-insensitive matching per key
 - safe transformation of non-serialisable and circular values
 - path-based redaction with `*`, `**`, and `!<key|index>` segments
@@ -74,6 +76,7 @@ In scope for v4:
 - a `fast-redact`-compatible primary API shape
 - path-based redaction including `*`, `**`, and `!segment`
 - preservation of deep key matching, regex-based partial redaction, custom replacers, fuzzy matching, case-insensitive matching, and the safe transformation pipeline
+- preservation of per-key rule overrides on string or regex key selectors, and of the value-type allowlist that defaults to string-only redaction
 - one-way deterministic redaction only
 - a documented major-version migration path from the existing class-based API
 - early configuration validation with singleton-style initialisation guidance
