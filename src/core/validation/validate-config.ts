@@ -54,8 +54,12 @@ const substringRuleOptionNames = new Set([
 
 const keyRuleOptionNames = new Set([
   'caseSensitiveKeyMatch',
+  'censor',
   'fuzzyKeyMatch',
   'key',
+  'remove',
+  'replaceStringByLength',
+  'retainStructure',
 ])
 
 const transformerOptionNames = new Set<keyof NonNullable<DeepRedactOptions['transformers']>>([
@@ -269,12 +273,19 @@ const validateLiteralKeySelector = (
 const validateKeyRule = (
   value: ConfigRecord,
   path: string,
+  defaults: EffectiveRuleDefaults,
   issues: ValidationIssue[],
 ): void => {
   validateAllowedOptions(value, keyRuleOptionNames, path, issues)
 
-  if (typeof value.key !== 'string') {
-    pushIssue(issues, `${path}.key`, 'key must be a string.')
+  if (isRegExp(value.key)) {
+    const unsupportedRegexMessage = getUnsupportedKeyRegexMessage(value.key)
+
+    if (unsupportedRegexMessage !== undefined) {
+      pushIssue(issues, `${path}.key`, unsupportedRegexMessage)
+    }
+  } else if (typeof value.key !== 'string') {
+    pushIssue(issues, `${path}.key`, 'key must be a string or RegExp.')
   } else if (value.key.length === 0) {
     pushIssue(issues, `${path}.key`, 'key must not be empty.')
   } else {
@@ -287,11 +298,31 @@ const validateKeyRule = (
 
   validateBooleanOption(value.fuzzyKeyMatch, path, 'fuzzyKeyMatch', issues)
   validateBooleanOption(value.caseSensitiveKeyMatch, path, 'caseSensitiveKeyMatch', issues)
+  validateCensorOption(value.censor, path, issues)
+  validateBooleanOption(value.remove, path, 'remove', issues)
+  validateBooleanOption(value.retainStructure, path, 'retainStructure', issues)
+  validateBooleanOption(value.replaceStringByLength, path, 'replaceStringByLength', issues)
+
+  const effectiveReplaceStringByLength = typeof value.replaceStringByLength === 'boolean'
+    ? value.replaceStringByLength
+    : defaults.replaceStringByLength
+
+  validateConflictingOptions(
+    {
+      censor: value.censor ?? defaults.censor,
+      remove: value.remove ?? defaults.remove,
+      retainStructure: value.retainStructure ?? defaults.retainStructure,
+      replaceStringByLength: effectiveReplaceStringByLength,
+    },
+    path,
+    issues,
+  )
 }
 
 const validateKeys = (
   value: unknown,
   path: string,
+  defaults: EffectiveRuleDefaults,
   issues: ValidationIssue[],
 ): void => {
   if (value === undefined) {
@@ -322,7 +353,7 @@ const validateKeys = (
     }
 
     if (isPlainObject(entry)) {
-      validateKeyRule(entry, entryPath, issues)
+      validateKeyRule(entry, entryPath, defaults, issues)
       continue
     }
 
@@ -736,6 +767,13 @@ export const validateConfig = (options: unknown): ValidationReport => {
     return createValidationReport(issues)
   }
 
+  const rootDefaults: EffectiveRuleDefaults = {
+    censor: options.censor,
+    remove: options.remove === true,
+    retainStructure: options.retainStructure === true,
+    replaceStringByLength: options.replaceStringByLength === true,
+  }
+
   validateAllowedOptions(options, rootOptionNames, 'options', issues)
   validateBooleanOption(options.caseSensitiveKeyMatch, 'options', 'caseSensitiveKeyMatch', issues)
   validateCensorOption(options.censor, 'options', issues)
@@ -743,7 +781,7 @@ export const validateConfig = (options: unknown): ValidationReport => {
   validateBooleanOption(options.fuzzyKeyMatch, 'options', 'fuzzyKeyMatch', issues)
   validateIgnoredValueTypes(options.ignoredValueTypes, 'options.ignoredValueTypes', issues)
   validateValueTypes(options.types, 'options.types', issues)
-  validateKeys(options.keys, 'options.keys', issues)
+  validateKeys(options.keys, 'options.keys', rootDefaults, issues)
   validateStringTests(options.stringTests, 'options.stringTests', issues)
   validateTransformers(options.transformers, 'options.transformers', issues)
   validatePositiveIntegerOption(options.maxDepth, 'options', 'maxDepth', issues)
@@ -752,25 +790,11 @@ export const validateConfig = (options: unknown): ValidationReport => {
   validateBooleanOption(options.retainStructure, 'options', 'retainStructure', issues)
   validateBooleanOption(options.replaceStringByLength, 'options', 'replaceStringByLength', issues)
   validateSerialiseOption(options.serialise, 'options', issues)
-  validateConflictingOptions(
-    {
-      censor: options.censor,
-      remove: options.remove === true,
-      retainStructure: options.retainStructure === true,
-      replaceStringByLength: options.replaceStringByLength === true,
-    },
-    'options',
-    issues,
-  )
+  validateConflictingOptions(rootDefaults, 'options', issues)
   validatePaths(
     options.paths,
     'options.paths',
-    {
-      censor: options.censor,
-      remove: options.remove === true,
-      retainStructure: options.retainStructure === true,
-      replaceStringByLength: options.replaceStringByLength === true,
-    },
+    rootDefaults,
     issues,
     selectorCandidates,
   )

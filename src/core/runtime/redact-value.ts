@@ -4,6 +4,7 @@ import type {
   CompiledLiteralKeyRule,
   CompiledRedactionPolicy,
   CompiledRedactorPlan,
+  CompiledRegexKeyRule,
   CompiledSubstringRule,
   FunctionCensorContext,
 } from '../compiler/compile-redactor-plan.js'
@@ -64,6 +65,8 @@ interface TraversalContext {
 interface DirectKeyMatchResult {
   readonly source: 'exact-key' | 'regex-key';
   readonly rulePath: PathSegments;
+  // The matched key rule's per-key override, if any. When unset the shared key-rule policy applies.
+  readonly policy?: CompiledRedactionPolicy;
 }
 
 interface TraversalResult {
@@ -161,12 +164,12 @@ export const setObjectEntry = (
 }
 
 const findMatchingRegexKey = (
-  matchers: readonly RegExp[],
+  matchers: readonly CompiledRegexKeyRule[],
   key: string,
-): RegExp | undefined => {
-  return matchers.find((matcher) => {
-    matcher.lastIndex = 0
-    return matcher.test(key)
+): CompiledRegexKeyRule | undefined => {
+  return matchers.find((rule) => {
+    rule.matcher.lastIndex = 0
+    return rule.matcher.test(key)
   })
 }
 
@@ -412,15 +415,17 @@ const resolveDirectKeyMatch = (
     return {
       source: 'exact-key',
       rulePath: matchingLiteralRule.rulePath,
+      policy: matchingLiteralRule.policy,
     }
   }
 
-  const matchingRegex = findMatchingRegexKey(plan.regexKeyRules.matchers, key)
+  const matchingRegexRule = findMatchingRegexKey(plan.regexKeyRules.matchers, key)
 
-  if (matchingRegex !== undefined) {
+  if (matchingRegexRule !== undefined) {
     return {
       source: 'regex-key',
-      rulePath: Object.freeze([matchingRegex]),
+      rulePath: Object.freeze([matchingRegexRule.matcher]),
+      policy: matchingRegexRule.policy,
     }
   }
 
@@ -546,7 +551,7 @@ const selectActivePolicy = (
 
   if (directKeyMatch?.source === 'exact-key') {
     return {
-      policy: plan.exactKeyRules.policy,
+      policy: directKeyMatch.policy ?? plan.exactKeyRules.policy,
       source: 'exact-key',
       rulePath: directKeyMatch.rulePath,
     }
@@ -554,7 +559,7 @@ const selectActivePolicy = (
 
   if (directKeyMatch?.source === 'regex-key') {
     return {
-      policy: plan.regexKeyRules.policy,
+      policy: directKeyMatch.policy ?? plan.regexKeyRules.policy,
       source: 'regex-key',
       rulePath: directKeyMatch.rulePath,
     }

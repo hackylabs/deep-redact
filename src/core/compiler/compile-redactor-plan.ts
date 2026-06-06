@@ -65,6 +65,10 @@ export interface CompiledLiteralKeyRule {
   readonly canonicalKey: string;
   readonly configuredKey: string;
   readonly matchMode: CompiledLiteralKeyMatchMode;
+  // Per-key redaction override compiled via `mergePolicy(defaults, overrides)`. Unset when the key
+  // rule carries no overrides, in which case the shared `CompiledExactKeyRules.policy` applies and
+  // existing behaviour is preserved exactly.
+  readonly policy?: CompiledRedactionPolicy;
   readonly rulePath: PathSegments;
 }
 
@@ -74,8 +78,15 @@ export interface CompiledExactKeyRules {
   readonly requiresCanonicalKey: boolean;
 }
 
+export interface CompiledRegexKeyRule {
+  readonly matcher: RegExp;
+  // Per-key redaction override; unset when the regex key rule carries no overrides, in which case
+  // the shared `CompiledRegexKeyRules.policy` applies.
+  readonly policy?: CompiledRedactionPolicy;
+}
+
 export interface CompiledRegexKeyRules {
-  readonly matchers: readonly RegExp[];
+  readonly matchers: readonly CompiledRegexKeyRule[];
   readonly policy: CompiledRedactionPolicy;
 }
 
@@ -245,14 +256,38 @@ const isKeyRule = (keySelector: KeySelector): keySelector is KeyRule => {
     && 'key' in keySelector
 }
 
-const toLiteralKeyRule = (keySelector: string | KeyRule, defaults: KeyMatchDefaults): CompiledLiteralKeyRule => {
-  const configuredKey = typeof keySelector === 'string' ? keySelector : keySelector.key
-  const fuzzyKeyMatch = typeof keySelector === 'string'
-    ? defaults.fuzzyKeyMatch
-    : keySelector.fuzzyKeyMatch ?? defaults.fuzzyKeyMatch
-  const caseSensitiveKeyMatch = typeof keySelector === 'string'
-    ? defaults.caseSensitiveKeyMatch
-    : keySelector.caseSensitiveKeyMatch ?? defaults.caseSensitiveKeyMatch
+const keyRuleHasPolicyOverrides = (rule: KeyRule): boolean => {
+  return rule.censor !== undefined
+    || rule.remove !== undefined
+    || rule.retainStructure !== undefined
+    || rule.replaceStringByLength !== undefined
+}
+
+// Per-key overrides reuse the same compile-time merge as `PathRule`. A rule that specifies any
+// override compiles a per-rule policy merged over the compiled global defaults; a rule with none
+// keeps `policy` unset and continues to use the shared key-rule policy, preserving behaviour.
+const compileKeyRulePolicy = (
+  rule: KeyRule,
+  defaults: CompiledRedactionPolicy,
+): CompiledRedactionPolicy | undefined => {
+  return keyRuleHasPolicyOverrides(rule)
+    ? mergePolicy(defaults, {
+      censor: rule.censor,
+      remove: rule.remove,
+      retainStructure: rule.retainStructure,
+      replaceStringByLength: rule.replaceStringByLength,
+    })
+    : undefined
+}
+
+const toLiteralKeyRule = (
+  configuredKey: string,
+  overrides: KeyRule | undefined,
+  defaults: CompiledRedactionPolicy,
+  keyDefaults: KeyMatchDefaults,
+): CompiledLiteralKeyRule => {
+  const fuzzyKeyMatch = overrides?.fuzzyKeyMatch ?? keyDefaults.fuzzyKeyMatch
+  const caseSensitiveKeyMatch = overrides?.caseSensitiveKeyMatch ?? keyDefaults.caseSensitiveKeyMatch
 
   let matchMode: CompiledLiteralKeyMatchMode = 'exact'
 
@@ -266,6 +301,7 @@ const toLiteralKeyRule = (keySelector: string | KeyRule, defaults: KeyMatchDefau
     canonicalKey: canonicaliseKey(configuredKey),
     configuredKey,
     matchMode,
+    policy: overrides === undefined ? undefined : compileKeyRulePolicy(overrides, defaults),
     rulePath: Object.freeze([configuredKey]) as PathSegments,
   })
 }
@@ -278,8 +314,11 @@ const compileExactKeyRules = (
   const literalMatchers: CompiledLiteralKeyRule[] = []
 
   for (const key of keys) {
-    if (typeof key === 'string' || isKeyRule(key)) {
-      literalMatchers.push(toLiteralKeyRule(key, keyDefaults))
+    if (typeof key === 'string') {
+      literalMatchers.push(toLiteralKeyRule(key, undefined, defaults, keyDefaults))
+    } else if (isKeyRule(key) && typeof key.key === 'string') {
+      // A regex-keyed rule routes to the regex matcher instead; only string-keyed rules are literal.
+      literalMatchers.push(toLiteralKeyRule(key.key, key, defaults, keyDefaults))
     }
   }
 
@@ -294,11 +333,16 @@ const compileRegexKeyRules = (
   keys: readonly KeySelector[],
   defaults: CompiledRedactionPolicy,
 ): CompiledRegexKeyRules => {
-  const matchers: RegExp[] = []
+  const matchers: CompiledRegexKeyRule[] = []
 
   for (const key of keys) {
     if (key instanceof RegExp) {
-      matchers.push(new RegExp(key.source, key.flags))
+      matchers.push(Object.freeze({ matcher: new RegExp(key.source, key.flags) }))
+    } else if (isKeyRule(key) && key.key instanceof RegExp) {
+      matchers.push(Object.freeze({
+        matcher: new RegExp(key.key.source, key.key.flags),
+        policy: compileKeyRulePolicy(key, defaults),
+      }))
     }
   }
 

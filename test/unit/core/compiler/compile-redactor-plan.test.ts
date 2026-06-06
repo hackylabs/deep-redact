@@ -164,9 +164,10 @@ describe('compiled exact-selector rule plan', () => {
       },
     ])
     expect(plan.regexKeyRules.matchers).toHaveLength(1)
-    expect(plan.regexKeyRules.matchers[0]).not.toBe(tokenPattern)
-    expect(plan.regexKeyRules.matchers[0]?.source).toBe('token$')
-    expect(plan.regexKeyRules.matchers[0]?.flags).toBe('i')
+    expect(plan.regexKeyRules.matchers[0]?.matcher).not.toBe(tokenPattern)
+    expect(plan.regexKeyRules.matchers[0]?.matcher.source).toBe('token$')
+    expect(plan.regexKeyRules.matchers[0]?.matcher.flags).toBe('i')
+    expect(plan.regexKeyRules.matchers[0]?.policy).toBeUndefined()
     expect(Object.isFrozen(plan.regexKeyRules.matchers)).toBe(true)
     expect(plan.regexKeyRules.policy).toBe(plan.exactKeyRules.policy)
     expect(plan.regexKeyRules.policy).toEqual({
@@ -208,7 +209,7 @@ describe('compiled exact-selector rule plan', () => {
     const plan = compileRedactorPlan({
       keys: [tokenPattern],
     })
-    const matcher = plan.regexKeyRules.matchers[0]
+    const matcher = plan.regexKeyRules.matchers[0]?.matcher
 
     tokenPattern.lastIndex = 99
 

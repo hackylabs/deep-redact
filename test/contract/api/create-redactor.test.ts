@@ -1719,8 +1719,8 @@ describe('Reusable redactor factory contract', () => {
     it.each([
       [
         'rejects unsupported key-rule option names',
-        { keys: [{ key: 'password', remove: true }] },
-        /options\.keys\[0\]: unsupported option "remove"/i,
+        { keys: [{ key: 'password', unknownOption: true }] },
+        /options\.keys\[0\]: unsupported option "unknownOption"/i,
       ],
       [
         'rejects non-boolean fuzzyKeyMatch values',
@@ -1738,9 +1738,9 @@ describe('Reusable redactor factory contract', () => {
         /options\.keys\[0\]\.key: key must not be empty/i,
       ],
       [
-        'rejects non-string key-rule key values',
-        { keys: [{ key: /password/i }] },
-        /options\.keys\[0\]\.key: key must be a string/i,
+        'rejects non-string, non-RegExp key-rule key values',
+        { keys: [{ key: 42 }] },
+        /options\.keys\[0\]\.key: key must be a string or RegExp/i,
       ],
     ])('%s', (_label, options, expectedMessage) => {
       expect(() => deepRedact(options as never)).toThrow(expectedMessage)
@@ -2011,6 +2011,285 @@ describe('Reusable redactor factory contract', () => {
       })
       expect(contexts).toHaveLength(1)
       expect(contexts[0]!.rulePath).toEqual(['pass'])
+    })
+  })
+
+  describe('v3 BlacklistKeyConfig parity: per-key overrides', () => {
+    it.each([
+      [
+        'rejects remove combined with censor on a literal key rule',
+        { keys: [{ key: 'password', remove: true, censor: '[X]' }] },
+        /options\.keys\[0\].*remove cannot be combined with censor/i,
+      ],
+      [
+        'rejects remove combined with retainStructure on a literal key rule',
+        { keys: [{ key: 'password', remove: true, retainStructure: true }] },
+        /options\.keys\[0\].*remove cannot be combined with retainStructure/i,
+      ],
+      [
+        'rejects remove combined with retainStructure on a regex key rule',
+        { keys: [{ key: /secret$/, remove: true, retainStructure: true }] },
+        /options\.keys\[0\].*remove cannot be combined with retainStructure/i,
+      ],
+      [
+        'rejects a non-boolean remove on a key rule',
+        { keys: [{ key: 'password', remove: 'yes' }] },
+        /options\.keys\[0\]\.remove: remove must be a boolean/i,
+      ],
+      [
+        'rejects a non-boolean retainStructure on a key rule',
+        { keys: [{ key: 'password', retainStructure: 'yes' }] },
+        /options\.keys\[0\]\.retainStructure: retainStructure must be a boolean/i,
+      ],
+      [
+        'rejects a non-boolean replaceStringByLength on a key rule',
+        { keys: [{ key: 'password', replaceStringByLength: 'yes' }] },
+        /options\.keys\[0\]\.replaceStringByLength: replaceStringByLength must be a boolean/i,
+      ],
+      [
+        'rejects a non-string/function censor on a key rule',
+        { keys: [{ key: 'password', censor: 42 }] },
+        /options\.keys\[0\]\.censor: censor must be a string or function/i,
+      ],
+      [
+        'rejects an unsupported global regex key-rule selector',
+        { keys: [{ key: /password/g }] },
+        /options\.keys\[0\]\.key: regex key selector must not use global or sticky flags/i,
+      ],
+    ])('%s', (_label, options, expectedMessage) => {
+      expect(() => deepRedact(options as never)).toThrow(expectedMessage)
+    })
+
+    it('applies a per-key string censor while keys matched by override-free rules use the global default', () => {
+      const redact = deepRedact({
+        censor: '[GLOBAL]',
+        keys: [
+          { key: 'password', censor: '[PWD]' },
+          'token',
+        ],
+      })
+
+      expect(redact({
+        password: 'secret',
+        token: 'session',
+        safe: 'visible',
+      })).toEqual({
+        password: '[PWD]',
+        token: '[GLOBAL]',
+        safe: 'visible',
+      })
+    })
+
+    it('invokes a per-key function censor with the matched key context', () => {
+      const contexts: FunctionCensorContext[] = []
+      const redact = deepRedact({
+        keys: [{
+          key: 'password',
+          censor: (value: unknown, ctx: FunctionCensorContext) => {
+            contexts.push(ctx)
+            return `[len:${String(value).length}|key:${String(ctx.terminalKey)}]`
+          },
+        }],
+      })
+
+      expect(redact({
+        account: { password: 'secret' },
+      })).toEqual({
+        account: { password: '[len:6|key:password]' },
+      })
+      expect(contexts).toHaveLength(1)
+      expect(contexts[0]!.rulePath).toEqual(['password'])
+      expect(contexts[0]!.terminalKey).toBe('password')
+      expect(contexts[0]!.matchedPath).toEqual(['account', 'password'])
+    })
+
+    it('removes a matching key when the literal key rule sets remove: true', () => {
+      const redact = deepRedact({
+        keys: [{ key: 'password', remove: true }],
+      })
+
+      expect(redact({ password: 'secret', keep: 'visible' })).toEqual({
+        keep: 'visible',
+      })
+    })
+
+    it('retains a matched container structure and redacts descendants under the inherited per-key censor', () => {
+      const redact = deepRedact({
+        censor: '[GLOBAL]',
+        keys: [{ key: 'credentials', retainStructure: true, censor: '[HIDDEN]' }],
+      })
+      const payload = {
+        credentials: {
+          token: 'abc',
+          nested: { password: 'def' },
+        },
+        public: { token: 'visible' },
+      }
+      const originalPayload = structuredClone(payload)
+
+      expect(redact(payload)).toEqual({
+        credentials: {
+          token: '[HIDDEN]',
+          nested: { password: '[HIDDEN]' },
+        },
+        public: { token: 'visible' },
+      })
+      expect(payload).toStrictEqual(originalPayload)
+    })
+
+    it('keeps the inherited per-key retain-structure policy over a descendant key-rule policy', () => {
+      const redact = deepRedact({
+        keys: [
+          { key: 'parent', retainStructure: true, censor: '[PARENT]' },
+          { key: 'password', censor: '[PWD]' },
+        ],
+      })
+      const payload = {
+        parent: { username: 'alice', password: 'secret' },
+        other: { password: 'top' },
+      }
+      const originalPayload = structuredClone(payload)
+
+      expect(redact(payload)).toEqual({
+        parent: { username: '[PARENT]', password: '[PARENT]' },
+        other: { password: '[PWD]' },
+      })
+      expect(payload).toStrictEqual(originalPayload)
+    })
+
+    it('replaces a matching string value with a same-length censor when replaceStringByLength is set', () => {
+      const redact = deepRedact({
+        censor: '*',
+        keys: [{ key: 'pin', replaceStringByLength: true }],
+      })
+
+      expect(redact({ pin: '12345', other: 'visible' })).toEqual({
+        pin: '*****',
+        other: 'visible',
+      })
+    })
+
+    it('applies per-key overrides carried by a regex key rule', () => {
+      const redact = deepRedact({
+        censor: '[GLOBAL]',
+        keys: [{ key: /secret$/i, censor: '[REGEX-OVERRIDE]' }],
+      })
+
+      expect(redact({
+        apiSecret: 'a',
+        topSecret: 'b',
+        safe: 'c',
+      })).toEqual({
+        apiSecret: '[REGEX-OVERRIDE]',
+        topSecret: '[REGEX-OVERRIDE]',
+        safe: 'c',
+      })
+    })
+
+    it('removes keys matched by a regex key rule with remove: true', () => {
+      const redact = deepRedact({
+        keys: [{ key: /token$/i, remove: true }],
+      })
+
+      expect(redact({
+        accessToken: 'a',
+        refreshToken: 'b',
+        keep: 'c',
+      })).toEqual({
+        keep: 'c',
+      })
+    })
+
+    it('retains structure for a container matched by a regex key rule with overrides', () => {
+      const redact = deepRedact({
+        keys: [{ key: /^creds/i, retainStructure: true, censor: '[R]' }],
+      })
+
+      expect(redact({
+        credsBundle: { a: '1', b: { c: '2' } },
+        other: 'x',
+      })).toEqual({
+        credsBundle: { a: '[R]', b: { c: '[R]' } },
+        other: 'x',
+      })
+    })
+
+    it('keeps string key rules without overrides on the shared key-rule policy (parity preserved)', () => {
+      const withRule = deepRedact({ censor: '[G]', keys: [{ key: 'password' }] })
+      const withBare = deepRedact({ censor: '[G]', keys: ['password'] })
+      const payload = { password: 'secret', safe: 'visible' }
+
+      expect(withRule(payload)).toEqual(withBare(payload))
+      expect(withRule(payload)).toEqual({ password: '[G]', safe: 'visible' })
+    })
+
+    it('keeps regex key rules without overrides on the shared regex policy (parity preserved)', () => {
+      const withRule = deepRedact({ censor: '[G]', keys: [{ key: /secret$/i }] })
+      const withBare = deepRedact({ censor: '[G]', keys: [/secret$/i] })
+      const payload = { apiSecret: 'a', safe: 'b' }
+
+      expect(withRule(payload)).toEqual(withBare(payload))
+      expect(withRule(payload)).toEqual({ apiSecret: '[G]', safe: 'b' })
+    })
+
+    it('keeps path-rule precedence over a key rule that carries its own per-key override', () => {
+      const redact = deepRedact({
+        keys: [{ key: 'token', censor: '[KEY-OVERRIDE]' }],
+        paths: [{ path: 'user.token', censor: '[PATH]' }],
+      })
+
+      expect(redact({
+        user: { token: 'a' },
+        token: 'b',
+      })).toEqual({
+        user: { token: '[PATH]' },
+        token: '[KEY-OVERRIDE]',
+      })
+    })
+
+    it('keeps exact-key precedence over regex-key when both carry overrides and match the same key', () => {
+      const redact = deepRedact({
+        keys: [
+          { key: 'token', censor: '[EXACT-OVERRIDE]' },
+          { key: /token$/i, censor: '[REGEX-OVERRIDE]' },
+        ],
+      })
+
+      expect(redact({ token: 'a' })).toEqual({ token: '[EXACT-OVERRIDE]' })
+    })
+
+    it('pins first-match-wins among literal key rules carrying different overrides', () => {
+      const redact = deepRedact({
+        keys: [
+          { key: 'pass', fuzzyKeyMatch: true, censor: '[FIRST]' },
+          { key: 'password', censor: '[SECOND]' },
+        ],
+      })
+
+      expect(redact({ password: 'secret' })).toEqual({ password: '[FIRST]' })
+    })
+
+    it('still vetoes a per-key override through the value-type allowlist (Story 9.1)', () => {
+      const redact = deepRedact({
+        keys: [{ key: 'count', censor: '[NUM]' }],
+      })
+
+      expect(redact({ count: 42, name: 'alice' })).toEqual({
+        count: 42,
+        name: 'alice',
+      })
+    })
+
+    it('applies a per-key override to a numeric value when the value-type allowlist permits it', () => {
+      const redact = deepRedact({
+        types: ['string', 'number'],
+        keys: [{ key: 'count', censor: '[NUM]' }],
+      })
+
+      expect(redact({ count: 42, name: 'alice' })).toEqual({
+        count: '[NUM]',
+        name: 'alice',
+      })
     })
   })
 

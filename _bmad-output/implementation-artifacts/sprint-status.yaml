@@ -127,6 +127,7 @@ development_status:
 
   epic-9: in-progress
   9-1-restore-the-value-type-allowlist-types-with-string-only-default: done
-  9-2-restore-full-keyrule-parity-with-the-v3-blacklistkeyconfig: ready-for-dev
+  9-2-restore-full-keyrule-parity-with-the-v3-blacklistkeyconfig: done
   9-3-update-v3-migration-matrix-generated-doc-and-worked-examples-for-restored-capabilities: ready-for-dev
+  9-4-scope-rule-invalid-combination-checks-to-same-rule-options: cancelled
   epic-9-retrospective: optional

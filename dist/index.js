@@ -20,6 +20,23 @@ const compileIgnoredValueTypes = (configured) => {
 	});
 };
 //#endregion
+//#region src/core/compiler/compile-value-types.ts
+const compileValueTypes = (configured) => {
+	const allows = (name) => {
+		return configured === void 0 ? name === "string" : configured.includes(name);
+	};
+	return Object.freeze({
+		string: allows("string"),
+		number: allows("number"),
+		bigint: allows("bigint"),
+		boolean: allows("boolean"),
+		object: allows("object"),
+		function: allows("function"),
+		symbol: allows("symbol"),
+		undefined: allows("undefined")
+	});
+};
+//#endregion
 //#region src/transformers/built-ins.ts
 const bigintTransformer = (value) => {
 	if (typeof value !== "bigint") return value;
@@ -597,10 +614,20 @@ const compilePathRules = (pathEntries, defaults) => {
 const isKeyRule = (keySelector) => {
 	return typeof keySelector === "object" && keySelector !== null && !(keySelector instanceof RegExp) && "key" in keySelector;
 };
-const toLiteralKeyRule = (keySelector, defaults) => {
-	const configuredKey = typeof keySelector === "string" ? keySelector : keySelector.key;
-	const fuzzyKeyMatch = typeof keySelector === "string" ? defaults.fuzzyKeyMatch : keySelector.fuzzyKeyMatch ?? defaults.fuzzyKeyMatch;
-	const caseSensitiveKeyMatch = typeof keySelector === "string" ? defaults.caseSensitiveKeyMatch : keySelector.caseSensitiveKeyMatch ?? defaults.caseSensitiveKeyMatch;
+const keyRuleHasPolicyOverrides = (rule) => {
+	return rule.censor !== void 0 || rule.remove !== void 0 || rule.retainStructure !== void 0 || rule.replaceStringByLength !== void 0;
+};
+const compileKeyRulePolicy = (rule, defaults) => {
+	return keyRuleHasPolicyOverrides(rule) ? mergePolicy(defaults, {
+		censor: rule.censor,
+		remove: rule.remove,
+		retainStructure: rule.retainStructure,
+		replaceStringByLength: rule.replaceStringByLength
+	}) : void 0;
+};
+const toLiteralKeyRule = (configuredKey, overrides, defaults, keyDefaults) => {
+	const fuzzyKeyMatch = overrides?.fuzzyKeyMatch ?? keyDefaults.fuzzyKeyMatch;
+	const caseSensitiveKeyMatch = overrides?.caseSensitiveKeyMatch ?? keyDefaults.caseSensitiveKeyMatch;
 	let matchMode = "exact";
 	if (fuzzyKeyMatch) matchMode = caseSensitiveKeyMatch ? "contains" : "canonical-contains";
 	else if (!caseSensitiveKeyMatch) matchMode = "canonical-exact";
@@ -608,12 +635,14 @@ const toLiteralKeyRule = (keySelector, defaults) => {
 		canonicalKey: canonicaliseKey(configuredKey),
 		configuredKey,
 		matchMode,
+		policy: overrides === void 0 ? void 0 : compileKeyRulePolicy(overrides, defaults),
 		rulePath: Object.freeze([configuredKey])
 	});
 };
 const compileExactKeyRules = (keys, defaults, keyDefaults) => {
 	const literalMatchers = [];
-	for (const key of keys) if (typeof key === "string" || isKeyRule(key)) literalMatchers.push(toLiteralKeyRule(key, keyDefaults));
+	for (const key of keys) if (typeof key === "string") literalMatchers.push(toLiteralKeyRule(key, void 0, defaults, keyDefaults));
+	else if (isKeyRule(key) && typeof key.key === "string") literalMatchers.push(toLiteralKeyRule(key.key, key, defaults, keyDefaults));
 	return Object.freeze({
 		literalMatchers: Object.freeze(literalMatchers),
 		policy: defaults,
@@ -622,7 +651,11 @@ const compileExactKeyRules = (keys, defaults, keyDefaults) => {
 };
 const compileRegexKeyRules = (keys, defaults) => {
 	const matchers = [];
-	for (const key of keys) if (key instanceof RegExp) matchers.push(new RegExp(key.source, key.flags));
+	for (const key of keys) if (key instanceof RegExp) matchers.push(Object.freeze({ matcher: new RegExp(key.source, key.flags) }));
+	else if (isKeyRule(key) && key.key instanceof RegExp) matchers.push(Object.freeze({
+		matcher: new RegExp(key.key.source, key.key.flags),
+		policy: compileKeyRulePolicy(key, defaults)
+	}));
 	return Object.freeze({
 		matchers: Object.freeze(matchers),
 		policy: defaults
@@ -669,12 +702,16 @@ const compileRedactorPlan = (options = {}) => {
 		regexKeyRules,
 		serialise: options.serialise,
 		substringRules,
-		transformers: compileTransformers(options.transformers)
+		transformers: compileTransformers(options.transformers),
+		valueTypes: compileValueTypes(options.types)
 	});
 };
 //#endregion
 //#region src/core/replacement/apply-redaction.ts
 const defaultCensor = "[REDACTED]";
+const isRedactableType = (value, valueTypes) => {
+	return valueTypes[typeof value];
+};
 const removedValue = Symbol("deep-redact.removed");
 const isRemovedValue = (value) => {
 	return value === removedValue;
@@ -877,9 +914,9 @@ const setObjectEntry = (target, key, value) => {
 	else target[key] = value;
 };
 const findMatchingRegexKey = (matchers, key) => {
-	return matchers.find((matcher) => {
-		matcher.lastIndex = 0;
-		return matcher.test(key);
+	return matchers.find((rule) => {
+		rule.matcher.lastIndex = 0;
+		return rule.matcher.test(key);
 	});
 };
 const findMatchingLiteralKey = (literalMatchers, requiresCanonicalKey, key) => {
@@ -997,12 +1034,14 @@ const resolveDirectKeyMatch = (plan, key) => {
 	const matchingLiteralRule = findMatchingLiteralKey(plan.exactKeyRules.literalMatchers, plan.exactKeyRules.requiresCanonicalKey, key);
 	if (matchingLiteralRule !== void 0) return {
 		source: "exact-key",
-		rulePath: matchingLiteralRule.rulePath
+		rulePath: matchingLiteralRule.rulePath,
+		policy: matchingLiteralRule.policy
 	};
-	const matchingRegex = findMatchingRegexKey(plan.regexKeyRules.matchers, key);
-	if (matchingRegex !== void 0) return {
+	const matchingRegexRule = findMatchingRegexKey(plan.regexKeyRules.matchers, key);
+	if (matchingRegexRule !== void 0) return {
 		source: "regex-key",
-		rulePath: Object.freeze([matchingRegex])
+		rulePath: Object.freeze([matchingRegexRule.matcher]),
+		policy: matchingRegexRule.policy
 	};
 };
 const resolveExactPathRule = (plan, canonicalPath) => {
@@ -1045,12 +1084,12 @@ const selectActivePolicy = (plan, exactPathRule, dynamicPathRule, directKeyMatch
 	};
 	if (inheritedPolicy?.source === "exact-path" || inheritedPolicy?.source === "dynamic-path" || inheritedPolicy?.source === "exact-key" || inheritedPolicy?.source === "regex-key") return inheritedPolicy;
 	if (directKeyMatch?.source === "exact-key") return {
-		policy: plan.exactKeyRules.policy,
+		policy: directKeyMatch.policy ?? plan.exactKeyRules.policy,
 		source: "exact-key",
 		rulePath: directKeyMatch.rulePath
 	};
 	if (directKeyMatch?.source === "regex-key") return {
-		policy: plan.regexKeyRules.policy,
+		policy: directKeyMatch.policy ?? plan.regexKeyRules.policy,
 		source: "regex-key",
 		rulePath: directKeyMatch.rulePath
 	};
@@ -1478,10 +1517,19 @@ const replayCompletedTraversal = (value, snapshot, plan, inheritedPolicy, contex
 const transformNode = (value, plan, context, state, branchState) => {
 	state.budget.nodesVisited += 1;
 	if (isNodeBudgetExceeded(state.budget, plan.maxNodes)) throwBudgetExceeded(plan, context, "nodes");
-	const activePolicy = context.suppressDescendantRedaction ? void 0 : selectActivePolicy(plan, resolveExactPathRule(plan, context.canonicalPath), plan.dynamicPathRules.length === 0 ? void 0 : resolveDynamicPathRule(plan, context.pathSegments), context.directKeyMatch, context.inheritedPolicy);
-	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) return applyConfiguredRedaction(value, activePolicy.policy, activePolicy.rulePath, !usesPathSensitivePolicy(activePolicy), plan, context);
+	let activePolicy = context.suppressDescendantRedaction ? void 0 : selectActivePolicy(plan, resolveExactPathRule(plan, context.canonicalPath), plan.dynamicPathRules.length === 0 ? void 0 : resolveDynamicPathRule(plan, context.pathSegments), context.directKeyMatch, context.inheritedPolicy);
+	if (activePolicy !== void 0 && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) {
+		if (isRedactableType(value, plan.valueTypes)) return applyConfiguredRedaction(value, activePolicy.policy, activePolicy.rulePath, !usesPathSensitivePolicy(activePolicy), plan, context);
+		if (!isTraversableContainer(value)) return {
+			cacheValue: value,
+			changed: false,
+			pathStable: true,
+			value
+		};
+		activePolicy = context.inheritedPolicy;
+	}
 	if (!isTraversableContainer(value)) {
-		const substringResult = context.suppressDescendantRedaction ? void 0 : transformSubstringValue(value, plan, context);
+		const substringResult = context.suppressDescendantRedaction || plan.substringRules.length === 0 || !isRedactableType(value, plan.valueTypes) ? void 0 : transformSubstringValue(value, plan, context);
 		if (substringResult !== void 0) return substringResult;
 		return {
 			cacheValue: value,
@@ -1636,6 +1684,7 @@ const emitCensorFailure = (plan, canonicalPath, value, error) => {
 	})));
 };
 const applyTerminalRule = (value, rule, plan, rootInput) => {
+	if (!isRedactableType(value, plan.valueTypes)) return value;
 	try {
 		if (typeof rule.policy.censor === "function") return applyRedaction(value, rule.policy, {
 			matchedPath: rule.rulePath,
@@ -1650,6 +1699,7 @@ const applyTerminalRule = (value, rule, plan, rootInput) => {
 	}
 };
 const applyWildcardTerminalRule = (value, rule, plan, rootInput, matchedPath) => {
+	if (!isRedactableType(value, plan.valueTypes)) return value;
 	try {
 		if (typeof rule.policy.censor === "function") return applyRedaction(value, rule.policy, {
 			matchedPath: Object.freeze([...matchedPath]),
@@ -1683,6 +1733,7 @@ const materialiseRetainCanonical = (inherited, leafSegment) => {
 	return appendCanonicalPathSegment(path, leafSegment);
 };
 const applyInheritedLeaf = (value, inherited, segment, key, plan, rootInput) => {
+	if (!isRedactableType(value, plan.valueTypes)) return value;
 	try {
 		if (typeof inherited.policy.censor === "function") return applyRedaction(value, inherited.policy, {
 			matchedPath: materialiseRetainMatchedPath(inherited, key),
@@ -1771,6 +1822,7 @@ const redactRetained = (container, level, inherited, plan, rootInput, budget) =>
 				const node = level.indexChildren?.get(index);
 				if (node?.rule?.kind === "wildcard") return delegate;
 				if (node?.rule !== void 0 && !node.rule.policy.retainStructure) {
+					if (isDescendable(value) && !isRedactableType(value, plan.valueTypes)) return delegate;
 					const redacted = applyTerminalRule(value, node.rule, plan, rootInput);
 					copy ??= shallowCopyContainer(container);
 					if (isRemovedValue(redacted)) (removedIndices ??= []).push(index);
@@ -1786,6 +1838,7 @@ const redactRetained = (container, level, inherited, plan, rootInput, budget) =>
 				}
 				if (node?.rule !== void 0 || inherited !== void 0) {
 					if (requiresDelegation(value)) return delegate;
+					if (!isRedactableType(value, plan.valueTypes)) continue;
 					const redacted = node?.rule === void 0 ? applyInheritedLeaf(value, inherited, buildSegment("index", index), index, plan, rootInput) : applyTerminalRule(value, node.rule, plan, rootInput);
 					copy ??= shallowCopyContainer(container);
 					if (isRemovedValue(redacted)) (removedIndices ??= []).push(index);
@@ -1810,6 +1863,7 @@ const redactRetained = (container, level, inherited, plan, rootInput, budget) =>
 			const value = container[key];
 			if (node?.rule?.kind === "wildcard") return delegate;
 			if (node?.rule !== void 0 && !node.rule.policy.retainStructure) {
+				if (isDescendable(value) && !isRedactableType(value, plan.valueTypes)) return delegate;
 				const redacted = applyTerminalRule(value, node.rule, plan, rootInput);
 				copy ??= shallowCopyContainer(container);
 				if (isRemovedValue(redacted)) delete copy[key];
@@ -1825,6 +1879,7 @@ const redactRetained = (container, level, inherited, plan, rootInput, budget) =>
 			}
 			if (node?.rule !== void 0 || inherited !== void 0) {
 				if (requiresDelegation(value)) return delegate;
+				if (!isRedactableType(value, plan.valueTypes)) continue;
 				const redacted = node?.rule === void 0 ? applyInheritedLeaf(value, inherited, buildSegment("property", key), key, plan, rootInput) : applyTerminalRule(value, node.rule, plan, rootInput);
 				copy ??= shallowCopyContainer(container);
 				if (isRemovedValue(redacted)) delete copy[key];
@@ -1886,6 +1941,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 						else copy[index] = retained;
 					}
 				} else {
+					if (isDescendable(value) && !isRedactableType(value, plan.valueTypes)) return delegate;
 					const redacted = applyWildcardTerminalRule(value, childNode.rule, plan, rootInput, concreteMatchedPath);
 					if (copy === void 0) {
 						copy = shallowCopyContainer(container);
@@ -1897,6 +1953,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 				continue;
 			}
 			if (childNode.rule !== void 0 && !childNode.rule.policy.retainStructure) {
+				if (isDescendable(value) && !isRedactableType(value, plan.valueTypes)) return delegate;
 				const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput);
 				if (copy === void 0) {
 					copy = shallowCopyContainer(container);
@@ -1955,6 +2012,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 						else setObjectEntry(copy, key, retained);
 					}
 				} else {
+					if (isDescendable(value) && !isRedactableType(value, plan.valueTypes)) return delegate;
 					const redacted = applyWildcardTerminalRule(value, childNode.rule, plan, rootInput, concreteMatchedPath);
 					if (copy === void 0) {
 						copy = shallowCopyContainer(container);
@@ -1966,6 +2024,7 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 				continue;
 			}
 			if (childNode.rule !== void 0 && !childNode.rule.policy.retainStructure) {
+				if (isDescendable(value) && !isRedactableType(value, plan.valueTypes)) return delegate;
 				const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput);
 				if (copy === void 0) {
 					copy = shallowCopyContainer(container);
@@ -2057,7 +2116,10 @@ const navigateNode = (container, level, plan, rootInput, ancestorCopies, compact
 };
 const applyWildcardEdge = (value, wildcardChild, matchedPath, plan, rootInput, ancestorCopies, compactedArrayCopies, budget) => {
 	if (wildcardChild.rule !== void 0) {
-		if (!wildcardChild.rule.policy.retainStructure) return applyWildcardTerminalRule(value, wildcardChild.rule, plan, rootInput, matchedPath);
+		if (!wildcardChild.rule.policy.retainStructure) {
+			if (isDescendable(value) && !isRedactableType(value, plan.valueTypes)) return delegate;
+			return applyWildcardTerminalRule(value, wildcardChild.rule, plan, rootInput, matchedPath);
+		}
 		return resolveRetainTerminalWildcard(value, wildcardChild, plan, rootInput, ancestorCopies, budget, matchedPath);
 	}
 	if (isDescendable(value)) return navigateNode(value, wildcardChild, plan, rootInput, ancestorCopies, compactedArrayCopies, budget, matchedPath);
@@ -2167,7 +2229,18 @@ const rootOptionNames = new Set([
 	"ignoredValueTypes",
 	"serialise",
 	"stringTests",
-	"transformers"
+	"transformers",
+	"types"
+]);
+const valueTypeNames = new Set([
+	"string",
+	"number",
+	"bigint",
+	"boolean",
+	"object",
+	"function",
+	"symbol",
+	"undefined"
 ]);
 const pathRuleOptionNames = new Set([
 	"path",
@@ -2179,8 +2252,12 @@ const pathRuleOptionNames = new Set([
 const substringRuleOptionNames = new Set(["pattern", "replacer"]);
 const keyRuleOptionNames = new Set([
 	"caseSensitiveKeyMatch",
+	"censor",
 	"fuzzyKeyMatch",
-	"key"
+	"key",
+	"remove",
+	"replaceStringByLength",
+	"retainStructure"
 ]);
 const transformerOptionNames = new Set([
 	"byType",
@@ -2276,9 +2353,12 @@ const validateLiteralKeySelector = (entry, path, issues) => {
 	const unsupportedSelectorMessage = getUnsupportedKeySelectorMessage(entry);
 	if (unsupportedSelectorMessage !== void 0) pushIssue(issues, path, unsupportedSelectorMessage);
 };
-const validateKeyRule = (value, path, issues) => {
+const validateKeyRule = (value, path, defaults, issues) => {
 	validateAllowedOptions(value, keyRuleOptionNames, path, issues);
-	if (typeof value.key !== "string") pushIssue(issues, `${path}.key`, "key must be a string.");
+	if (isRegExp(value.key)) {
+		const unsupportedRegexMessage = getUnsupportedKeyRegexMessage(value.key);
+		if (unsupportedRegexMessage !== void 0) pushIssue(issues, `${path}.key`, unsupportedRegexMessage);
+	} else if (typeof value.key !== "string") pushIssue(issues, `${path}.key`, "key must be a string or RegExp.");
 	else if (value.key.length === 0) pushIssue(issues, `${path}.key`, "key must not be empty.");
 	else {
 		const unsupportedSelectorMessage = getUnsupportedKeySelectorMessage(value.key);
@@ -2286,8 +2366,19 @@ const validateKeyRule = (value, path, issues) => {
 	}
 	validateBooleanOption(value.fuzzyKeyMatch, path, "fuzzyKeyMatch", issues);
 	validateBooleanOption(value.caseSensitiveKeyMatch, path, "caseSensitiveKeyMatch", issues);
+	validateCensorOption(value.censor, path, issues);
+	validateBooleanOption(value.remove, path, "remove", issues);
+	validateBooleanOption(value.retainStructure, path, "retainStructure", issues);
+	validateBooleanOption(value.replaceStringByLength, path, "replaceStringByLength", issues);
+	const effectiveReplaceStringByLength = typeof value.replaceStringByLength === "boolean" ? value.replaceStringByLength : defaults.replaceStringByLength;
+	validateConflictingOptions({
+		censor: value.censor ?? defaults.censor,
+		remove: value.remove ?? defaults.remove,
+		retainStructure: value.retainStructure ?? defaults.retainStructure,
+		replaceStringByLength: effectiveReplaceStringByLength
+	}, path, issues);
 };
-const validateKeys = (value, path, issues) => {
+const validateKeys = (value, path, defaults, issues) => {
 	if (value === void 0) return;
 	if (!Array.isArray(value)) {
 		pushIssue(issues, path, "keys must be an array.");
@@ -2305,7 +2396,7 @@ const validateKeys = (value, path, issues) => {
 			continue;
 		}
 		if (isPlainObject(entry)) {
-			validateKeyRule(entry, entryPath, issues);
+			validateKeyRule(entry, entryPath, defaults, issues);
 			continue;
 		}
 		pushIssue(issues, entryPath, "key selectors must be strings or RegExp instances or key-rule objects.");
@@ -2438,6 +2529,14 @@ const validateIgnoredValueTypes = (value, path, issues) => {
 		validateBooleanOption(value[optionName], path, optionName, issues);
 	}
 };
+const validateValueTypes = (value, path, issues) => {
+	if (value === void 0) return;
+	if (!Array.isArray(value)) {
+		pushIssue(issues, path, "types must be an array of value-type names.");
+		return;
+	}
+	for (const [index, entry] of value.entries()) if (typeof entry !== "string" || !valueTypeNames.has(entry)) pushIssue(issues, `${path}[${index}]`, `Unsupported value type name "${String(entry)}". Supported names: ${[...valueTypeNames].join(", ")}.`);
+};
 const validateDiagnostics = (value, path, issues) => {
 	if (value === void 0) return;
 	if (!isPlainObject(value)) {
@@ -2500,13 +2599,20 @@ const validateConfig = (options) => {
 		pushIssue(issues, "options", "options must be an object.");
 		return createValidationReport(issues);
 	}
+	const rootDefaults = {
+		censor: options.censor,
+		remove: options.remove === true,
+		retainStructure: options.retainStructure === true,
+		replaceStringByLength: options.replaceStringByLength === true
+	};
 	validateAllowedOptions(options, rootOptionNames, "options", issues);
 	validateBooleanOption(options.caseSensitiveKeyMatch, "options", "caseSensitiveKeyMatch", issues);
 	validateCensorOption(options.censor, "options", issues);
 	validateDiagnostics(options.diagnostics, "options.diagnostics", issues);
 	validateBooleanOption(options.fuzzyKeyMatch, "options", "fuzzyKeyMatch", issues);
 	validateIgnoredValueTypes(options.ignoredValueTypes, "options.ignoredValueTypes", issues);
-	validateKeys(options.keys, "options.keys", issues);
+	validateValueTypes(options.types, "options.types", issues);
+	validateKeys(options.keys, "options.keys", rootDefaults, issues);
 	validateStringTests(options.stringTests, "options.stringTests", issues);
 	validateTransformers(options.transformers, "options.transformers", issues);
 	validatePositiveIntegerOption(options.maxDepth, "options", "maxDepth", issues);
@@ -2515,18 +2621,8 @@ const validateConfig = (options) => {
 	validateBooleanOption(options.retainStructure, "options", "retainStructure", issues);
 	validateBooleanOption(options.replaceStringByLength, "options", "replaceStringByLength", issues);
 	validateSerialiseOption(options.serialise, "options", issues);
-	validateConflictingOptions({
-		censor: options.censor,
-		remove: options.remove === true,
-		retainStructure: options.retainStructure === true,
-		replaceStringByLength: options.replaceStringByLength === true
-	}, "options", issues);
-	validatePaths(options.paths, "options.paths", {
-		censor: options.censor,
-		remove: options.remove === true,
-		retainStructure: options.retainStructure === true,
-		replaceStringByLength: options.replaceStringByLength === true
-	}, issues, selectorCandidates);
+	validateConflictingOptions(rootDefaults, "options", issues);
+	validatePaths(options.paths, "options.paths", rootDefaults, issues, selectorCandidates);
 	validatePathSelectors(selectorCandidates, issues);
 	return createValidationReport(issues);
 };

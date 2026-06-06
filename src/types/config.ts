@@ -4,10 +4,19 @@ import type { IgnoredValueTypesOption } from './ignored-value-types.js'
 import type { TransformersOption } from './transformers.js'
 
 export type SerialiseOption = boolean | ((value: unknown) => string)
+
+// A per-key rule reaching parity with the v3 `BlacklistKeyConfig`: `key` may be a literal string
+// or a RegExp, and each rule may carry its own redaction overrides (`censor`, `remove`,
+// `retainStructure`, `replaceStringByLength`) plus the literal-key matching flags. A rule with no
+// overrides keeps using the shared key-rule policy, preserving prior behaviour exactly.
 export interface KeyRule {
-  readonly key: string;
+  readonly key: string | RegExp;
   readonly fuzzyKeyMatch?: boolean;
   readonly caseSensitiveKeyMatch?: boolean;
+  readonly censor?: Censor;
+  readonly remove?: boolean;
+  readonly retainStructure?: boolean;
+  readonly replaceStringByLength?: boolean;
 }
 
 export type KeySelector = string | RegExp | KeyRule
