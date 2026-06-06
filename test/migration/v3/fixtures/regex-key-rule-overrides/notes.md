@@ -1,0 +1,1 @@
+A v3 regex `BlacklistKeyConfig` (`key: /.../`) carries over as a v4 `KeyRule` whose `key` is the same RegExp, and a regex key rule reaches the same per-key override parity as a literal key rule. Here `/token$/i` matches `accessToken` and `refreshToken` (case-insensitively) and applies the per-key `censor` `[TOKEN REDACTED]`; `name` is left untouched.

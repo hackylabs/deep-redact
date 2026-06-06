@@ -13,7 +13,7 @@ This guide covers the Deep Redact v3-to-v4 migration only. The `fast-redact` mig
 - Source package: `@hackylabs/deep-redact`
 - Canonical manifest: `test/migration/v3/matrix.json`
 - Fixture root: `test/migration/v3/fixtures`
-- Structured output rows: 8
+- Structured output rows: 10
 - Serialised output rows: 1
 - Initialisation error rows: 1
 
@@ -29,7 +29,7 @@ This guide covers the Deep Redact v3-to-v4 migration only. The `fast-redact` mig
 
 ## Options That Carry Over Unchanged
 
-`serialise`, `retainStructure`, `fuzzyKeyMatch`, `caseSensitiveKeyMatch`, `replaceStringByLength`, `remove`
+`serialise`, `retainStructure`, `fuzzyKeyMatch`, `caseSensitiveKeyMatch`, `replaceStringByLength`, `remove`, `types`
 
 ## Matrix
 
@@ -38,9 +38,11 @@ This guide covers the Deep Redact v3-to-v4 migration only. The `fast-redact` mig
 | `class-instantiation-to-factory` | `v4-structured-output` |
 | `invocation-pattern-change` | `v4-structured-output` |
 | `blacklisted-keys-rename` | `v4-structured-output` |
+| `regex-key-rule-overrides` | `v4-structured-output` |
 | `replacement-string-rename` | `v4-structured-output` |
 | `replacement-function-rename` | `v4-structured-output` |
 | `unchanged-options` | `v4-structured-output` |
+| `value-type-allowlist-carryover` | `v4-structured-output` |
 | `serialise-option-carryover` | `v4-serialised-output` |
 | `remove-option-carryover` | `v4-structured-output` |
 | `combined-migration` | `v4-structured-output` |
@@ -160,7 +162,7 @@ v3 usage:
 ```json
 {
   "import": "DeepRedact",
-  "instantiation": "new DeepRedact({ blacklistedKeys: ['password'] })",
+  "instantiation": "new DeepRedact({ blacklistedKeys: [{ key: 'password', replacement: '[PWD]' }] })",
   "invocation": "redactor.redact(payload)"
 }
 ```
@@ -170,11 +172,14 @@ v4 usage:
 ```json
 {
   "import": "deepRedact",
-  "factory": "deepRedact({ keys: ['password'] })",
+  "factory": "deepRedact({ keys: [{ key: 'password', censor: '[PWD]' }] })",
   "invocation": "redactor(payload)",
   "config": {
     "keys": [
-      "password"
+      {
+        "key": "password",
+        "censor": "[PWD]"
+      }
     ]
   }
 }
@@ -185,17 +190,71 @@ Expected result:
 ```json
 {
   "username": "alice",
-  "password": "[REDACTED]"
+  "password": "[PWD]"
 }
 ```
 
 Migration steps:
 
 - Rename `blacklistedKeys` to `keys`.
+- A v3 `BlacklistKeyConfig` object maps to a v4 `KeyRule` object with the same fields. Map the per-key `replacement` field to `censor`; `key`, `fuzzyKeyMatch`, `caseSensitiveKeyMatch`, `retainStructure`, `remove`, and `replaceStringByLength` carry over unchanged.
 - Replace `new DeepRedact(options)` with `deepRedact(options)`.
 - Replace `redactor.redact(payload)` with `redactor(payload)`.
 
-Notes: The `blacklistedKeys` option is renamed to `keys` in v4. The semantics and accepted selector types are unchanged.
+Notes: The `blacklistedKeys` option is renamed to `keys` in v4. A v3 `BlacklistKeyConfig` object carries over as a v4 `KeyRule` object with the same fields; the per-key `replacement` field maps to `censor`. Here the per-key `censor` `[PWD]` redacts the matched `password` value.
+
+### regex-key-rule-overrides
+
+Assertion mode: `v4-structured-output`
+
+Fixture directory: `test/migration/v3/fixtures/regex-key-rule-overrides`
+
+v3 usage:
+
+```json
+{
+  "import": "DeepRedact",
+  "instantiation": "new DeepRedact({ blacklistedKeys: [{ key: /token$/i, replacement: '[TOKEN REDACTED]' }] })",
+  "invocation": "redactor.redact(payload)"
+}
+```
+
+v4 usage:
+
+```json
+{
+  "import": "deepRedact",
+  "factory": "deepRedact({ keys: [{ key: /token$/i, censor: '[TOKEN REDACTED]' }] })",
+  "invocation": "redactor(payload)",
+  "config": {
+    "keys": [
+      {
+        "key": "/token$/i",
+        "censor": "[TOKEN REDACTED]"
+      }
+    ]
+  }
+}
+```
+
+Expected result:
+
+```json
+{
+  "accessToken": "[TOKEN REDACTED]",
+  "refreshToken": "[TOKEN REDACTED]",
+  "name": "service"
+}
+```
+
+Migration steps:
+
+- Rename `blacklistedKeys` to `keys`.
+- A regex `BlacklistKeyConfig` (`key: /.../`) maps to a v4 `KeyRule` whose `key` is the same RegExp; regex key rules carry the same per-key overrides as literal key rules. Map the per-key `replacement` to `censor`.
+- Replace `new DeepRedact(options)` with `deepRedact(options)`.
+- Replace `redactor.redact(payload)` with `redactor(payload)`.
+
+Notes: A v3 regex `BlacklistKeyConfig` (`key: /.../`) carries over as a v4 `KeyRule` whose `key` is the same RegExp, and a regex key rule reaches the same per-key override parity as a literal key rule. Here `/token$/i` matches `accessToken` and `refreshToken` (case-insensitively) and applies the per-key `censor` `[TOKEN REDACTED]`; `name` is left untouched.
 
 ### replacement-string-rename
 
@@ -351,6 +410,62 @@ Migration steps:
 - Options `retainStructure`, `fuzzyKeyMatch`, and `caseSensitiveKeyMatch` carry over unchanged; `replaceStringByLength` also carries over unchanged with the same name and semantics.
 
 Notes: Options `retainStructure` and `fuzzyKeyMatch` carry over to v4 with the same names and semantics. This row proves both simultaneously: fuzzy matching finds `homeAddress` via the `address` selector, and `retainStructure` preserves the nested shape.
+
+### value-type-allowlist-carryover
+
+Assertion mode: `v4-structured-output`
+
+Fixture directory: `test/migration/v3/fixtures/value-type-allowlist-carryover`
+
+v3 usage:
+
+```json
+{
+  "import": "DeepRedact",
+  "instantiation": "new DeepRedact({ blacklistedKeys: ['accountId', 'label', 'verified'], types: ['string', 'number'] })",
+  "invocation": "redactor.redact(payload)"
+}
+```
+
+v4 usage:
+
+```json
+{
+  "import": "deepRedact",
+  "factory": "deepRedact({ keys: ['accountId', 'label', 'verified'], types: ['string', 'number'] })",
+  "invocation": "redactor(payload)",
+  "config": {
+    "keys": [
+      "accountId",
+      "label",
+      "verified"
+    ],
+    "types": [
+      "string",
+      "number"
+    ]
+  }
+}
+```
+
+Expected result:
+
+```json
+{
+  "accountId": "[REDACTED]",
+  "label": "[REDACTED]",
+  "verified": true
+}
+```
+
+Migration steps:
+
+- Rename `blacklistedKeys` to `keys`.
+- Replace `new DeepRedact(options)` with `deepRedact(options)`.
+- Replace `redactor.redact(payload)` with `redactor(payload)`.
+- The `types` value-type allowlist carries over unchanged, keeping the v3 string-only default; list additional `typeof` names (e.g. `['string', 'number']`) to make those value types eligible for redaction, exactly as in v3. Values whose type is not listed are left untouched even when a key or path rule matches.
+
+Notes: The `types` value-type allowlist carries over from v3 unchanged, including its string-only default. Here `types: ['string', 'number']` makes both the string `label` and the numeric `accountId` eligible for redaction, while the boolean `verified` is left untouched even though its key matches — a value whose `typeof` is not listed is never redacted.
 
 ### serialise-option-carryover
 

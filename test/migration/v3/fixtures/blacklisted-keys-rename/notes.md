@@ -1,1 +1,1 @@
-The `blacklistedKeys` option is renamed to `keys` in v4. The semantics and accepted selector types are unchanged.
+The `blacklistedKeys` option is renamed to `keys` in v4. A v3 `BlacklistKeyConfig` object carries over as a v4 `KeyRule` object with the same fields; the per-key `replacement` field maps to `censor`. Here the per-key `censor` `[PWD]` redacts the matched `password` value.

@@ -242,7 +242,7 @@ describe('example manifest contract', () => {
   it('runs verifyExampleManifest against the real manifest and returns verified rows without error', async () => {
     const result = await verifyExampleManifest({ repositoryRoot: repoRoot })
 
-    expect(result).toHaveLength(20)
+    expect(result).toHaveLength(24)
     expect(result.map(r => r.id)).toStrictEqual([
       'singleton-setup',
       'key-targeting',
@@ -254,11 +254,15 @@ describe('example manifest contract', () => {
       'path-segment-ignore',
       'substring-targeting',
       'root-primitive-redaction',
+      'per-key-rule-overrides-string',
+      'per-key-rule-overrides-regex',
       'replacement-and-removal',
       'retain-structure',
       'same-length-replacement',
       'serialised-output',
       'ignored-value-types',
+      'value-type-allowlist-default',
+      'value-type-allowlist-extended',
       'custom-transformer',
       'graceful-error-replacement',
       'console-redaction',
@@ -267,11 +271,11 @@ describe('example manifest contract', () => {
     ])
   })
 
-  it('contains exactly 18 non-migration example rows', () => {
+  it('contains exactly 22 non-migration example rows', () => {
     const manifest = loadExampleManifest(repoRoot)
     const nonMigrationRows = manifest.rows.filter(r => !r.category.startsWith('migration-'))
 
-    expect(nonMigrationRows).toHaveLength(18)
+    expect(nonMigrationRows).toHaveLength(22)
   })
 
   it('contains at least one migration-fast-redact row and at least one migration-v3 row', () => {

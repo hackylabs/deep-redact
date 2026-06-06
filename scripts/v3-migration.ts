@@ -71,6 +71,14 @@ interface HelperReference {
   helperId: string;
 }
 
+// A JSON-expressible stand-in for a RegExp value inside a fixture config (matrix.json cannot hold a
+// live RegExp). Materialised to `new RegExp(regexSource, regexFlags)` for verification and rendered
+// as `/source/flags` in the generated guide. Used for regex `key` selectors on KeyRule fixtures.
+interface RegexReference {
+  regexSource: string;
+  regexFlags?: string;
+}
+
 const require = createRequire(import.meta.url)
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 const defaultRepositoryRoot = path.resolve(scriptDirectory, '..')
@@ -114,6 +122,7 @@ const KNOWN_V4_OPTIONS_ARRAY = [
   'serialise',
   'stringTests',
   'transformers',
+  'types',
 ] as const satisfies ReadonlyArray<keyof DeepRedactOptions>
 
 export const KNOWN_V4_OPTIONS = new Set<string>(KNOWN_V4_OPTIONS_ARRAY)
@@ -133,9 +142,21 @@ const isHelperReference = (value: unknown): value is HelperReference => {
     && value.helperId.length > 0
 }
 
+const isRegexReference = (value: unknown): value is RegexReference => {
+  return isRecord(value)
+    && typeof value.regexSource === 'string'
+    && value.regexSource.length > 0
+    && (value.regexFlags === undefined || typeof value.regexFlags === 'string')
+    && Object.keys(value).every((key) => key === 'regexSource' || key === 'regexFlags')
+}
+
 const materialiseHelperConfig = (value: unknown): unknown => {
   if (Array.isArray(value)) {
     return value.map((entry) => materialiseHelperConfig(entry))
+  }
+
+  if (isRegexReference(value)) {
+    return new RegExp(value.regexSource, value.regexFlags)
   }
 
   if (isHelperReference(value)) {
@@ -273,6 +294,39 @@ const assertStringArray = (
   return true
 }
 
+// Walk a materialisable v4 config and fail with a row-scoped message if any regex reference does
+// not form a valid RegExp. Without this, an invalid `regexSource`/`regexFlags` passes shape
+// validation and only throws a raw SyntaxError later, during materialisation/rendering.
+const validateRegexReferences = (value: unknown, row: V3MigrationRow): void => {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      validateRegexReferences(entry, row)
+    }
+
+    return
+  }
+
+  if (isRegexReference(value)) {
+    try {
+      new RegExp(value.regexSource, value.regexFlags)
+    } catch (error) {
+      fail(
+        row,
+        'fixture',
+        `v4Usage.config regex reference /${value.regexSource}/${value.regexFlags ?? ''} is not a valid RegExp: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+
+    return
+  }
+
+  if (isRecord(value)) {
+    for (const entry of Object.values(value)) {
+      validateRegexReferences(entry, row)
+    }
+  }
+}
+
 export const loadV3MigrationMatrix = (
   repositoryRoot = defaultRepositoryRoot,
 ): V3MigrationMatrix => {
@@ -363,6 +417,8 @@ if (!isRecord(candidateRow.v4Usage)) {
         }
       }
     }
+
+    validateRegexReferences(candidateRow.v4Usage.config, candidateRow)
 
     assertStringArray(candidateRow.migrationSteps, candidateRow, 'migrationSteps')
 
@@ -579,6 +635,10 @@ const renderFixtureHelperReferences = (value: unknown): unknown => {
     return value.map((entry) => renderFixtureHelperReferences(entry))
   }
 
+  if (isRegexReference(value)) {
+    return `/${value.regexSource}/${value.regexFlags ?? ''}`
+  }
+
   if (isHelperReference(value)) {
     return `[Function fixture helper: ${value.helperId}]`
   }
@@ -687,7 +747,7 @@ export const renderV3MigrationGuide = (
     '',
     '## Options That Carry Over Unchanged',
     '',
-    '`serialise`, `retainStructure`, `fuzzyKeyMatch`, `caseSensitiveKeyMatch`, `replaceStringByLength`, `remove`',
+    '`serialise`, `retainStructure`, `fuzzyKeyMatch`, `caseSensitiveKeyMatch`, `replaceStringByLength`, `remove`, `types`',
     '',
     '## Matrix',
     '',

@@ -70,19 +70,48 @@
       "fixtureDir": "test/migration/v3/fixtures/blacklisted-keys-rename",
       "v3Usage": {
         "import": "DeepRedact",
-        "instantiation": "new DeepRedact({ blacklistedKeys: ['password'] })",
+        "instantiation": "new DeepRedact({ blacklistedKeys: [{ key: 'password', replacement: '[PWD]' }] })",
         "invocation": "redactor.redact(payload)"
       },
       "v4Usage": {
         "import": "deepRedact",
-        "factory": "deepRedact({ keys: ['password'] })",
+        "factory": "deepRedact({ keys: [{ key: 'password', censor: '[PWD]' }] })",
         "invocation": "redactor(payload)",
         "config": {
-          "keys": ["password"]
+          "keys": [{ "key": "password", "censor": "[PWD]" }]
         }
       },
       "migrationSteps": [
         "Rename `blacklistedKeys` to `keys`.",
+        "A v3 `BlacklistKeyConfig` object maps to a v4 `KeyRule` object with the same fields. Map the per-key `replacement` field to `censor`; `key`, `fuzzyKeyMatch`, `caseSensitiveKeyMatch`, `retainStructure`, `remove`, and `replaceStringByLength` carry over unchanged.",
+        "Replace `new DeepRedact(options)` with `deepRedact(options)`.",
+        "Replace `redactor.redact(payload)` with `redactor(payload)`."
+      ],
+      "assertionMode": "v4-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "regex-key-rule-overrides",
+      "fixtureDir": "test/migration/v3/fixtures/regex-key-rule-overrides",
+      "v3Usage": {
+        "import": "DeepRedact",
+        "instantiation": "new DeepRedact({ blacklistedKeys: [{ key: /token$/i, replacement: '[TOKEN REDACTED]' }] })",
+        "invocation": "redactor.redact(payload)"
+      },
+      "v4Usage": {
+        "import": "deepRedact",
+        "factory": "deepRedact({ keys: [{ key: /token$/i, censor: '[TOKEN REDACTED]' }] })",
+        "invocation": "redactor(payload)",
+        "config": {
+          "keys": [{ "key": { "regexSource": "token$", "regexFlags": "i" }, "censor": "[TOKEN REDACTED]" }]
+        }
+      },
+      "migrationSteps": [
+        "Rename `blacklistedKeys` to `keys`.",
+        "A regex `BlacklistKeyConfig` (`key: /.../`) maps to a v4 `KeyRule` whose `key` is the same RegExp; regex key rules carry the same per-key overrides as literal key rules. Map the per-key `replacement` to `censor`.",
         "Replace `new DeepRedact(options)` with `deepRedact(options)`.",
         "Replace `redactor.redact(payload)` with `redactor(payload)`."
       ],
@@ -174,6 +203,35 @@
         "Replace `new DeepRedact(options)` with `deepRedact(options)`.",
         "Replace `redactor.redact(payload)` with `redactor(payload)`.",
         "Options `retainStructure`, `fuzzyKeyMatch`, and `caseSensitiveKeyMatch` carry over unchanged; `replaceStringByLength` also carries over unchanged with the same name and semantics."
+      ],
+      "assertionMode": "v4-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "value-type-allowlist-carryover",
+      "fixtureDir": "test/migration/v3/fixtures/value-type-allowlist-carryover",
+      "v3Usage": {
+        "import": "DeepRedact",
+        "instantiation": "new DeepRedact({ blacklistedKeys: ['accountId', 'label', 'verified'], types: ['string', 'number'] })",
+        "invocation": "redactor.redact(payload)"
+      },
+      "v4Usage": {
+        "import": "deepRedact",
+        "factory": "deepRedact({ keys: ['accountId', 'label', 'verified'], types: ['string', 'number'] })",
+        "invocation": "redactor(payload)",
+        "config": {
+          "keys": ["accountId", "label", "verified"],
+          "types": ["string", "number"]
+        }
+      },
+      "migrationSteps": [
+        "Rename `blacklistedKeys` to `keys`.",
+        "Replace `new DeepRedact(options)` with `deepRedact(options)`.",
+        "Replace `redactor.redact(payload)` with `redactor(payload)`.",
+        "The `types` value-type allowlist carries over unchanged, keeping the v3 string-only default; list additional `typeof` names (e.g. `['string', 'number']`) to make those value types eligible for redaction, exactly as in v3. Values whose type is not listed are left untouched even when a key or path rule matches."
       ],
       "assertionMode": "v4-structured-output",
       "expectedResult": {

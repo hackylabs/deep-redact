@@ -97,6 +97,24 @@
       "expectedResultFile": "expected.json"
     },
     {
+      "id": "per-key-rule-overrides-string",
+      "category": "targeting",
+      "docTarget": "docs/examples/per-key-rule-overrides-string.md",
+      "sourceFile": "docs/examples/examples/per-key-rule-overrides-string.ts",
+      "fixtureDir": "docs/examples/fixtures/per-key-rule-overrides-string",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "per-key-rule-overrides-regex",
+      "category": "targeting",
+      "docTarget": "docs/examples/per-key-rule-overrides-regex.md",
+      "sourceFile": "docs/examples/examples/per-key-rule-overrides-regex.ts",
+      "fixtureDir": "docs/examples/fixtures/per-key-rule-overrides-regex",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
       "id": "replacement-and-removal",
       "category": "replacement",
       "docTarget": "docs/examples/replacement-and-removal.md",
@@ -140,6 +158,24 @@
       "fixtureDir": "docs/examples/fixtures/ignored-value-types",
       "assertionMode": "serialised-output",
       "expectedResultFile": "expected.txt"
+    },
+    {
+      "id": "value-type-allowlist-default",
+      "category": "runtime",
+      "docTarget": "docs/examples/value-type-allowlist-default.md",
+      "sourceFile": "docs/examples/examples/value-type-allowlist-default.ts",
+      "fixtureDir": "docs/examples/fixtures/value-type-allowlist-default",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
+    },
+    {
+      "id": "value-type-allowlist-extended",
+      "category": "runtime",
+      "docTarget": "docs/examples/value-type-allowlist-extended.md",
+      "sourceFile": "docs/examples/examples/value-type-allowlist-extended.ts",
+      "fixtureDir": "docs/examples/fixtures/value-type-allowlist-extended",
+      "assertionMode": "structured-output",
+      "expectedResultFile": "expected.json"
     },
     {
       "id": "custom-transformer",

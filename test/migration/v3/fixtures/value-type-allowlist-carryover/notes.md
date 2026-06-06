@@ -1,0 +1,1 @@
+The `types` value-type allowlist carries over from v3 unchanged, including its string-only default. Here `types: ['string', 'number']` makes both the string `label` and the numeric `accountId` eligible for redaction, while the boolean `verified` is left untouched even though its key matches — a value whose `typeof` is not listed is never redacted.
