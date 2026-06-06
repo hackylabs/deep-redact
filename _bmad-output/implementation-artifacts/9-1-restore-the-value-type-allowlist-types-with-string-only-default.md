@@ -1,6 +1,6 @@
 # Story 9.1: Restore the Value-Type Allowlist (`types`) with String-Only Default
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -64,18 +64,18 @@ This story restores `types` with strict v3 parity. Because v4 has not been publi
 
 ## Tasks / Subtasks
 
-- [ ] Add a `ValueTypeName` union (`'string' | 'number' | 'bigint' | 'boolean' | 'object' | 'function' | 'symbol' | 'undefined'`) and `readonly types?: readonly ValueTypeName[]` to `DeepRedactOptions` in [src/types/config.ts](src/types/config.ts); re-export the type through [src/types/public.ts](src/types/public.ts) and [src/index.ts](src/index.ts).
-- [ ] Add `types` to `rootOptionNames` and validate it is an array of supported type-name strings, rejecting unknown names, in [src/core/validation/validate-config.ts](src/core/validation/validate-config.ts).
-- [ ] Create `src/core/compiler/compile-value-types.ts`, mirroring [src/core/compiler/compile-ignored-value-types.ts](src/core/compiler/compile-ignored-value-types.ts): an unset option compiles the string-only default; the output is an immutable `typeof`-keyed boolean lookup (`CompiledValueTypesPlan`).
-- [ ] Add a non-optional `valueTypes: CompiledValueTypesPlan` to `CompiledRedactorPlan` and wire `compileValueTypes(options.types)` in `compileRedactorPlan` ([src/core/compiler/compile-redactor-plan.ts](src/core/compiler/compile-redactor-plan.ts)).
-- [ ] Add an exported `isRedactableType(value, valueTypes)` predicate in [src/core/replacement/apply-redaction.ts](src/core/replacement/apply-redaction.ts).
-- [ ] Gate the generic engine: fold the predicate into the wholesale-redaction-vs-traverse guard in `transformNode`/`applyConfiguredRedaction` ([src/core/runtime/redact-value.ts](src/core/runtime/redact-value.ts)). A scalar veto returns the raw value with `changed: false`; a container veto falls through to normal traversal. Gate before `buildFunctionCensorContext` so a veto skips context allocation.
-- [ ] Gate the rule-driven engine: apply the predicate in the three terminal apply helpers in [src/core/runtime/navigate-exact-paths.ts](src/core/runtime/navigate-exact-paths.ts) (exact-terminal, wildcard-terminal, inherited-retain). A veto returns the raw value, never a redaction.
-- [ ] Add contract tests in [test/contract/api/create-redactor.test.ts](test/contract/api/create-redactor.test.ts): string-only default; multi-type allowlist; authority across all targeting modes; cross-engine parity (AC 4); `Date` veto transformed under `serialise: true` and raw under `serialise: false` (AC 5); container veto descends (AC 6); validation failure (AC 7); the matched-but-vetoed ≡ unmatched invariant across `Date`/`Map`/`BigInt`.
-- [ ] Add a unit test for `compile-value-types` under [test/unit/core/compiler/](test/unit/core/compiler/) (run it explicitly — `test/unit/**` is not part of `pnpm run test`).
-- [ ] **Sweep existing v4 tests and fixtures** for assertions that redact a non-string value at a matched key/path: under the string-only default these now leave the value unchanged, so regenerate the expected outputs. A contract test that still passes only because it never exercised a non-string target is a coverage gap to close, not evidence of correctness.
-- [ ] Run `pnpm run bench` and `pnpm run verify:benchmarks`; confirm no `maxOverheadPct` threshold changed and existing rows pass (AC 8).
-- [ ] Update capability documentation and record the value-type-allowlist gap as addressed in [_bmad-output/implementation-artifacts/deferred-work-audit.md](_bmad-output/implementation-artifacts/deferred-work-audit.md).
+- [x] Add a `ValueTypeName` union (`'string' | 'number' | 'bigint' | 'boolean' | 'object' | 'function' | 'symbol' | 'undefined'`) and `readonly types?: readonly ValueTypeName[]` to `DeepRedactOptions` in [src/types/config.ts](src/types/config.ts); re-export the type through [src/types/public.ts](src/types/public.ts) and [src/index.ts](src/index.ts).
+- [x] Add `types` to `rootOptionNames` and validate it is an array of supported type-name strings, rejecting unknown names, in [src/core/validation/validate-config.ts](src/core/validation/validate-config.ts).
+- [x] Create `src/core/compiler/compile-value-types.ts`, mirroring [src/core/compiler/compile-ignored-value-types.ts](src/core/compiler/compile-ignored-value-types.ts): an unset option compiles the string-only default; the output is an immutable `typeof`-keyed boolean lookup (`CompiledValueTypesPlan`).
+- [x] Add a non-optional `valueTypes: CompiledValueTypesPlan` to `CompiledRedactorPlan` and wire `compileValueTypes(options.types)` in `compileRedactorPlan` ([src/core/compiler/compile-redactor-plan.ts](src/core/compiler/compile-redactor-plan.ts)).
+- [x] Add an exported `isRedactableType(value, valueTypes)` predicate in [src/core/replacement/apply-redaction.ts](src/core/replacement/apply-redaction.ts).
+- [x] Gate the generic engine: fold the predicate into the wholesale-redaction-vs-traverse guard in `transformNode`/`applyConfiguredRedaction` ([src/core/runtime/redact-value.ts](src/core/runtime/redact-value.ts)). A scalar veto returns the raw value with `changed: false`; a container veto falls through to normal traversal. Gate before `buildFunctionCensorContext` so a veto skips context allocation.
+- [x] Gate the rule-driven engine: apply the predicate in the three terminal apply helpers in [src/core/runtime/navigate-exact-paths.ts](src/core/runtime/navigate-exact-paths.ts) (exact-terminal, wildcard-terminal, inherited-retain). A veto returns the raw value, never a redaction.
+- [x] Add contract tests in [test/contract/api/create-redactor.test.ts](test/contract/api/create-redactor.test.ts): string-only default; multi-type allowlist; authority across all targeting modes; cross-engine parity (AC 4); `Date` veto transformed under `serialise: true` and raw under `serialise: false` (AC 5); container veto descends (AC 6); validation failure (AC 7); the matched-but-vetoed ≡ unmatched invariant across `Date`/`Map`/`BigInt`.
+- [x] Add a unit test for `compile-value-types` under [test/unit/core/compiler/](test/unit/core/compiler/) (run it explicitly — `test/unit/**` is not part of `pnpm run test`).
+- [x] **Sweep existing v4 tests and fixtures** for assertions that redact a non-string value at a matched key/path: under the string-only default these now leave the value unchanged, so regenerate the expected outputs. A contract test that still passes only because it never exercised a non-string target is a coverage gap to close, not evidence of correctness.
+- [x] Run `pnpm run bench` and `pnpm run verify:benchmarks`; confirm no `maxOverheadPct` threshold changed and existing rows pass (AC 8).
+- [x] Update capability documentation and record the value-type-allowlist gap as addressed in [_bmad-output/implementation-artifacts/deferred-work-audit.md](_bmad-output/implementation-artifacts/deferred-work-audit.md).
 
 ## Dev Notes
 
@@ -111,8 +111,47 @@ Enforce the gate at the **single shared leaf-replacement boundary** so both engi
 
 ### Debug Log
 
+- Sweep of the existing suite surfaced 22 contract failures, all from assertions that redacted a non-string value at a matched key/path. They were adapted, not relaxed: incidental numeric placeholders in mechanics tests were converted to strings (golden output unchanged), and tests/fixtures that specifically target a container or non-string for wholesale redaction were given an explicit widened `types` allowlist (golden output unchanged). The new default-veto behaviour is covered exhaustively by the new Story 9.1 contract suite.
+- Cross-engine parity required handling a vetoed *container* at a non-retain rule-driven terminal: the three terminal helpers return the raw value for vetoed leaves, but a vetoed descendable container at a non-retain terminal returns the `delegate` sentinel so the general traversal performs the veto-and-descend, guaranteeing byte-identical output (proved by the `parent-and-child-paths`/`array-terminal-value`/`nested-object-terminal` equivalence-corpus entries and the AC 4 shadow-exposure test).
+- `dist/` is gitignored (only a stale `dist/index.js` is tracked); the build is regenerated by `pnpm run build`, so no build artefact is committed with this change.
+
 ### Completion Notes
+
+Restored the v3 value-type allowlist (`types`, default `['string']`) with strict parity, implemented as a single O(1) `typeof`-keyed lookup enforced at the shared leaf-replacement boundary of both engines.
+
+- **Public surface:** `ValueTypeName` union + `types?: readonly ValueTypeName[]` on `DeepRedactOptions`, re-exported through `public.ts` and `index.ts` (verified present in built declarations).
+- **Compilation:** `compileValueTypes` compiles an immutable `typeof`-keyed `CompiledValueTypesPlan`; an unset option compiles the string-only default (never allow-all). Wired non-optionally into `CompiledRedactorPlan`.
+- **Enforcement:** `isRedactableType(value, valueTypes)` gates redaction in the generic engine (wholesale-redaction guard: vetoed scalar → raw `changed:false`; vetoed container → traverse as-if-unmatched; substring rules gated) and the rule-driven engine (three terminal apply helpers return raw on veto; vetoed containers at non-retain terminals delegate for byte-identical descent).
+- **Validation:** initialisation rejects a non-array `types` or any unsupported type-name string.
+- **Orthogonality preserved:** `types` governs redaction eligibility during traversal; transformation stays serialise-gated (vetoed `Date` transformed under `serialise:true`, raw under `serialise:false`); `ignoredValueTypes` unchanged.
+- **Verification:** `pnpm run test` 711 passed; `vitest --config vitest.red-phase.config.ts` 89 passed; `pnpm lint` exit 0; `pnpm run verify:benchmarks` all six rows pass with no `maxOverheadPct` threshold changed; `pnpm run bench` re-measured all rows within thresholds (regenerated machine-specific artefacts reverted to canonical).
 
 ### File List
 
+New:
+- `src/core/compiler/compile-value-types.ts`
+- `test/unit/core/compiler/compile-value-types.test.ts`
+
+Modified:
+- `src/types/config.ts`
+- `src/types/public.ts`
+- `src/index.ts`
+- `src/core/validation/validate-config.ts`
+- `src/core/compiler/compile-redactor-plan.ts`
+- `src/core/replacement/apply-redaction.ts`
+- `src/core/runtime/redact-value.ts`
+- `src/core/runtime/navigate-exact-paths.ts`
+- `test/contract/api/create-redactor.test.ts`
+- `test/contract/api/rule-driven-traversal-contract.test.ts`
+- `test/fixtures/exact-path-equivalence/index.ts`
+- `_bmad-output/implementation-artifacts/deferred-work-audit.md`
+
 ### Change Log
+
+- 2026-06-06 — Story 9.1: restored the value-type allowlist (`types`, string-only default) with v3 parity, enforced at the shared leaf-replacement boundary of both engines as a compiled O(1) `typeof` lookup; added validation, unit + contract coverage (ACs 1–8), swept existing fixtures/tests, and recorded the gap as addressed in the deferred-work audit. No benchmark threshold changed.
+
+### Review Findings
+
+Code review 2026-06-06 (bmad-code-review, three adversarial layers). 1 patch, 0 decision-needed, 0 defer, 11 dismissed (6 verified false positives, 5 by-design/harmless).
+
+- [x] [Review][Patch] Add a committed cross-engine parity test for the retain-structure + type-vetoed-container delegation path [src/core/runtime/navigate-exact-paths.ts:642-648,738-744] — **Fixed 2026-06-06**: added `cross-engine parity (AC 4) > … a retain ancestor holds a vetoed-container override (exercises redactRetained delegation)` to `test/contract/api/create-redactor.test.ts` (`[{ path: 'a', retainStructure: true }, 'a.b', 'a.b.secret']`, asserting path-driven ≡ generic and that the deeper leaf still redacts). Verified: full file 548 passing, `tsc --noEmit` clean. Regression-meaningful — removing the `return delegate` branch leaves `a.b.secret` un-redacted in path-driven mode and the test fails. — the new `return delegate` branches in `redactRetained` (a non-retain override on a default-vetoed object container, inside a `retainStructure: true` ancestor) are exercised by **no committed test**: the Story 9.1 contract suite has zero `retainStructure` configs, and every swept equivalence-corpus retain entry redacts only string leaves (no container veto). This is the riskiest new code, and its byte-identical cross-engine claim (AC 4) is currently pinned only by the Edge Case Hunter's ad-hoc probes. Add a contract case (or `exactPathEquivalenceCorpus` entry) with a config such as `[{ path: 'a', retainStructure: true }, 'a.b']` where `a.b` is an object under the default `types`, plus a deeper string rule, asserting path-driven ≡ generic and that the deeper leaf still redacts.

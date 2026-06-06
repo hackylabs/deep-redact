@@ -12,6 +12,7 @@ export type {
   SerialiseOption,
   StringTest,
   SubstringRule,
+  ValueTypeName,
 } from './config.js'
 export type { IgnoredValueTypesOption } from './ignored-value-types.js'
 export type {

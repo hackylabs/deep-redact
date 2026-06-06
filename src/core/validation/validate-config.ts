@@ -1,6 +1,6 @@
 import type { PathRule, PathSelector } from '../../types/paths.js'
 import type { IgnoredValueTypesOption } from '../../types/ignored-value-types.js'
-import type { DeepRedactOptions, SerialiseOption } from '../../types/public.js'
+import type { DeepRedactOptions, SerialiseOption, ValueTypeName } from '../../types/public.js'
 import type { TransformersByConstructor, TransformersByType } from '../../types/transformers.js'
 import { createValidationReport, type ValidationIssue, type ValidationReport } from './validation-report.js'
 import {
@@ -25,6 +25,18 @@ const rootOptionNames = new Set<keyof DeepRedactOptions>([
   'serialise',
   'stringTests',
   'transformers',
+  'types',
+])
+
+const valueTypeNames = new Set<ValueTypeName>([
+  'string',
+  'number',
+  'bigint',
+  'boolean',
+  'object',
+  'function',
+  'symbol',
+  'undefined',
 ])
 
 const pathRuleOptionNames = new Set<keyof PathRule>([
@@ -585,6 +597,31 @@ const validateIgnoredValueTypes = (
   }
 }
 
+const validateValueTypes = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): void => {
+  if (value === undefined) {
+    return
+  }
+
+  if (!Array.isArray(value)) {
+    pushIssue(issues, path, 'types must be an array of value-type names.')
+    return
+  }
+
+  for (const [index, entry] of value.entries()) {
+    if (typeof entry !== 'string' || !valueTypeNames.has(entry as ValueTypeName)) {
+      pushIssue(
+        issues,
+        `${path}[${index}]`,
+        `Unsupported value type name "${String(entry)}". Supported names: ${[...valueTypeNames].join(', ')}.`,
+      )
+    }
+  }
+}
+
 const validateDiagnostics = (
   value: unknown,
   path: string,
@@ -705,6 +742,7 @@ export const validateConfig = (options: unknown): ValidationReport => {
   validateDiagnostics(options.diagnostics, 'options.diagnostics', issues)
   validateBooleanOption(options.fuzzyKeyMatch, 'options', 'fuzzyKeyMatch', issues)
   validateIgnoredValueTypes(options.ignoredValueTypes, 'options.ignoredValueTypes', issues)
+  validateValueTypes(options.types, 'options.types', issues)
   validateKeys(options.keys, 'options.keys', issues)
   validateStringTests(options.stringTests, 'options.stringTests', issues)
   validateTransformers(options.transformers, 'options.transformers', issues)

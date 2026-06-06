@@ -1,5 +1,5 @@
 # generated: 2026-04-13T09:43:13+0100
-# last_updated: 2026-06-05T21:39:34+0100
+# last_updated: 2026-06-06T00:00:00+0100
 # project: deep-redact
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Scrum Master typically creates the next story after the previous one is 'done'
 
 generated: 2026-04-13T09:43:13+0100
-last_updated: 2026-06-05T20:28:00+0100
+last_updated: 2026-06-06T00:00:00+0100
 project: deep-redact
 project_key: NOKEY
 tracking_system: file-system
@@ -126,7 +126,7 @@ development_status:
   epic-8-retrospective: optional
 
   epic-9: in-progress
-  9-1-restore-the-value-type-allowlist-types-with-string-only-default: ready-for-dev
+  9-1-restore-the-value-type-allowlist-types-with-string-only-default: done
   9-2-restore-full-keyrule-parity-with-the-v3-blacklistkeyconfig: ready-for-dev
   9-3-update-v3-migration-matrix-generated-doc-and-worked-examples-for-restored-capabilities: ready-for-dev
   epic-9-retrospective: optional

@@ -79,7 +79,9 @@ describe('Rule-driven traversal contract', () => {
     it('applies the censor at a circular reference on a configured terminal without descending or throwing', () => {
       const payload: Record<string, unknown> = {}
       payload.self = payload
-      const redact = deepRedact({ paths: ['self'] })
+      // The terminal value is the circular object itself; the allowlist is widened to make object
+      // types eligible so the wholesale censor still applies (Story 9.1 — objects are vetoed by default).
+      const redact = deepRedact({ paths: ['self'], types: ['object'] })
 
       let output: Record<string, unknown> | undefined
       expect(() => { output = redact(payload) as Record<string, unknown> }).not.toThrow()
@@ -160,7 +162,7 @@ describe('Rule-driven traversal contract', () => {
 
     it('redacts a mid-path wildcard with exact segments before and after — a.*.b', () => {
       const redact = deepRedact({ paths: ['a.*.b'] })
-      const payload = { a: { x: { b: 1, c: 2 }, y: { b: 3 } } }
+      const payload = { a: { x: { b: 'b1', c: 2 }, y: { b: 'b2' } } }
 
       expect(redact(payload)).toStrictEqual({
         a: { x: { b: '[REDACTED]', c: 2 }, y: { b: '[REDACTED]' } },
@@ -207,7 +209,7 @@ describe('Rule-driven traversal contract', () => {
       // a.b.d through it (this overlap routes to the general traversal, which resolves it). Found
       // in review of Story 8.4: the rule-driven dedup had skipped `b` and left a.b.d raw.
       const redact = deepRedact({ paths: ['a.b.c', 'a.*.d'] })
-      const payload = { a: { b: { c: 1, d: 2 }, x: { d: 3 } } }
+      const payload = { a: { b: { c: 'c1', d: 'd2' }, x: { d: 'd3' } } }
 
       expect(redact(payload)).toStrictEqual({
         a: { b: { c: '[REDACTED]', d: '[REDACTED]' }, x: { d: '[REDACTED]' } },

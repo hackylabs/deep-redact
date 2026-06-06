@@ -30,6 +30,7 @@ export type {
   TransformersByConstructor,
   TransformersByType,
   TransformersOption,
+  ValueTypeName,
 } from './types/public.js'
 
 export const deepRedact = createReusableRedactor

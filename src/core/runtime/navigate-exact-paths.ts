@@ -5,7 +5,7 @@ import type {
 } from '../compiler/compile-redactor-plan.js'
 import type { ExactPathSegment, PathSegment } from '../matching/path-parser.js'
 import { appendCanonicalPathSegment } from '../matching/path-normaliser.js'
-import { applyRedaction, isRemovedValue } from '../replacement/apply-redaction.js'
+import { applyRedaction, isRedactableType, isRemovedValue } from '../replacement/apply-redaction.js'
 import {
   createDiagnosticEvent,
   createFailureDiagnosticSnapshot,
@@ -346,6 +346,13 @@ const applyTerminalRule = (
   plan: CompiledRedactorPlan,
   rootInput: unknown,
 ): unknown => {
+  // The value-type allowlist outranks the rule match (Story 9.1). A type-vetoed value is returned
+  // raw, byte-identical to an unmatched value of the same type. Callers route a vetoed *container*
+  // to the general traversal before reaching here, so this only ever vetoes leaves.
+  if (!isRedactableType(value, plan.valueTypes)) {
+    return value
+  }
+
   try {
     if (typeof rule.policy.censor === 'function') {
       return applyRedaction(value, rule.policy, {
@@ -375,6 +382,11 @@ const applyWildcardTerminalRule = (
   rootInput: unknown,
   matchedPath: readonly (string | number)[],
 ): unknown => {
+  // Value-type allowlist outranks the wildcard match (Story 9.1); a vetoed leaf is returned raw.
+  if (!isRedactableType(value, plan.valueTypes)) {
+    return value
+  }
+
   try {
     if (typeof rule.policy.censor === 'function') {
       return applyRedaction(value, rule.policy, {
@@ -442,6 +454,12 @@ const applyInheritedLeaf = (
   plan: CompiledRedactorPlan,
   rootInput: unknown,
 ): unknown => {
+  // Value-type allowlist outranks the inherited retain policy (Story 9.1); a vetoed leaf stays raw.
+  // Inherited leaves are always non-container primitives, so no delegation is needed here.
+  if (!isRedactableType(value, plan.valueTypes)) {
+    return value
+  }
+
   try {
     if (typeof inherited.policy.censor === 'function') {
       return applyRedaction(value, inherited.policy, {
@@ -624,6 +642,12 @@ const redactRetained = (
       }
 
       if (node?.rule !== undefined && !node.rule.policy.retainStructure) {
+        if (isDescendable(value) && !isRedactableType(value, plan.valueTypes)) {
+          // Type-vetoed container at a non-retain override — route as if unmatched: delegate so
+          // the general traversal descends it (and any deeper rules) with identical output.
+          return delegate
+        }
+
         const redacted = applyTerminalRule(value, node.rule, plan, rootInput)
         copy ??= shallowCopyContainer(container) as Record<string | number, unknown>
 
@@ -656,6 +680,12 @@ const redactRetained = (
         if (requiresDelegation(value)) {
           // Under a retain/inherited policy the general traversal transforms this value.
           return delegate
+        }
+
+        if (!isRedactableType(value, plan.valueTypes)) {
+          // Type-vetoed leaf — left raw with no copy write, so an all-vetoed subtree keeps its
+          // original identity, matching the general traversal's unchanged-reference behaviour.
+          continue
         }
 
         const redacted = node?.rule === undefined
@@ -708,6 +738,12 @@ const redactRetained = (
     }
 
     if (node?.rule !== undefined && !node.rule.policy.retainStructure) {
+      if (isDescendable(value) && !isRedactableType(value, plan.valueTypes)) {
+        // Type-vetoed container at a non-retain override — route as if unmatched: delegate so
+        // the general traversal descends it (and any deeper rules) with identical output.
+        return delegate
+      }
+
       const redacted = applyTerminalRule(value, node.rule, plan, rootInput)
       copy ??= shallowCopyContainer(container) as Record<string | number, unknown>
 
@@ -744,6 +780,12 @@ const redactRetained = (
       if (requiresDelegation(value)) {
         // Under a retain/inherited policy the general traversal transforms this value.
         return delegate
+      }
+
+      if (!isRedactableType(value, plan.valueTypes)) {
+        // Type-vetoed leaf — left raw with no copy write, so an all-vetoed subtree keeps its
+        // original identity, matching the general traversal's unchanged-reference behaviour.
+        continue
       }
 
       const redacted = node?.rule === undefined
@@ -925,6 +967,12 @@ const navigateNode = (
               }
             }
           } else {
+            if (isDescendable(value) && !isRedactableType(value, plan.valueTypes)) {
+              // Type-vetoed container at a non-retain wildcard terminal — delegate (route as if
+              // unmatched) so the general traversal handles veto-and-descend identically.
+              return delegate
+            }
+
             const redacted = applyWildcardTerminalRule(value, childNode.rule, plan, rootInput, concreteMatchedPath)
 
             if (copy === undefined) {
@@ -943,6 +991,12 @@ const navigateNode = (
         }
 
         if (childNode.rule !== undefined && !childNode.rule.policy.retainStructure) {
+          if (isDescendable(value) && !isRedactableType(value, plan.valueTypes)) {
+            // Type-vetoed container at a non-retain terminal — delegate (route as if unmatched)
+            // so the general traversal handles veto-and-descend identically.
+            return delegate
+          }
+
           // Terminal (non-retain): the censor wins wholesale, even over a container value or a
           // circular reference at the terminal — no descent (AC 5).
           const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput)
@@ -1056,6 +1110,12 @@ const navigateNode = (
               }
             }
           } else {
+            if (isDescendable(value) && !isRedactableType(value, plan.valueTypes)) {
+              // Type-vetoed container at a non-retain wildcard terminal — delegate (route as if
+              // unmatched) so the general traversal handles veto-and-descend identically.
+              return delegate
+            }
+
             const redacted = applyWildcardTerminalRule(value, childNode.rule, plan, rootInput, concreteMatchedPath)
 
             if (copy === undefined) {
@@ -1074,6 +1134,12 @@ const navigateNode = (
         }
 
         if (childNode.rule !== undefined && !childNode.rule.policy.retainStructure) {
+          if (isDescendable(value) && !isRedactableType(value, plan.valueTypes)) {
+            // Type-vetoed container at a non-retain terminal — delegate (route as if unmatched)
+            // so the general traversal handles veto-and-descend identically.
+            return delegate
+          }
+
           const redacted = applyTerminalRule(value, childNode.rule, plan, rootInput)
 
           if (copy === undefined) {
@@ -1294,6 +1360,12 @@ const applyWildcardEdge = (
 ): unknown => {
   if (wildcardChild.rule !== undefined) {
     if (!wildcardChild.rule.policy.retainStructure) {
+      if (isDescendable(value) && !isRedactableType(value, plan.valueTypes)) {
+        // Type-vetoed container at a non-retain wildcard terminal — delegate (route as if
+        // unmatched) so the general traversal handles veto-and-descend identically.
+        return delegate
+      }
+
       // Terminal (non-retain): censor wins wholesale, even over a container or circular
       // reference at the terminal — no descent, no delegation (AC 6).
       return applyWildcardTerminalRule(value, wildcardChild.rule, plan, rootInput, matchedPath)

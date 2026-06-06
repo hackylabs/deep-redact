@@ -2492,6 +2492,9 @@ describe('Reusable redactor factory contract', () => {
       { token: 'keep-fifth' },
     ]
     const result = deepRedact({
+      // The removed array items are objects; the allowlist is widened to make object types
+      // eligible for removal (Story 9.1 — objects are vetoed by default).
+      types: ['object'],
       paths: [
         {
           path: 'users[1]',
@@ -2876,7 +2879,7 @@ describe('Reusable redactor factory contract', () => {
 
     it('redacts the divergent leaf the general traversal would (a.b.c + a.*.d)', () => {
       const options: DeepRedactOptions = { paths: ['a.b.c', 'a.*.d'] }
-      const payload = (): unknown => ({ a: { b: { c: 1, d: 2 }, x: { d: 3 } } })
+      const payload = (): unknown => ({ a: { b: { c: 'c1', d: 'd2' }, x: { d: 'd3' } } })
 
       // a.b.d — reached via a.* and the a.b intermediate — must be redacted, matching the oracle.
       expect(deepRedact(options)(payload())).toStrictEqual({
@@ -2889,7 +2892,7 @@ describe('Reusable redactor factory contract', () => {
     it('keeps exact precedence on the convergent leaf (a.b.c="X" wins over a.*.c="Y")', () => {
       const redact = deepRedact({ paths: [{ path: 'a.b.c', censor: 'X' }, { path: 'a.*.c', censor: 'Y' }] })
 
-      expect(redact({ a: { b: { c: 1 }, x: { c: 2 } } }))
+      expect(redact({ a: { b: { c: 'cb' }, x: { c: 'cx' } } }))
         .toStrictEqual({ a: { b: { c: 'X' }, x: { c: 'Y' } } })
     })
   })
@@ -3615,6 +3618,9 @@ describe('Built-in and custom transformer resolution', () => {
 
   it('keeps whole-value rule precedence when a transformed branch is already claimed by an existing terminal rule', () => {
     const redact = deepRedact({
+      // The matched `map` value is a Map (object); widen the allowlist so the whole-value key rule
+      // censors it (Story 9.1 — object types are vetoed by default).
+      types: ['object'],
       keys: ['map'],
       paths: ['map.value.password'],
     })
@@ -4202,6 +4208,9 @@ describe('Ignored value types suppress descendant redaction inside transformed r
 
   it('keeps whole-value rule precedence when an ignored transformed branch is already claimed by a terminal rule', () => {
     const redact = deepRedact({
+      // The matched `map` value is a Map (object); widen the allowlist so the whole-value key rule
+      // censors it (Story 9.1 — object types are vetoed by default).
+      types: ['object'],
       ignoredValueTypes: {
         Map: true,
       },
@@ -5612,7 +5621,7 @@ describe('Function censors and same-length string replacement', () => {
       keys: ['a', 'b'],
     })
 
-    redact({ a: 1, b: 2 })
+    redact({ a: 'one', b: 'two' })
 
     expect(contexts).toHaveLength(2)
     for (const ctx of contexts) {
@@ -5696,7 +5705,9 @@ describe('Function censors and same-length string replacement', () => {
   })
 
   it('skips same-length replacement for non-string matched values', () => {
-    const redact = deepRedact({ censor: '*', replaceStringByLength: true, keys: ['count'] })
+    // `count` holds a number; widen the allowlist so it is redacted, proving replaceStringByLength
+    // falls back to the literal censor for a non-string matched value (Story 9.1).
+    const redact = deepRedact({ censor: '*', replaceStringByLength: true, keys: ['count'], types: ['number'] })
 
     expect(redact({ count: 42 })).toEqual({ count: '*' })
   })
@@ -6427,7 +6438,9 @@ describe('Wildcard rule-driven engine vs. general traversal equivalence (Story 8
   })
 
   it('censors a non-plain object matched at a wildcard terminal wholesale, no descent or delegation (AC 6)', () => {
-    const plan = compileRedactorPlan({ paths: ['*.when'] })
+    // The matched `when` is a Date (object); widen the allowlist so the wildcard terminal censors
+    // it wholesale (Story 9.1 — object types are vetoed by default).
+    const plan = compileRedactorPlan({ paths: ['*.when'], types: ['object'] })
     const createPayload = () => ({ u: { when: new Date('2020-01-01T00:00:00.000Z') } })
 
     const result = buildPathDrivenExecutor(plan, failOnDelegation)(createPayload())
@@ -6437,7 +6450,9 @@ describe('Wildcard rule-driven engine vs. general traversal equivalence (Story 8
   })
 
   it('censors a circular reference matched at a wildcard terminal wholesale (AC 6)', () => {
-    const plan = compileRedactorPlan({ paths: ['*.self'] })
+    // The matched `self` is the circular object; widen the allowlist so the wildcard terminal
+    // censors it wholesale (Story 9.1 — object types are vetoed by default).
+    const plan = compileRedactorPlan({ paths: ['*.self'], types: ['object'] })
     const createPayload = (): Record<string, unknown> => {
       const inner: Record<string, unknown> = {}
       inner.self = inner
@@ -6541,5 +6556,177 @@ describe('Wildcard rule-driven engine vs. general traversal equivalence (Story 8
 
     const wired = buildPathDrivenExecutor(plan, (value) => redactValue(value, plan))(createPayload())
     expect(wired).toStrictEqual(redactValue(createPayload(), plan))
+  })
+})
+
+describe('Value-type allowlist (types) — Story 9.1', () => {
+  describe('string-only default (AC 1)', () => {
+    it('redacts string values at configured key targets but leaves non-string values unchanged', () => {
+      const redact = deepRedact({ keys: ['secret'] })
+
+      expect(redact({ secret: 'hide-me' })).toEqual({ secret: '[REDACTED]' })
+      expect(redact({ secret: 42 })).toEqual({ secret: 42 })
+      expect(redact({ secret: true })).toEqual({ secret: true })
+      expect(redact({ secret: 10n })).toEqual({ secret: 10n })
+      expect(redact({ secret: null })).toEqual({ secret: null })
+    })
+
+    it('redacts a string path target but leaves a number path target unchanged', () => {
+      const redact = deepRedact({ paths: ['user.token'] })
+
+      expect(redact({ user: { token: 'abc' } })).toEqual({ user: { token: '[REDACTED]' } })
+      expect(redact({ user: { token: 99 } })).toEqual({ user: { token: 99 } })
+    })
+  })
+
+  describe('multi-type allowlist (AC 2)', () => {
+    it('redacts string and number targets when types is [string, number], leaving other types unchanged', () => {
+      const redact = deepRedact({ keys: ['v'], types: ['string', 'number'] })
+
+      expect(redact({ v: 'x' })).toEqual({ v: '[REDACTED]' })
+      expect(redact({ v: 42 })).toEqual({ v: '[REDACTED]' })
+      expect(redact({ v: true })).toEqual({ v: true })
+      expect(redact({ v: 10n })).toEqual({ v: 10n })
+    })
+  })
+
+  describe('the allowlist outranks every targeting mode (AC 3)', () => {
+    it('a value whose type is excluded is not redacted by exact-key, regex-key, exact-path, or wildcard-path rules', () => {
+      const n = 12_345
+
+      // Default types: ['string'] — a number value is vetoed for every targeting mode.
+      expect(deepRedact({ keys: ['v'] })({ v: n })).toEqual({ v: n }) // exact key
+      expect(deepRedact({ keys: [/^v$/] })({ v: n })).toEqual({ v: n }) // regex key
+      expect(deepRedact({ paths: ['v'] })({ v: n })).toEqual({ v: n }) // exact path
+      expect(deepRedact({ paths: ['a.*'] })({ a: { v: n } })).toEqual({ a: { v: n } }) // wildcard path
+    })
+
+    it('a whole-value substring rule cannot redact a string when string is excluded from types', () => {
+      const vetoed = deepRedact({ stringTests: [/secret/], types: ['number'] })
+      expect(vetoed({ note: 'this is secret' })).toEqual({ note: 'this is secret' })
+
+      // Control: with string eligible (the default), the same rule redacts.
+      const allowed = deepRedact({ stringTests: [/secret/] })
+      expect(allowed({ note: 'this is secret' })).toEqual({ note: '[REDACTED]' })
+    })
+
+    it('a path rule cannot override the type allowlist on a number leaf', () => {
+      const redact = deepRedact({ paths: [{ path: 'user.age', censor: '[AGE]' }] })
+      expect(redact({ user: { age: 30 } })).toEqual({ user: { age: 30 } })
+    })
+  })
+
+  describe('cross-engine parity (AC 4)', () => {
+    it('rule-driven and generic engines produce identical output for a types-filtered leaf config (no delegation)', () => {
+      const options: DeepRedactOptions = { paths: ['user.token', 'user.count'], types: ['string'] }
+      const plan = compileRedactorPlan(options)
+      expect(plan.pathDrivenOnly).toBe(true)
+
+      const payload = () => ({ user: { token: 'abc', count: 42 } })
+      const pathDriven = createExecutionModeForcedRedactorFromPlan(plan, 'path-driven')(payload())
+      const generic = createExecutionModeForcedRedactorFromPlan(plan, 'generic')(payload())
+
+      expect(pathDriven).toStrictEqual(generic)
+      expect(pathDriven).toStrictEqual({ user: { token: '[REDACTED]', count: 42 } })
+    })
+
+    it('rule-driven and generic engines agree when a vetoed container exposes a deeper rule', () => {
+      // `user` (object) is vetoed under the default, so the deeper `user.token` rule must apply.
+      const options: DeepRedactOptions = { paths: ['user', 'user.token'] }
+      const plan = compileRedactorPlan(options)
+      expect(plan.pathDrivenOnly).toBe(true)
+
+      const payload = () => ({ user: { token: 'abc', name: 'alice' } })
+      const pathDriven = createExecutionModeForcedRedactorFromPlan(plan, 'path-driven')(payload())
+      const generic = createExecutionModeForcedRedactorFromPlan(plan, 'generic')(payload())
+
+      expect(pathDriven).toStrictEqual(generic)
+      expect(pathDriven).toStrictEqual({ user: { token: '[REDACTED]', name: 'alice' } })
+    })
+
+    it('rule-driven and generic engines agree when a retain ancestor holds a vetoed-container override (exercises redactRetained delegation)', () => {
+      // `a` is retained (structure kept). `a.b` is a non-retain override whose value is an object,
+      // vetoed by the default string-only allowlist, so the rule-driven retain walk (redactRetained)
+      // must route it to the general traversal (`return delegate`) and descend — where the deeper
+      // `a.b.secret` string rule still fires and the number leaf stays raw. Pins the retainStructure
+      // veto-delegation branches whose byte-identity (AC 4) was otherwise only probed ad hoc.
+      const options: DeepRedactOptions = {
+        paths: [{ path: 'a', retainStructure: true }, 'a.b', 'a.b.secret'],
+      }
+      const plan = compileRedactorPlan(options)
+      expect(plan.pathDrivenOnly).toBe(true)
+
+      const payload = () => ({ a: { b: { secret: 'hide', keep: 5 } } })
+      const pathDriven = createExecutionModeForcedRedactorFromPlan(plan, 'path-driven')(payload())
+      const generic = createExecutionModeForcedRedactorFromPlan(plan, 'generic')(payload())
+
+      expect(pathDriven).toStrictEqual(generic)
+      expect(pathDriven).toStrictEqual({ a: { b: { secret: '[REDACTED]', keep: 5 } } })
+    })
+  })
+
+  describe('transformation stays serialise-gated, the allowlist suppresses redaction only (AC 5)', () => {
+    const iso = '2020-01-01T00:00:00.000Z'
+
+    it('returns a type-vetoed Date raw and by identity under serialise: false (byte-identical to an unmatched Date)', () => {
+      const source = new Date(iso)
+      const out = deepRedact({ paths: ['meta.when'] })({ meta: { when: source } }) as { meta: { when: unknown } }
+
+      expect(out.meta.when).toBeInstanceOf(Date)
+      expect(out.meta.when).toBe(source)
+    })
+
+    it('transforms a type-vetoed Date under serialise: true, identical to leaving it unmatched', () => {
+      const matched = deepRedact({ paths: ['meta.when'], serialise: true })({ meta: { when: new Date(iso) } })
+      const unmatched = deepRedact({ serialise: true })({ meta: { when: new Date(iso) } })
+
+      expect(matched).toBe(unmatched)
+      expect(matched).not.toContain('[REDACTED]')
+      expect(matched).toContain(iso)
+    })
+  })
+
+  describe('a vetoed container is traversed so descendant rules still fire (AC 6)', () => {
+    it('does not wholesale-redact a key-matched object but still redacts its descendant string leaves', () => {
+      const redact = deepRedact({ keys: ['data', 'secret'] })
+      const out = redact({ data: { secret: 'hide', count: 5, nested: { secret: 'deep' } } })
+
+      expect(out).toEqual({
+        data: { secret: '[REDACTED]', count: 5, nested: { secret: '[REDACTED]' } },
+      })
+    })
+  })
+
+  describe('initialisation validation (AC 7)', () => {
+    it('fails fast when types is not an array of supported type-name strings', () => {
+      expect(() => deepRedact({ types: 'string' as never })).toThrow()
+      expect(() => deepRedact({ types: ['strng'] as never })).toThrow()
+      expect(() => deepRedact({ types: [42] as never })).toThrow()
+      expect(() => deepRedact({ types: ['string', 'date'] as never })).toThrow()
+    })
+
+    it('accepts a valid array of supported type-name strings', () => {
+      expect(() => deepRedact({ types: ['string', 'number', 'object'] })).not.toThrow()
+      expect(() => deepRedact({ types: [] })).not.toThrow()
+    })
+  })
+
+  describe('matched-but-vetoed is byte-identical to unmatched across Date, Map, and BigInt', () => {
+    const transformables: ReadonlyArray<readonly [string, () => unknown]> = [
+      ['Date', () => new Date('2020-01-01T00:00:00.000Z')],
+      ['Map', () => new Map<string, unknown>([['k', 'v']])],
+      ['BigInt', () => 123n],
+    ]
+
+    it.each(transformables)('a vetoed %s at a configured path equals the same value left unmatched, by identity', (_label, make) => {
+      const matched = deepRedact({ paths: ['box.value'] })({ box: { value: make() } })
+      const unmatched = deepRedact({ paths: ['box.other'] })({ box: { value: make() } })
+
+      expect(matched).toStrictEqual(unmatched)
+
+      const ref = make()
+      const out = deepRedact({ paths: ['box.value'] })({ box: { value: ref } }) as { box: { value: unknown } }
+      expect(out.box.value).toBe(ref)
+    })
   })
 })

@@ -1,7 +1,19 @@
 import type { FunctionCensorContext } from '../compiler/compile-redactor-plan.js'
 import type { CompiledRedactionPolicy } from '../compiler/compile-redactor-plan.js'
+import type { CompiledValueTypesPlan } from '../compiler/compile-value-types.js'
 
 const defaultCensor = '[REDACTED]'
+
+// The single value-type eligibility check shared by both engines. `valueTypes` is `typeof`-keyed,
+// so this is one O(1) property read evaluated only where a rule has already matched a value. A
+// vetoed value must be returned raw — never redacted — so a matched-but-vetoed value stays byte-
+// identical to the same value had no rule matched it (Story 9.1).
+export const isRedactableType = (
+  value: unknown,
+  valueTypes: CompiledValueTypesPlan,
+): boolean => {
+  return valueTypes[typeof value]
+}
 
 export const removedValue = Symbol('deep-redact.removed')
 

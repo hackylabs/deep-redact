@@ -18,6 +18,7 @@ import { canonicaliseKey } from '../matching/key-normaliser.js'
 import { appendCanonicalPathSegment } from '../matching/path-normaliser.js'
 import {
   applyRedaction,
+  isRedactableType,
   isRemovedValue,
   type RemovedValue,
 } from '../replacement/apply-redaction.js'
@@ -1255,7 +1256,7 @@ const transformNode = (
     throwBudgetExceeded(plan, context, 'nodes')
   }
 
-  const activePolicy = context.suppressDescendantRedaction
+  let activePolicy = context.suppressDescendantRedaction
     ? undefined
     : selectActivePolicy(
       plan,
@@ -1266,18 +1267,35 @@ const transformNode = (
     )
 
   if (activePolicy !== undefined && (!activePolicy.policy.retainStructure || !canRetainStructure(value))) {
-    return applyConfiguredRedaction(
-      value,
-      activePolicy.policy,
-      activePolicy.rulePath,
-      !usesPathSensitivePolicy(activePolicy),
-      plan,
-      context,
-    )
+    // Single leaf-replacement boundary: a rule has matched and we are about to replace `value`
+    // wholesale. The value-type allowlist outranks the match (Story 9.1).
+    if (isRedactableType(value, plan.valueTypes)) {
+      return applyConfiguredRedaction(
+        value,
+        activePolicy.policy,
+        activePolicy.rulePath,
+        !usesPathSensitivePolicy(activePolicy),
+        plan,
+        context,
+      )
+    }
+
+    // Type-vetoed. A non-container leaf — a scalar or a transformable runtime value such as
+    // `Date`/`Map`/`BigInt` — is returned raw and routed exactly as an unmatched value of the same
+    // type (serialise transformation still applies later, unchanged). A container is traversed
+    // normally so descendant rules still fire, but the vetoed match is dropped: descent proceeds
+    // "as if unmatched", carrying only an ancestor's inherited (retain) policy.
+    if (!isTraversableContainer(value)) {
+      return { cacheValue: value, changed: false, pathStable: true, value }
+    }
+
+    activePolicy = context.inheritedPolicy
   }
 
   if (!isTraversableContainer(value)) {
     const substringResult = context.suppressDescendantRedaction
+      || plan.substringRules.length === 0
+      || !isRedactableType(value, plan.valueTypes)
       ? undefined
       : transformSubstringValue(value, plan, context)
 

@@ -18,6 +18,10 @@ import {
   compileIgnoredValueTypes,
   type CompiledIgnoredValueTypesPlan,
 } from './compile-ignored-value-types.js'
+import {
+  compileValueTypes,
+  type CompiledValueTypesPlan,
+} from './compile-value-types.js'
 import { compileTransformers, type CompiledTransformersPlan } from './compile-transformers.js'
 import {
   containsOnlySingleWildcardDynamics,
@@ -109,6 +113,9 @@ export interface CompiledRedactorPlan {
   readonly serialise?: SerialiseOption;
   readonly substringRules: readonly CompiledSubstringRule[];
   readonly transformers: CompiledTransformersPlan;
+  // The value-type allowlist, authoritative over every redaction source at the shared leaf-
+  // replacement boundary. Always present; an unset `types` option compiles the string-only default.
+  readonly valueTypes: CompiledValueTypesPlan;
 }
 
 const createLookupTable = <T>(): Record<string, T> => {
@@ -382,6 +389,7 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
     serialise: options.serialise,
     substringRules,
     transformers: compileTransformers(options.transformers),
+    valueTypes: compileValueTypes(options.types),
   })
 }
 
