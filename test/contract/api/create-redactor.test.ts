@@ -358,8 +358,8 @@ describe('Reusable redactor factory contract', () => {
     ['unsupported regex-like key selector', { keys: ['/^password$/'] }, /unsupported regex-like key selector/i],
     ['unsupported global regex key selector', { keys: [/password/g] }, /regex key selector must not use global or sticky flags/i],
     ['unsupported sticky regex key selector', { keys: [/password/y] }, /regex key selector must not use global or sticky flags/i],
-    ['unsafe nested-quantifier regex key selector', { keys: [/^(a+)+$/] }, /unsafe regex key selector/i],
-    ['unsafe overlapping-alternation regex key selector', { keys: [/^(a|aa)+$/] }, /unsafe regex key selector/i],
+    ['unsafe nested-quantifier regex key selector', { keys: [/^(a+)+$/] }, /unsafe regex key selector/i], // codeql[js/redos] -- test data: proves deepRedact rejects this pattern, never matched against input
+    ['unsafe overlapping-alternation regex key selector', { keys: [/^(a|aa)+$/] }, /unsafe regex key selector/i], // codeql[js/redos] -- test data: proves deepRedact rejects this pattern, never matched against input
     [
       'overlong regex key selector',
       { keys: [new RegExp('a'.repeat(257))] },
@@ -473,15 +473,15 @@ describe('Reusable redactor factory contract', () => {
     ['negative structured ignore index', { paths: [['users', { ignore: -1 }, 'password']] }, /structured ignore indexes must be non-negative integers/i],
     ['unsupported global regex path segment', { paths: [['users', /^admin$/g, 'token']] }, /regex path segment must not use global or sticky flags/i],
     ['unsupported sticky regex ignore segment', { paths: [['users', { ignore: /^internal/y }, 'token']] }, /regex path segment must not use global or sticky flags/i],
-    ['unsafe nested-quantifier regex path segment', { paths: [['users', /^(a+)+$/, 'token']] }, /unsafe regex path segment/i],
-    ['unsafe overlapping-alternation regex path segment', { paths: [['users', /^(a|aa)+$/, 'token']] }, /unsafe regex path segment/i],
+    ['unsafe nested-quantifier regex path segment', { paths: [['users', /^(a+)+$/, 'token']] }, /unsafe regex path segment/i], // codeql[js/redos] -- test data: proves deepRedact rejects this pattern, never matched against input
+    ['unsafe overlapping-alternation regex path segment', { paths: [['users', /^(a|aa)+$/, 'token']] }, /unsafe regex path segment/i], // codeql[js/redos] -- test data: proves deepRedact rejects this pattern, never matched against input
     [
       'overlong regex path segment',
       { paths: [['users', new RegExp('a'.repeat(257)), 'token']] },
       /regex path segment source must be at most 256 characters/i,
     ],
-    ['unsafe nested-quantifier regex ignore segment', { paths: [['users', { ignore: /^(a+)+$/ }, 'token']] }, /unsafe regex path segment/i],
-    ['unsafe overlapping-alternation regex ignore segment', { paths: [['users', { ignore: /^(a|aa)+$/ }, 'token']] }, /unsafe regex path segment/i],
+    ['unsafe nested-quantifier regex ignore segment', { paths: [['users', { ignore: /^(a+)+$/ }, 'token']] }, /unsafe regex path segment/i], // codeql[js/redos] -- test data: proves deepRedact rejects this pattern, never matched against input
+    ['unsafe overlapping-alternation regex ignore segment', { paths: [['users', { ignore: /^(a|aa)+$/ }, 'token']] }, /unsafe regex path segment/i], // codeql[js/redos] -- test data: proves deepRedact rejects this pattern, never matched against input
     [
       'overlong regex ignore segment',
       { paths: [['users', { ignore: new RegExp('a'.repeat(257)) }, 'token']] },
@@ -718,8 +718,8 @@ describe('Reusable redactor factory contract', () => {
         { stringTests: [{ pattern: /token/, replacer: '[TOKEN]' }] },
         /options\.stringTests\[0\]\.replacer: replacer must be a function/i,
       ],
-      ['unsafe nested-quantifier pattern', { stringTests: [/^(a+)+$/] }, /unsafe substring rule pattern/i],
-      ['unsafe overlapping-alternation pattern', { stringTests: [/^(a|aa)+$/] }, /unsafe substring rule pattern/i],
+      ['unsafe nested-quantifier pattern', { stringTests: [/^(a+)+$/] }, /unsafe substring rule pattern/i], // codeql[js/redos] -- test data: proves deepRedact rejects this pattern, never matched against input
+      ['unsafe overlapping-alternation pattern', { stringTests: [/^(a|aa)+$/] }, /unsafe substring rule pattern/i], // codeql[js/redos] -- test data: proves deepRedact rejects this pattern, never matched against input
       ['sticky pattern', { stringTests: [/token/y] }, /substring rule pattern must not use sticky flag/i],
       [
         'overlong pattern',
