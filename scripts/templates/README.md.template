@@ -1,8 +1,13 @@
 # Deep Redact
 
+[![npm version](https://badge.fury.io/js/@hackylabs%2Fdeep-redact.svg)](https://badge.fury.io/js/@hackylabs%2Fdeep-redact)
+[![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/hackylabs/deep-redact/blob/main/LICENSE)
+
 {{PACKAGE_NAME}} is a rule-driven redaction library for Node.js and Deno. It lets you express what to redact — a key name, a path, a regex, or a substring — and the runtime locates and replaces it everywhere in the payload without requiring exhaustive path enumeration. Policies are compiled once at initialisation and reused across every request, making it suitable for high-throughput production use.
 
 Libraries like `fast-redact` require an explicit path for every location where a sensitive field might appear (`a.b.password`, `a.c.password`, …). Deep Redact inverts this: a single `keys: ['password']` rule targets every `password` field at any depth. It also adds capabilities that path-enumeration libraries cannot offer, such as partial string redaction (targeting a sensitive pattern inside a larger value) and wildcard path selectors for repeated structures.
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/hackylabs)
 
 ## Features
 
