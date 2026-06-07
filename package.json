@@ -1,7 +1,7 @@
 {
   "name": "@hackylabs/deep-redact",
   "version": "4.0.0",
-  "description": "The function-first v4 foundation for Deep Redact.",
+  "description": "Deeply redact sensitive data from objects, arrays and arbitrary strings (e.g. XML or raw cookies data) with a composable, function-first API.",
   "private": false,
   "license": "MIT",
   "author": "Benjamin Green (https://bengreen.dev)",
