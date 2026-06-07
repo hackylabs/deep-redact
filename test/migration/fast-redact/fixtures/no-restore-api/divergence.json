@@ -1,0 +1,6 @@
+{
+  "fastRedactBehaviour": "With serialize: false, fast-redact exposes a redactor.restore method for caller-side reversal.",
+  "v4Behaviour": "Deep Redact v4 redactors expose no restore, unredact, or reverse-operation method.",
+  "migrationAction": "Do not migrate code that calls `restore` to an equivalent Deep Redact v4 API. Keep an unredacted source value separately if application logic still needs it.",
+  "reason": "Deep Redact v4 is intentionally one-way."
+}

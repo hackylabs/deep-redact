@@ -1,0 +1,4 @@
+{
+  "paths": ["*.password", "*.email", "*.firstName", "*.ip"],
+  "serialise": true
+}

@@ -1,0 +1,13 @@
+{
+  "accounts": [
+    {
+      "name": "primary",
+      "secret": "secret-one"
+    },
+    {
+      "name": "backup",
+      "secret": "secret-two"
+    }
+  ],
+  "requestId": "req-8"
+}

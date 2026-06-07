@@ -1,0 +1,554 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "title": "fast-redact migration matrix",
+    "sourcePackage": "fast-redact@3.5.0",
+    "generatedGuide": "docs/migration/from-fast-redact.md",
+    "fixtureRoot": "test/migration/fast-redact/fixtures",
+    "helperIds": {
+      "lastFourTokenCensor": "Returns a deterministic token derived from the final four characters of the original value.",
+      "stableEnvelopeSerialiser": "Serialises the redacted value inside a deterministic fixture envelope."
+    }
+  },
+  "rows": [
+    {
+      "id": "dot-path-structured-output",
+      "classification": "direct-equivalent",
+      "fixtureDir": "test/migration/fast-redact/fixtures/dot-path-structured-output",
+      "fastRedactConfig": {
+        "paths": [
+          "user.password"
+        ],
+        "serialize": false
+      },
+      "v4Action": {
+        "kind": "deep-redact-config",
+        "config": {
+          "paths": [
+            "user.password"
+          ]
+        },
+        "migrationSteps": [
+          "Keep the dot-path selector unchanged."
+        ],
+        "fastRedactBehaviour": "With serialize: false, fast-redact returns the redacted object for the configured dot path.",
+        "v4Behaviour": "Deep Redact v4 returns the same structured redacted object for the same selector.",
+        "reason": "The selector syntax and structured result are equivalent."
+      },
+      "assertionMode": "same-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "bracket-quoted-property-path",
+      "classification": "direct-equivalent",
+      "fixtureDir": "test/migration/fast-redact/fixtures/bracket-quoted-property-path",
+      "fastRedactConfig": {
+        "paths": [
+          "headers[\"X-Forwarded-For\"]"
+        ],
+        "serialize": false
+      },
+      "v4Action": {
+        "kind": "deep-redact-config",
+        "config": {
+          "paths": [
+            "headers[\"X-Forwarded-For\"]"
+          ]
+        },
+        "migrationSteps": [
+          "Keep the bracket-quoted property selector unchanged."
+        ],
+        "fastRedactBehaviour": "fast-redact targets the quoted property name exactly.",
+        "v4Behaviour": "Deep Redact v4 targets the same quoted property name exactly.",
+        "reason": "The quoted property path syntax is shared."
+      },
+      "assertionMode": "same-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "numeric-array-index-path",
+      "classification": "direct-equivalent",
+      "fixtureDir": "test/migration/fast-redact/fixtures/numeric-array-index-path",
+      "fastRedactConfig": {
+        "paths": [
+          "accounts[0].token"
+        ],
+        "serialize": false
+      },
+      "v4Action": {
+        "kind": "deep-redact-config",
+        "config": {
+          "paths": [
+            "accounts[0].token"
+          ]
+        },
+        "migrationSteps": [
+          "Keep the numeric array-index selector unchanged."
+        ],
+        "fastRedactBehaviour": "fast-redact redacts the selected array element only.",
+        "v4Behaviour": "Deep Redact v4 redacts the same array element only.",
+        "reason": "Numeric bracket indexes have the same migration meaning."
+      },
+      "assertionMode": "same-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "final-wildcard-path",
+      "classification": "direct-equivalent",
+      "fixtureDir": "test/migration/fast-redact/fixtures/final-wildcard-path",
+      "fastRedactConfig": {
+        "paths": [
+          "tokens.*"
+        ],
+        "serialize": false
+      },
+      "v4Action": {
+        "kind": "deep-redact-config",
+        "config": {
+          "paths": [
+            "tokens.*"
+          ]
+        },
+        "migrationSteps": [
+          "Keep the final-position wildcard selector unchanged."
+        ],
+        "fastRedactBehaviour": "fast-redact redacts every immediate child matched by the final wildcard.",
+        "v4Behaviour": "Deep Redact v4 redacts the same immediate children.",
+        "reason": "Final-position wildcard targeting is equivalent for this documented shape."
+      },
+      "assertionMode": "same-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "intermediate-wildcard-path",
+      "classification": "direct-equivalent",
+      "fixtureDir": "test/migration/fast-redact/fixtures/intermediate-wildcard-path",
+      "fastRedactConfig": {
+        "paths": [
+          "users.*.password"
+        ],
+        "serialize": false
+      },
+      "v4Action": {
+        "kind": "deep-redact-config",
+        "config": {
+          "paths": [
+            "users.*.password"
+          ]
+        },
+        "migrationSteps": [
+          "Keep the intermediate wildcard selector unchanged."
+        ],
+        "fastRedactBehaviour": "fast-redact redacts matching descendants beneath each wildcard segment.",
+        "v4Behaviour": "Deep Redact v4 redacts the same descendant values.",
+        "reason": "The shared wildcard string syntax is accepted by both libraries."
+      },
+      "assertionMode": "same-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "leading-bracket-property-path",
+      "classification": "direct-equivalent",
+      "fixtureDir": "test/migration/fast-redact/fixtures/leading-bracket-property-path",
+      "fastRedactConfig": {
+        "paths": [
+          "[\"session\"].token"
+        ],
+        "serialize": false
+      },
+      "v4Action": {
+        "kind": "deep-redact-config",
+        "config": {
+          "paths": [
+            "[\"session\"].token"
+          ]
+        },
+        "migrationSteps": [
+          "Keep the leading bracket-quoted property selector unchanged."
+        ],
+        "fastRedactBehaviour": "fast-redact accepts a leading bracket-quoted property selector and redacts the selected descendant.",
+        "v4Behaviour": "Deep Redact v4 accepts the same leading bracket-quoted property selector and redacts the selected descendant.",
+        "reason": "The leading bracket-quoted property path syntax is shared."
+      },
+      "assertionMode": "same-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "literal-string-censor",
+      "classification": "direct-equivalent",
+      "fixtureDir": "test/migration/fast-redact/fixtures/literal-string-censor",
+      "fastRedactConfig": {
+        "paths": [
+          "token"
+        ],
+        "censor": "[MASKED]",
+        "serialize": false
+      },
+      "v4Action": {
+        "kind": "deep-redact-config",
+        "config": {
+          "paths": [
+            "token"
+          ],
+          "censor": "[MASKED]"
+        },
+        "migrationSteps": [
+          "Keep the literal string censor unchanged."
+        ],
+        "fastRedactBehaviour": "fast-redact replaces the selected value with the configured string.",
+        "v4Behaviour": "Deep Redact v4 replaces the selected value with the same string.",
+        "reason": "String censors are supported by both libraries."
+      },
+      "assertionMode": "same-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "function-censor-helper",
+      "classification": "direct-equivalent",
+      "fixtureDir": "test/migration/fast-redact/fixtures/function-censor-helper",
+      "fastRedactConfig": {
+        "paths": [
+          "token"
+        ],
+        "censor": {
+          "helperId": "lastFourTokenCensor"
+        },
+        "serialize": false
+      },
+      "v4Action": {
+        "kind": "deep-redact-config",
+        "config": {
+          "paths": [
+            "token"
+          ],
+          "censor": {
+            "helperId": "lastFourTokenCensor"
+          }
+        },
+        "migrationSteps": [
+          "Keep the function censor intent and map it to a declared Deep Redact v4 function."
+        ],
+        "fastRedactBehaviour": "fast-redact calls the configured censor function for the selected value.",
+        "v4Behaviour": "Deep Redact v4 calls the equivalent configured censor function for the selected value.",
+        "reason": "The fixture helper proves compatible one-argument censor behaviour without embedding source code in JSON."
+      },
+      "assertionMode": "same-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "bracket-array-wildcard-rewrite",
+      "classification": "mechanical-rewrite",
+      "fixtureDir": "test/migration/fast-redact/fixtures/bracket-array-wildcard-rewrite",
+      "fastRedactConfig": {
+        "paths": [
+          "accounts[*].secret"
+        ],
+        "serialize": false
+      },
+      "v4Action": {
+        "kind": "deep-redact-config",
+        "config": {
+          "paths": [
+            "accounts.*.secret"
+          ]
+        },
+        "migrationSteps": [
+          "Rewrite the bracket array wildcard path from `accounts[*].secret` to `accounts.*.secret`.",
+          "Omit serialise for structured Deep Redact v4 output."
+        ],
+        "fastRedactBehaviour": "fast-redact accepts bracket array wildcard syntax.",
+        "v4Behaviour": "Deep Redact v4 accepts the equivalent dot wildcard syntax.",
+        "reason": "Deep Redact v4 rejects bracket wildcard syntax, so the selector needs a mechanical path rewrite."
+      },
+      "assertionMode": "same-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "serialize-false-spelling-rewrite",
+      "classification": "mechanical-rewrite",
+      "fixtureDir": "test/migration/fast-redact/fixtures/serialize-false-spelling-rewrite",
+      "fastRedactConfig": {
+        "paths": [
+          "user.password"
+        ],
+        "serialize": false
+      },
+      "v4Action": {
+        "kind": "deep-redact-config",
+        "config": {
+          "paths": [
+            "user.password"
+          ],
+          "serialise": false
+        },
+        "migrationSteps": [
+          "Rename `serialize` to `serialise`.",
+          "Keep the explicit false value when preserving structured output intent."
+        ],
+        "fastRedactBehaviour": "fast-redact uses the American-English `serialize` option.",
+        "v4Behaviour": "Deep Redact v4 uses the British-English `serialise` option.",
+        "reason": "The output intent is the same, but the public option spelling changes."
+      },
+      "assertionMode": "same-structured-output",
+      "expectedResult": {
+        "kind": "structured",
+        "file": "expected-v4.json"
+      }
+    },
+    {
+      "id": "default-json-output-serialise-true",
+      "classification": "mechanical-rewrite",
+      "fixtureDir": "test/migration/fast-redact/fixtures/default-json-output-serialise-true",
+      "fastRedactConfig": {
+        "paths": [
+          "user.password"
+        ]
+      },
+      "v4Action": {
+        "kind": "deep-redact-config",
+        "config": {
+          "paths": [
+            "user.password"
+          ],
+          "serialise": true
+        },
+        "migrationSteps": [
+          "Set `serialise: true` when the old `fast-redact` call relied on default JSON string output."
+        ],
+        "fastRedactBehaviour": "fast-redact serialises with JSON.stringify by default.",
+        "v4Behaviour": "Deep Redact v4 returns structured output by default, so JSON string output must be requested explicitly.",
+        "reason": "The default output type changed and needs an explicit option in migrated code."
+      },
+      "assertionMode": "same-serialised-output",
+      "expectedResult": {
+        "kind": "serialised",
+        "file": "expected-v4.txt"
+      }
+    },
+    {
+      "id": "custom-serialize-function-rewrite",
+      "classification": "mechanical-rewrite",
+      "fixtureDir": "test/migration/fast-redact/fixtures/custom-serialize-function-rewrite",
+      "fastRedactConfig": {
+        "paths": [
+          "user.password"
+        ],
+        "serialize": {
+          "helperId": "stableEnvelopeSerialiser"
+        }
+      },
+      "v4Action": {
+        "kind": "deep-redact-config",
+        "config": {
+          "paths": [
+            "user.password"
+          ],
+          "serialise": {
+            "helperId": "stableEnvelopeSerialiser"
+          }
+        },
+        "migrationSteps": [
+          "Rename `serialize` to `serialise`.",
+          "Move the existing custom serialiser function to the Deep Redact v4 option."
+        ],
+        "fastRedactBehaviour": "fast-redact passes the redacted value to the configured serialize function.",
+        "v4Behaviour": "Deep Redact v4 passes the redacted value to the configured serialise function.",
+        "reason": "The serialiser function role is equivalent after the option is renamed."
+      },
+      "assertionMode": "same-serialised-output",
+      "expectedResult": {
+        "kind": "serialised",
+        "file": "expected-v4.txt"
+      }
+    },
+    {
+      "id": "remove-true-rewrite",
+      "classification": "mechanical-rewrite",
+      "fixtureDir": "test/migration/fast-redact/fixtures/remove-true-rewrite",
+      "fastRedactConfig": {
+        "paths": [
+          "user.password"
+        ],
+        "remove": true
+      },
+      "v4Action": {
+        "kind": "deep-redact-config",
+        "config": {
+          "paths": [
+            "user.password"
+          ],
+          "remove": true,
+          "serialise": true
+        },
+        "migrationSteps": [
+          "Keep `remove: true`.",
+          "Set `serialise: true` because fast-redact remove output is tied to JSON serialisation."
+        ],
+        "fastRedactBehaviour": "fast-redact removes the selected property from its default JSON string output.",
+        "v4Behaviour": "Deep Redact v4 removes the selected property and serialises when `serialise: true` is set.",
+        "reason": "Removal intent is equivalent, but migrated code must request serialisation explicitly."
+      },
+      "assertionMode": "same-serialised-output",
+      "expectedResult": {
+        "kind": "serialised",
+        "file": "expected-v4.txt"
+      }
+    },
+    {
+      "id": "no-restore-api",
+      "classification": "intentional-divergence",
+      "fixtureDir": "test/migration/fast-redact/fixtures/no-restore-api",
+      "fastRedactConfig": {
+        "paths": [
+          "user.password"
+        ],
+        "serialize": false
+      },
+      "v4Action": {
+        "kind": "documented-divergence",
+        "config": {
+          "paths": [
+            "user.password"
+          ]
+        },
+        "migrationSteps": [
+          "Do not migrate code that calls `restore` to an equivalent Deep Redact v4 API.",
+          "Keep an unredacted source value separately if application logic still needs it."
+        ],
+        "fastRedactBehaviour": "With serialize: false, fast-redact exposes a redactor.restore method for caller-side reversal.",
+        "v4Behaviour": "Deep Redact v4 redactors expose no restore, unredact, or reverse-operation method.",
+        "reason": "Deep Redact v4 is intentionally one-way."
+      },
+      "assertionMode": "documented-divergence",
+      "expectedResult": {
+        "kind": "divergence",
+        "file": "divergence.json"
+      }
+    },
+    {
+      "id": "no-strict-option",
+      "classification": "intentional-divergence",
+      "fixtureDir": "test/migration/fast-redact/fixtures/no-strict-option",
+      "fastRedactConfig": {
+        "paths": [
+          "missing.value"
+        ],
+        "strict": false,
+        "serialize": false
+      },
+      "v4Action": {
+        "kind": "unsupported-v4-config",
+        "config": {
+          "paths": [
+            "missing.value"
+          ],
+          "strict": false
+        },
+        "unsupportedOption": "strict",
+        "migrationSteps": [
+          "Remove `strict` from the Deep Redact v4 configuration.",
+          "Handle primitive inputs according to the migrated caller's policy before calling Deep Redact v4."
+        ],
+        "fastRedactBehaviour": "With strict: false and serialize: false, fast-redact returns the primitive input unchanged when the redactor sees a primitive instead of an object.",
+        "v4Behaviour": "Deep Redact v4 rejects the unsupported `strict` option during initialisation.",
+        "reason": "Deep Redact v4 does not provide a strict compatibility switch for primitive input handling."
+      },
+      "assertionMode": "v4-initialisation-error",
+      "expectedResult": {
+        "kind": "divergence",
+        "file": "divergence.json"
+      }
+    },
+    {
+      "id": "omitted-serialise-structured-output",
+      "classification": "intentional-divergence",
+      "fixtureDir": "test/migration/fast-redact/fixtures/omitted-serialise-structured-output",
+      "fastRedactConfig": {
+        "paths": [
+          "user.password"
+        ]
+      },
+      "v4Action": {
+        "kind": "documented-divergence",
+        "config": {
+          "paths": [
+            "user.password"
+          ]
+        },
+        "migrationSteps": [
+          "Set `serialise: true` in Deep Redact v4 if the old call depended on the fast-redact default JSON string.",
+          "Leave `serialise` omitted only when the migrated caller wants structured output."
+        ],
+        "fastRedactBehaviour": "fast-redact returns a JSON string when `serialize` is omitted.",
+        "v4Behaviour": "Deep Redact v4 returns structured output when `serialise` is omitted.",
+        "reason": "The default output type intentionally differs."
+      },
+      "assertionMode": "documented-divergence",
+      "expectedResult": {
+        "kind": "divergence",
+        "file": "divergence.json"
+      }
+    },
+    {
+      "id": "non-string-censor-value",
+      "classification": "intentional-divergence",
+      "fixtureDir": "test/migration/fast-redact/fixtures/non-string-censor-value",
+      "fastRedactConfig": {
+        "paths": [
+          "user.password"
+        ],
+        "censor": 0,
+        "serialize": false
+      },
+      "v4Action": {
+        "kind": "unsupported-v4-config",
+        "config": {
+          "paths": [
+            "user.password"
+          ],
+          "censor": 0
+        },
+        "unsupportedOption": "censor",
+        "migrationSteps": [
+          "Replace non-string literal censors with a string censor or a function censor before migrating.",
+          "Use a function censor if the migrated code needs to return a non-string value deliberately."
+        ],
+        "fastRedactBehaviour": "fast-redact accepts documented non-string censor values such as number literals.",
+        "v4Behaviour": "Deep Redact v4 rejects root censor values that are neither strings nor functions.",
+        "reason": "The v4 public Censor contract is intentionally narrower."
+      },
+      "assertionMode": "v4-initialisation-error",
+      "expectedResult": {
+        "kind": "divergence",
+        "file": "divergence.json"
+      }
+    }
+  ]
+}

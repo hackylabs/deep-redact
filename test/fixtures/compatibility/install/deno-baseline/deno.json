@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "@hackylabs/deep-redact": "{denoPackageSpecifier}"
+  }
+}

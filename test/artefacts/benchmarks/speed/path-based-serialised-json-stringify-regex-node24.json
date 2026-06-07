@@ -1,0 +1,54 @@
+{
+  "id": "path-based-serialised-json-stringify-regex-node24",
+  "workloadClass": "path-based",
+  "runtime": "node24",
+  "conditions": {
+    "nodeVersion": "v24.14.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "iterations": 100000,
+    "warmupIterations": 10000
+  },
+  "comparator": {
+    "name": "./test/bench/competitors/json-stringify-regex",
+    "version": "1.0.0"
+  },
+  "subject": {
+    "name": "@hackylabs/deep-redact",
+    "version": "4.0.0"
+  },
+  "measurements": {
+    "subject": {
+      "median": 0.004380088000003525,
+      "mean": 0.004401586619999594,
+      "min": 0.004296511999993527,
+      "max": 0.004727237999997669,
+      "unit": "ms"
+    },
+    "comparator": {
+      "median": 0.0016405119999935778,
+      "mean": 0.0016549507500010483,
+      "min": 0.001611227999995208,
+      "max": 0.0018166639999990365,
+      "unit": "ms"
+    }
+  },
+  "overheadPct": 167,
+  "generatingPlatform": {
+    "os": "darwin",
+    "arch": "arm64",
+    "nodeVersion": "v24.14.1"
+  },
+  "thresholdDecision": {
+    "passed": true,
+    "metric": "median",
+    "minOverheadPct": -100,
+    "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
+    "maxOverheadPct": 1000,
+    "runScope": [
+      "protected-branch",
+      "release-candidate"
+    ]
+  },
+  "generatedAt": "2026-06-07T12:28:34.565Z"
+}

@@ -1,0 +1,25 @@
+name: Benchmark
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.1'
+          cache: 'pnpm'
+      - run: corepack enable
+      - run: corepack prepare pnpm@10.33.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run verify:speed-benchmarks
+        env:
+          DEEP_REDACT_BENCH_RUN_SCOPE: protected-branch

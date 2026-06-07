@@ -1,0 +1,8 @@
+{
+  "credentials": {
+    "username": "alice",
+    "password": "hunter2"
+  },
+  "token": "abc123",
+  "plan": "pro"
+}

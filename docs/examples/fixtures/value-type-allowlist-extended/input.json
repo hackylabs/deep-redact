@@ -1,0 +1,1 @@
+{ "a": { "secret": "classified" }, "b": { "secret": 42 }, "c": { "secret": true } }

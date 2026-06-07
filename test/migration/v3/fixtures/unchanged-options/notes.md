@@ -1,0 +1,1 @@
+Options `retainStructure` and `fuzzyKeyMatch` carry over to v4 with the same names and semantics. This row proves both simultaneously: fuzzy matching finds `homeAddress` via the `address` selector, and `retainStructure` preserves the nested shape.

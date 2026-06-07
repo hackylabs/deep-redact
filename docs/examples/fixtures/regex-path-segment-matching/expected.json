@@ -1,0 +1,1 @@
+{ "config": { "db_password": "[REDACTED]", "db_host": "localhost", "app_secret": "[REDACTED]" }, "name": "app" }

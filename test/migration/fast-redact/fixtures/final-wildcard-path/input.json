@@ -1,0 +1,7 @@
+{
+  "tokens": {
+    "access": "access-token",
+    "refresh": "refresh-token"
+  },
+  "status": "active"
+}

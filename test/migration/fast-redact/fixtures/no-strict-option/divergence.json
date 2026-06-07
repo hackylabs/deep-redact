@@ -1,0 +1,6 @@
+{
+  "fastRedactBehaviour": "With strict: false and serialize: false, fast-redact returns the primitive input unchanged when the redactor sees a primitive instead of an object.",
+  "v4Behaviour": "Deep Redact v4 rejects the unsupported `strict` option during initialisation.",
+  "migrationAction": "Remove `strict` from the Deep Redact v4 configuration. Handle primitive inputs according to the migrated caller's policy before calling Deep Redact v4.",
+  "reason": "Deep Redact v4 does not provide a strict compatibility switch for primitive input handling."
+}

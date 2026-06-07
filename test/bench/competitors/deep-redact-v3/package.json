@@ -1,0 +1,5 @@
+{
+  "name": "deep-redact-v3-adapter",
+  "version": "3.0.5",
+  "main": "index.cjs"
+}

@@ -1,0 +1,13 @@
+{
+  "fastRedactBehaviour": "fast-redact returns a JSON string when `serialize` is omitted.",
+  "v4Behaviour": "Deep Redact v4 returns structured output when `serialise` is omitted.",
+  "migrationAction": "Set `serialise: true` in Deep Redact v4 if the old call depended on the fast-redact default JSON string. Leave `serialise` omitted only when the migrated caller wants structured output.",
+  "reason": "The default output type intentionally differs.",
+  "expectedV4": {
+    "user": {
+      "name": "Ada",
+      "password": "[REDACTED]"
+    },
+    "requestId": "req-15"
+  }
+}

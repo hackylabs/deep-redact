@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "commandTokens": {
+      "{packageTarball}": "Verifier-provided path to the packed .tgz artefact produced from the current repository build.",
+      "{packageTarballUrl}": "Verifier-provided URL for the same packed .tgz artefact when a package manager requires URL-style package input.",
+      "{denoPackageSpecifier}": "Verifier-provided Deno-compatible public package specifier resolved from package metadata as npm:@hackylabs/deep-redact@{packageVersion}."
+    },
+    "deferredPhases": {
+      "nodePackageManagerExecution": "later-node-package-manager-verification",
+      "migrationExamplesBenchmarksAndPlatformGuidance": "later-release-guidance"
+    }
+  },
+  "rows": [
+    {
+      "id": "npm-node22",
+      "packageManager": "npm",
+      "runtime": "node",
+      "fixtureDir": "test/fixtures/compatibility/install/node-baseline",
+      "runtimeVersion": "node@22.18.0",
+      "installCommand": [
+        "npm",
+        "install",
+        "{packageTarball}"
+      ],
+      "runCommand": [
+        "node",
+        "smoke.mjs"
+      ],
+      "expectedStdoutFile": "test/artefacts/install-matrix/expected/baseline-structured.stdout",
+      "expectedExitStatus": 0
+    },
+    {
+      "id": "npm-node24",
+      "packageManager": "npm",
+      "runtime": "node",
+      "fixtureDir": "test/fixtures/compatibility/install/node-baseline",
+      "runtimeVersion": "node@24.14.1",
+      "installCommand": [
+        "npm",
+        "install",
+        "{packageTarball}"
+      ],
+      "runCommand": [
+        "node",
+        "smoke.mjs"
+      ],
+      "expectedStdoutFile": "test/artefacts/install-matrix/expected/baseline-structured.stdout",
+      "expectedExitStatus": 0
+    },
+    {
+      "id": "pnpm-node22",
+      "packageManager": "pnpm",
+      "runtime": "node",
+      "fixtureDir": "test/fixtures/compatibility/install/node-baseline",
+      "runtimeVersion": "node@22.18.0",
+      "installCommand": [
+        "pnpm",
+        "add",
+        "{packageTarball}"
+      ],
+      "runCommand": [
+        "node",
+        "smoke.mjs"
+      ],
+      "expectedStdoutFile": "test/artefacts/install-matrix/expected/baseline-structured.stdout",
+      "expectedExitStatus": 0
+    },
+    {
+      "id": "pnpm-node24",
+      "packageManager": "pnpm",
+      "runtime": "node",
+      "fixtureDir": "test/fixtures/compatibility/install/node-baseline",
+      "runtimeVersion": "node@24.14.1",
+      "installCommand": [
+        "pnpm",
+        "add",
+        "{packageTarball}"
+      ],
+      "runCommand": [
+        "node",
+        "smoke.mjs"
+      ],
+      "expectedStdoutFile": "test/artefacts/install-matrix/expected/baseline-structured.stdout",
+      "expectedExitStatus": 0
+    },
+    {
+      "id": "yarn-node22",
+      "packageManager": "yarn",
+      "runtime": "node",
+      "fixtureDir": "test/fixtures/compatibility/install/node-baseline",
+      "runtimeVersion": "node@22.18.0",
+      "installCommand": [
+        "yarn",
+        "add",
+        "@hackylabs/deep-redact@file:{packageTarball}"
+      ],
+      "runCommand": [
+        "node",
+        "smoke.mjs"
+      ],
+      "expectedStdoutFile": "test/artefacts/install-matrix/expected/baseline-structured.stdout",
+      "expectedExitStatus": 0
+    },
+    {
+      "id": "yarn-node24",
+      "packageManager": "yarn",
+      "runtime": "node",
+      "fixtureDir": "test/fixtures/compatibility/install/node-baseline",
+      "runtimeVersion": "node@24.14.1",
+      "installCommand": [
+        "yarn",
+        "add",
+        "@hackylabs/deep-redact@file:{packageTarball}"
+      ],
+      "runCommand": [
+        "node",
+        "smoke.mjs"
+      ],
+      "expectedStdoutFile": "test/artefacts/install-matrix/expected/baseline-structured.stdout",
+      "expectedExitStatus": 0
+    },
+    {
+      "id": "bun-node22",
+      "packageManager": "bun",
+      "runtime": "node",
+      "fixtureDir": "test/fixtures/compatibility/install/node-baseline",
+      "runtimeVersion": "node@22.18.0",
+      "installCommand": [
+        "bun",
+        "add",
+        "@hackylabs/deep-redact@{packageTarballUrl}"
+      ],
+      "runCommand": [
+        "node",
+        "smoke.mjs"
+      ],
+      "expectedStdoutFile": "test/artefacts/install-matrix/expected/baseline-structured.stdout",
+      "expectedExitStatus": 0
+    },
+    {
+      "id": "bun-node24",
+      "packageManager": "bun",
+      "runtime": "node",
+      "fixtureDir": "test/fixtures/compatibility/install/node-baseline",
+      "runtimeVersion": "node@24.14.1",
+      "installCommand": [
+        "bun",
+        "add",
+        "@hackylabs/deep-redact@{packageTarballUrl}"
+      ],
+      "runCommand": [
+        "node",
+        "smoke.mjs"
+      ],
+      "expectedStdoutFile": "test/artefacts/install-matrix/expected/baseline-structured.stdout",
+      "expectedExitStatus": 0
+    },
+    {
+      "id": "deno-2",
+      "packageManager": "deno",
+      "runtime": "deno",
+      "fixtureDir": "test/fixtures/compatibility/install/deno-baseline",
+      "runtimeVersion": "deno@2",
+      "installCommand": [
+        "deno",
+        "install",
+        "--entrypoint",
+        "smoke.ts"
+      ],
+      "runCommand": [
+        "deno",
+        "run",
+        "smoke.ts"
+      ],
+      "expectedStdoutFile": "test/artefacts/install-matrix/expected/baseline-structured.stdout",
+      "expectedExitStatus": 0
+    }
+  ]
+}

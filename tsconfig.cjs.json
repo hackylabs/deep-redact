@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "module": "NodeNext",
-    "outDir": "./dist",
-    "target": "ES2015"
-  },
-  "include": ["src/**/*"]
-}

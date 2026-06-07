@@ -1,0 +1,17 @@
+{
+  "user": {
+    "id": 1,
+    "firstName": "Emily",
+    "lastName": "Johnson",
+    "email": "emily.johnson@example.com",
+    "password": "emilyspass",
+    "ip": "42.48.100.32",
+    "address": {
+      "street": "123 Maple Avenue",
+      "city": "Springfield",
+      "postalCode": "62701"
+    }
+  },
+  "requestId": "req-abc-123",
+  "ok": true
+}
