@@ -1,0 +1,49 @@
+{
+  "id": "wildcard-single-object-json-stringify-regex-node24",
+  "workloadClass": "wildcard",
+  "runtime": "node24",
+  "conditions": {
+    "nodeVersion": "v24.14.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "warmupIterations": 50000,
+    "measurementBatches": 100,
+    "batchSize": 500,
+    "totalMeasurementIterations": 50000,
+    "gcExposed": true
+  },
+  "comparator": {
+    "name": "./test/bench/competitors/json-stringify-regex",
+    "version": "1.0.0"
+  },
+  "subject": {
+    "name": "@hackylabs/deep-redact",
+    "version": "4.0.0"
+  },
+  "measurements": {
+    "subject": {
+      "baselineHeapUsedBytes": 9233200,
+      "peakHeapUsedBytes": 13341896,
+      "afterGcHeapUsedBytes": 9233200,
+      "heapDeltaBeforeGcBytes": 4108696,
+      "heapDeltaAfterGcBytes": 0,
+      "baselineRssBytes": 96010240,
+      "peakRssBytes": 96010240
+    },
+    "comparator": {
+      "baselineHeapUsedBytes": 9231568,
+      "peakHeapUsedBytes": 13390464,
+      "afterGcHeapUsedBytes": 9231568,
+      "heapDeltaBeforeGcBytes": 4158896,
+      "heapDeltaAfterGcBytes": 0,
+      "baselineRssBytes": 96010240,
+      "peakRssBytes": 96010240
+    }
+  },
+  "generatingPlatform": {
+    "os": "darwin",
+    "arch": "arm64",
+    "nodeVersion": "v24.14.1"
+  },
+  "generatedAt": "2026-06-07T11:05:18.589Z"
+}

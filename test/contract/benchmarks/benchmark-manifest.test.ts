@@ -29,13 +29,13 @@ const requiredFixtureFiles = ['input.json', 'deep-redact-config.json', 'competit
 
 describe('benchmark manifest contract', () => {
   it('loads the canonical benchmark manifest without error', () => {
-    const manifestPath = path.join(repoRoot, 'test/bench/manifest.json')
+    const manifestPath = path.join(repoRoot, 'test/bench/speed-manifest.json')
     expect(existsSync(manifestPath)).toBe(true)
     expect(() => JSON.parse(readFileSync(manifestPath, 'utf8'))).not.toThrow()
   })
 
   it('requires all eight fields on every row', () => {
-    const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'test/bench/manifest.json'), 'utf8')) as {
+    const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'test/bench/speed-manifest.json'), 'utf8')) as {
       rows: Record<string, unknown>[];
     }
 
@@ -47,7 +47,7 @@ describe('benchmark manifest contract', () => {
   })
 
   it('requires all four fields on every thresholdPolicy', () => {
-    const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'test/bench/manifest.json'), 'utf8')) as {
+    const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'test/bench/speed-manifest.json'), 'utf8')) as {
       rows: Array<Record<string, unknown>>;
     }
 
@@ -63,7 +63,7 @@ describe('benchmark manifest contract', () => {
   })
 
   it('requires broad lower-overhead floors to name an output-equivalence safety signal', () => {
-    const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'test/bench/manifest.json'), 'utf8')) as {
+    const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'test/bench/speed-manifest.json'), 'utf8')) as {
       rows: Array<{ id: string; thresholdPolicy: { minOverheadPct: number; minOverheadRationale?: unknown } }>;
     }
 
@@ -86,7 +86,7 @@ describe('benchmark manifest contract', () => {
   it('declares at least one deep-redact-v3 gate row for the path-based workload class', () => {
     // The path-based gate compares the rule-driven engine against deep-redact v3 (the direct
     // predecessor) rather than fast-redact: v4 must not regress against its own prior release.
-    const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'test/bench/manifest.json'), 'utf8')) as {
+    const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'test/bench/speed-manifest.json'), 'utf8')) as {
       rows: Array<{ workloadClass: string; competitor: string }>;
     }
 
@@ -99,7 +99,7 @@ describe('benchmark manifest contract', () => {
   })
 
   it('has unique row ids', () => {
-    const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'test/bench/manifest.json'), 'utf8')) as {
+    const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'test/bench/speed-manifest.json'), 'utf8')) as {
       rows: Array<{ id: string }>;
     }
 
@@ -109,7 +109,7 @@ describe('benchmark manifest contract', () => {
   })
 
   it('has a fixtureDir that exists on disk with all required fixture files for every row', () => {
-    const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'test/bench/manifest.json'), 'utf8')) as {
+    const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'test/bench/speed-manifest.json'), 'utf8')) as {
       rows: Array<{ fixtureDir: string }>;
     }
 

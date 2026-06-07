@@ -94,7 +94,7 @@ export interface BenchmarkArtefact {
 }
 
 export function loadBenchmarkManifest(repoRoot: string): BenchmarkManifest {
-  const manifestPath = path.join(repoRoot, 'test/bench/manifest.json')
+  const manifestPath = path.join(repoRoot, 'test/bench/speed-manifest.json')
   const raw = readFileSync(manifestPath, 'utf8')
   return JSON.parse(raw) as BenchmarkManifest
 }
@@ -232,7 +232,7 @@ export function runBenchmarkRow(row: BenchmarkRow, repoRoot: string): BenchmarkA
 }
 
 export function writeArtefact(artefact: BenchmarkArtefact, repoRoot: string, outputArtefact: string): string {
-  const outputDir = path.join(repoRoot, 'test/artefacts/benchmarks')
+  const outputDir = path.join(repoRoot, 'test/artefacts/benchmarks/speed')
   mkdirSync(outputDir, { recursive: true })
   const outputPath = path.join(outputDir, outputArtefact)
   writeFileSync(outputPath, JSON.stringify(artefact, null, 2) + '\n')
@@ -240,7 +240,7 @@ export function writeArtefact(artefact: BenchmarkArtefact, repoRoot: string, out
 }
 
 export function benchmarkResultsDocPath(repoRoot: string): string {
-  return path.join(repoRoot, 'docs', 'benchmarks', 'results.md')
+  return path.join(repoRoot, 'docs', 'benchmarks', 'speed-results.md')
 }
 
 export function buildBenchmarkResultsDoc(repoRoot: string): string {
@@ -248,11 +248,11 @@ export function buildBenchmarkResultsDoc(repoRoot: string): string {
   const sections: string[] = [
     '# Benchmark Results',
     '',
-    'Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/`.',
+    'Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed/`.',
   ]
 
   for (const row of manifest.rows) {
-    const artefactPath = path.join(repoRoot, 'test/artefacts/benchmarks', row.outputArtefact)
+    const artefactPath = path.join(repoRoot, 'test/artefacts/benchmarks/speed', row.outputArtefact)
     if (!existsSync(artefactPath)) {
       throw new Error(`Benchmark artefact missing: ${row.outputArtefact}`)
     }

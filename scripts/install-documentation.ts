@@ -11,7 +11,6 @@ interface InstallDocumentationSources {
   matrix: InstallMatrix;
   packageJson: PackageJsonMetadata;
   denoConfigSource: string;
-  denoSmokeSource: string;
 }
 
 const packageManagersForPublicInstall = ['npm', 'pnpm', 'yarn', 'bun']
@@ -103,18 +102,14 @@ export const renderInstallationDocumentation = ({
   matrix,
   packageJson,
   denoConfigSource,
-  denoSmokeSource,
 }: InstallDocumentationSources): string => {
   const packageName = requirePackageName(packageJson)
   const denoPackageSpecifier = resolveDenoPackageSpecifier(packageJson)
   const publicInstallCommands = selectPublicNodeInstallRows(matrix)
     .map((row) => renderPublicInstallCommand(row, packageName))
-  const denoRow = selectDenoInstallRow(matrix)
-  const denoSmokeSnippet = denoSmokeSource.trimEnd()
 
-  if (!denoSmokeSnippet.includes(`from '${packageName}'`)) {
-    throw new Error(`Deno baseline fixture must import ${packageName}`)
-  }
+  // guard: throws if the Deno row is absent from the install matrix
+  selectDenoInstallRow(matrix)
 
   return [
     '## Installation',
@@ -123,19 +118,10 @@ export const renderInstallationDocumentation = ({
     ...publicInstallCommands,
     '```',
     '',
-    '### Deno Baseline',
+    '**Deno** — add the package to your import map (`deno.json`):',
     '',
     '```json',
     renderDenoImportMap({ denoConfigSource, denoPackageSpecifier, packageName }),
-    '```',
-    '',
-    '```sh',
-    denoRow.installCommand.join(' '),
-    denoRow.runCommand.join(' '),
-    '```',
-    '',
-    '```ts',
-    denoSmokeSnippet,
     '```',
     '',
   ].join('\n')
@@ -158,6 +144,5 @@ export const buildInstallDocumentation = (
     matrix: readJson<InstallMatrix>(path.join(repositoryRoot, 'test', 'compatibility', 'install', 'matrix.json')),
     packageJson,
     denoConfigSource: readFileSync(path.join(denoFixtureDirectory, 'deno.json'), 'utf8'),
-    denoSmokeSource: readFileSync(path.join(denoFixtureDirectory, 'smoke.ts'), 'utf8'),
   })
 }

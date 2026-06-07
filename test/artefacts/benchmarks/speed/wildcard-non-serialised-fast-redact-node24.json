@@ -1,6 +1,6 @@
 {
-  "id": "path-based-single-object-json-stringify-regex-node24",
-  "workloadClass": "path-based",
+  "id": "wildcard-non-serialised-fast-redact-node24",
+  "workloadClass": "wildcard",
   "runtime": "node24",
   "conditions": {
     "nodeVersion": "v24.14.1",
@@ -10,8 +10,8 @@
     "warmupIterations": 10000
   },
   "comparator": {
-    "name": "./test/bench/competitors/json-stringify-regex",
-    "version": "1.0.0"
+    "name": "fast-redact",
+    "version": "3.5.0"
   },
   "subject": {
     "name": "@hackylabs/deep-redact",
@@ -19,21 +19,21 @@
   },
   "measurements": {
     "subject": {
-      "median": 0.00038666999999395556,
-      "mean": 0.00039216702000067474,
-      "min": 0.0003739140000002408,
-      "max": 0.0005364519999993718,
+      "median": 0.0006501860000025772,
+      "mean": 0.0006731974799999628,
+      "min": 0.0006290120000012393,
+      "max": 0.0009868359999345557,
       "unit": "ms"
     },
     "comparator": {
-      "median": 0.0016344860000058361,
-      "mean": 0.0016538661500002533,
-      "min": 0.0015856839999910334,
-      "max": 0.0020480260000044835,
+      "median": 0.0005191759999906935,
+      "mean": 0.0005420975500016539,
+      "min": 0.0005020620000104828,
+      "max": 0.0006814880000092672,
       "unit": "ms"
     }
   },
-  "overheadPct": -76.34,
+  "overheadPct": 25.23,
   "generatingPlatform": {
     "os": "darwin",
     "arch": "arm64",
@@ -44,11 +44,11 @@
     "metric": "median",
     "minOverheadPct": -100,
     "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
-    "maxOverheadPct": 0,
+    "maxOverheadPct": 75,
     "runScope": [
       "protected-branch",
       "release-candidate"
     ]
   },
-  "generatedAt": "2026-06-06T04:15:22.540Z"
+  "generatedAt": "2026-06-07T12:28:42.470Z"
 }

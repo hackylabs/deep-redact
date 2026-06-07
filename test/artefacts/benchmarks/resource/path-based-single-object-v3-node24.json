@@ -1,0 +1,49 @@
+{
+  "id": "path-based-single-object-v3-node24",
+  "workloadClass": "path-based",
+  "runtime": "node24",
+  "conditions": {
+    "nodeVersion": "v24.14.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "warmupIterations": 50000,
+    "measurementBatches": 100,
+    "batchSize": 500,
+    "totalMeasurementIterations": 50000,
+    "gcExposed": true
+  },
+  "comparator": {
+    "name": "./test/bench/competitors/deep-redact-v3",
+    "version": "3.0.5"
+  },
+  "subject": {
+    "name": "@hackylabs/deep-redact",
+    "version": "4.0.0"
+  },
+  "measurements": {
+    "subject": {
+      "baselineHeapUsedBytes": 8576616,
+      "peakHeapUsedBytes": 10701600,
+      "afterGcHeapUsedBytes": 8578024,
+      "heapDeltaBeforeGcBytes": 2124984,
+      "heapDeltaAfterGcBytes": 1408,
+      "baselineRssBytes": 87556096,
+      "peakRssBytes": 87605248
+    },
+    "comparator": {
+      "baselineHeapUsedBytes": 8726552,
+      "peakHeapUsedBytes": 12956792,
+      "afterGcHeapUsedBytes": 8728208,
+      "heapDeltaBeforeGcBytes": 4230240,
+      "heapDeltaAfterGcBytes": 1656,
+      "baselineRssBytes": 88391680,
+      "peakRssBytes": 92700672
+    }
+  },
+  "generatingPlatform": {
+    "os": "darwin",
+    "arch": "arm64",
+    "nodeVersion": "v24.14.1"
+  },
+  "generatedAt": "2026-06-07T11:05:14.831Z"
+}

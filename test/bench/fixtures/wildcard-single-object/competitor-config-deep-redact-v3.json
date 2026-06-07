@@ -1,3 +1,4 @@
 {
-  "blacklistedKeys": ["password", "email", "firstName", "ip"]
+  "blacklistedKeys": ["password", "email", "firstName", "ip"],
+  "serialise": false
 }

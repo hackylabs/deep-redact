@@ -64,18 +64,28 @@ export const serialisePackageJson = (packageJson: PackageJson): string => {
   return `${JSON.stringify(buildGeneratedPackageJson(packageJson), null, 2)}\n`
 }
 
+function timesSpeedierFromArtefact(artefactPath: string): string {
+  const artefact = JSON.parse(readFileSync(artefactPath, 'utf8')) as { overheadPct: number }
+  return String(Math.round(1 / (1 + artefact.overheadPct / 100)))
+}
+
 export const buildGeneratedReadme = (): string => {
   const packageJson = readPackageJson()
   const template = readFileSync(readmeTemplatePath, 'utf8')
   const contributorNodeVersion = readFileSync(nodeVersionPath, 'utf8').trim()
   const packageManager = String(packageJson.packageManager ?? 'pnpm')
   const installationDocumentation = buildInstallDocumentation(repositoryRoot, packageJson)
+  const speedDir = path.join(repositoryRoot, 'test/artefacts/benchmarks/speed')
+  const pathV3Ratio = timesSpeedierFromArtefact(path.join(speedDir, 'path-based-non-serialised-v3-node24.json'))
+  const wildcardV3Ratio = timesSpeedierFromArtefact(path.join(speedDir, 'wildcard-non-serialised-v3-node24.json'))
 
   return template
     .replaceAll('{{PACKAGE_NAME}}', String(packageJson.name))
     .replaceAll('{{CONTRIBUTOR_NODE_VERSION}}', contributorNodeVersion)
     .replaceAll('{{PACKAGE_MANAGER}}', packageManager)
     .replaceAll('{{INSTALLATION_DOCUMENTATION}}', installationDocumentation.trimEnd())
+    .replaceAll('{{SPEED_PATH_V3_TIMES_FASTER}}', pathV3Ratio)
+    .replaceAll('{{SPEED_WILDCARD_V3_TIMES_FASTER}}', wildcardV3Ratio)
 }
 
 export const buildGeneratedPrecedenceDocument = (): string => {

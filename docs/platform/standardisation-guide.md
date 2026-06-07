@@ -53,7 +53,7 @@ For the complete migration matrix and fixture-verified examples, see [docs/migra
 
 ### Deep Redact v3 migration
 
-Deep Redact v4 introduces a factory API (`deepRedact(config)`) to replace the v3 class instantiation pattern (`new DeepRedact(config)`). The redaction method is unchanged.
+Deep Redact v4 introduces a factory API (`deepRedact(config)`) to replace the v3 class instantiation pattern (`new DeepRedact(config)`). The returned redactor is directly callable: use `redactor(payload)` instead of `redactor.redact(payload)`.
 
 For the complete v3 migration matrix and fixture-verified examples, see [docs/migration/from-v3.md](../migration/from-v3.md).
 
@@ -63,8 +63,10 @@ The following artefacts have been produced and committed as part of the v4 relea
 
 - **Installation verification matrix** — verified across Node.js 22/24, npm, pnpm, yarn, bun, and deno: `test/artefacts/install-matrix/`
 - **Worked-example manifest** — all examples validated against fixture inputs and expected outputs: `docs/examples/manifest.json`
-- **Benchmark artefacts** — performance comparison against fast-redact: `test/artefacts/benchmarks/`
-- **Benchmark results document** — rendered from committed artefacts: `docs/benchmarks/results.md`
+- **Speed benchmark artefacts** — performance comparison against competitors: `test/artefacts/benchmarks/speed/`
+- **Resource benchmark artefacts** — heap and RSS comparison against competitors: `test/artefacts/benchmarks/resource/`
+- **Speed benchmark results document** — rendered from committed artefacts: `docs/benchmarks/speed-results.md`
+- **Resource benchmark results document** — heap and RSS rendered from committed artefacts: `docs/benchmarks/resource-results.md`
 
 Supported installation environments: Node.js 22 LTS and 24 LTS (npm, pnpm, yarn, bun); Deno 2.x.
 

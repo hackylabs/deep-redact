@@ -26,7 +26,7 @@ Deep Redact has two distinct output stages:
 
 ## `serialise: false` Raw Output Contract
 
-When `serialise` is unset, `false`, or `null`, the redaction traversal result is
+When `serialise` is unset or `false`, the redaction traversal result is
 returned directly to the caller without any further processing. The contract is:
 
 - **Redacted positions** — values at configured paths are replaced by the
@@ -128,10 +128,17 @@ interface TransformersByConstructor {
 
 Dispatch order is deterministic:
 
+For `bigint` values:
+1. `byType.bigint`
+2. `fallback`
+
+For built-in constructor types (`Date`, `Error`, `Map`, `RegExp`, `Set`, `URL`) and unknown object types:
 1. `byType.object`
-2. matching built-in constructor bucket, when the value is a built-in runtime type
+2. matching built-in constructor bucket (built-in types only)
 3. `byConstructor.custom` registrations in declaration order
 4. `fallback`
+
+`byType.object` is not consulted for `bigint` values.
 
 Custom registrations match by constructor identity using `instanceof`, not by
 constructor name. If inheritance makes multiple custom registrations match, the

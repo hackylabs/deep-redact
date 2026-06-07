@@ -1,6 +1,6 @@
 {
-  "id": "path-based-single-object-serialised-fast-redact-node24",
-  "workloadClass": "path-based",
+  "id": "wildcard-serialised-fast-redact-node24",
+  "workloadClass": "wildcard",
   "runtime": "node24",
   "conditions": {
     "nodeVersion": "v24.14.1",
@@ -19,21 +19,21 @@
   },
   "measurements": {
     "subject": {
-      "median": 0.004507230000001982,
-      "mean": 0.004535184919999502,
-      "min": 0.004300764000002346,
-      "max": 0.0056960280000093915,
+      "median": 0.006909850000018196,
+      "mean": 0.00696411170000064,
+      "min": 0.006681632000005266,
+      "max": 0.008474802000018827,
       "unit": "ms"
     },
     "comparator": {
-      "median": 0.0006061800000097719,
-      "mean": 0.0006873213599996235,
-      "min": 0.0005816839999952208,
-      "max": 0.005435680000002321,
+      "median": 0.0009923779999935504,
+      "mean": 0.001004193670000568,
+      "min": 0.000970153999991453,
+      "max": 0.0011564959999941493,
       "unit": "ms"
     }
   },
-  "overheadPct": 643.55,
+  "overheadPct": 596.29,
   "generatingPlatform": {
     "os": "darwin",
     "arch": "arm64",
@@ -50,5 +50,5 @@
       "release-candidate"
     ]
   },
-  "generatedAt": "2026-06-06T04:15:23.584Z"
+  "generatedAt": "2026-06-07T12:28:37.805Z"
 }

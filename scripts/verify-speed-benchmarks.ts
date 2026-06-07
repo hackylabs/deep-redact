@@ -28,7 +28,7 @@ async function runCli(): Promise<void> {
   const mismatches: string[] = []
 
   for (const row of manifest.rows) {
-    const artefactPath = path.join(repoRoot, 'test/artefacts/benchmarks', row.outputArtefact)
+    const artefactPath = path.join(repoRoot, 'test/artefacts/benchmarks/speed', row.outputArtefact)
 
     if (!existsSync(artefactPath)) {
       throw new Error(`Benchmark artefact missing: ${row.outputArtefact}`)
@@ -72,10 +72,10 @@ async function runCli(): Promise<void> {
   if (existsSync(docPath)) {
     const currentDoc = readFileSync(docPath, 'utf8')
     if (currentDoc !== expectedDoc) {
-      mismatches.push('docs/benchmarks/results.md is out of date')
+      mismatches.push('docs/benchmarks/speed-results.md is out of date')
     }
   } else {
-    mismatches.push('docs/benchmarks/results.md is missing')
+    mismatches.push('docs/benchmarks/speed-results.md is missing')
   }
 
   const allIssues = [...failures, ...mismatches]

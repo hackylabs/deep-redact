@@ -42,27 +42,17 @@ describe('generated README installation documentation', () => {
     }
   })
 
-  it('renders the Deno import map and baseline usage from the Deno fixture source', () => {
+  it('renders the Deno import map from the Deno fixture', () => {
     const packageJson = readPackageJson()
     const denoPackageSpecifier = resolveDenoPackageSpecifier(packageJson)
-    const matrix = readJson<InstallMatrix>('test/compatibility/install/matrix.json')
-    const denoRow = matrix.rows.find((row) => row.id === 'deno-2')
     const denoJson = readJson<{ imports: Record<string, string> }>(
       'test/fixtures/compatibility/install/deno-baseline/deno.json',
     )
-    const denoSmokeSource = readFileSync(
-      'test/fixtures/compatibility/install/deno-baseline/smoke.ts',
-      'utf8',
-    ).trimEnd()
     const readme = buildGeneratedReadme()
 
     denoJson.imports['@hackylabs/deep-redact'] = denoPackageSpecifier
 
-    expect(denoRow).toBeDefined()
     expect(readme).toContain(JSON.stringify(denoJson, null, 2))
-    expect(readme).toContain((denoRow as InstallMatrixRow).installCommand.join(' '))
-    expect(readme).toContain((denoRow as InstallMatrixRow).runCommand.join(' '))
-    expect(readme).toContain(`\`\`\`ts\n${denoSmokeSource}\n\`\`\``)
     expect(readme).not.toContain('{denoPackageSpecifier}')
     expect(readme).not.toContain('latest')
   })

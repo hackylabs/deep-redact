@@ -61,9 +61,9 @@
     "url": "git+https://github.com/hackylabs/deep-redact"
   },
   "scripts": {
-    "bench": "pnpm run bench:produce",
+    "bench": "pnpm run bench:speed",
     "build": "pnpm run verify-generated-files && pnpm exec tsdown",
-    "generate": "pnpm run generate-exports && pnpm run generate-readme && pnpm run generate-precedence-doc && pnpm run generate-one-way-redaction-doc && pnpm run generate-fast-redact-migration-doc && pnpm run generate-v3-migration-doc && pnpm run generate-example-docs",
+    "generate": "pnpm run generate-exports && pnpm run generate-readme && pnpm run generate-precedence-doc && pnpm run generate-one-way-redaction-doc && pnpm run generate-fast-redact-migration-doc && pnpm run generate-v3-migration-doc && pnpm run generate-example-docs && pnpm run generate:standardisation-guide",
     "generate-exports": "node --experimental-strip-types ./scripts/generate-exports.ts",
     "generate-fast-redact-migration-doc": "node --experimental-strip-types ./scripts/generate-fast-redact-migration-doc.ts",
     "generate-v3-migration-doc": "node --experimental-strip-types ./scripts/generate-v3-migration-doc.ts",
@@ -74,16 +74,19 @@
     "lint": "pnpm exec eslint . && pnpm exec tsc --noEmit",
     "test": "pnpm run build && pnpm run test:contract",
     "test:contract": "pnpm exec vitest run test/build.test.ts test/contract/**/*.test.ts test/security/*.test.ts --reporter=verbose",
-    "test:red-phase": "pnpm exec vitest run --config vitest.red-phase.config.ts",
     "verify:install-matrix": "pnpm run build && node --experimental-strip-types ./scripts/verify-install-matrix.ts",
     "verify:migration:fast-redact": "pnpm run build && node --experimental-strip-types ./scripts/verify-fast-redact-migration.ts",
     "verify:migration:v3": "pnpm run build && node --experimental-strip-types ./scripts/verify-v3-migration.ts",
     "verify:examples": "pnpm run build && node --experimental-strip-types ./scripts/verify-examples.ts",
     "verify-generated-files": "node --experimental-strip-types ./scripts/verify-generated-files.ts",
     "generate-example-docs": "node --experimental-strip-types ./scripts/generate-example-docs.ts",
-    "bench:generate-doc": "node --experimental-strip-types ./scripts/generate-benchmark-doc.ts",
-    "bench:produce": "pnpm run build && node --experimental-strip-types ./scripts/run-benchmarks.ts",
-    "verify:benchmarks": "pnpm run build && node --experimental-strip-types ./scripts/verify-benchmarks.ts"
+    "bench:resource": "pnpm run build && node --expose-gc --experimental-strip-types ./scripts/run-resource-benchmarks.ts",
+    "bench:resource:generate-doc": "node --experimental-strip-types ./scripts/generate-resource-benchmark-doc.ts",
+    "bench:speed": "pnpm run build && node --experimental-strip-types ./scripts/run-benchmarks.ts",
+    "bench:speed:generate-doc": "node --experimental-strip-types ./scripts/generate-benchmark-doc.ts",
+    "bench:generate-charts": "node --experimental-strip-types ./scripts/generate-benchmark-charts.ts",
+    "verify:resource-benchmarks": "pnpm run build && node --experimental-strip-types ./scripts/verify-resource-benchmarks.ts",
+    "verify:speed-benchmarks": "pnpm run build && node --experimental-strip-types ./scripts/verify-speed-benchmarks.ts"
   },
   "//": [
     "deep-redact-v3 and fast-redact are installed only as internal benchmark comparisons and are not used in the library",
@@ -91,10 +94,10 @@
   ],
   "devDependencies": {
     "@eslint/js": "9.39.4",
-    "deep-redact-v3": "npm:@hackylabs/deep-redact@^3.0.0",
     "@stylistic/eslint-plugin": "4.4.1",
     "@types/fast-redact": "3.0.4",
     "@types/node": "24.1.0",
+    "deep-redact-v3": "npm:@hackylabs/deep-redact@^3.0.0",
     "eslint": "9.39.4",
     "eslint-plugin-unicorn": "59.0.1",
     "fast-redact": "3.5.0",
@@ -102,6 +105,8 @@
     "tsdown": "0.21.7",
     "typescript": "6.0.2",
     "typescript-eslint": "8.59.0",
+    "vega": "6.2.0",
+    "vega-lite": "6.4.3",
     "vitest": "4.1.4"
   },
   "editor.formatOnSave": true,

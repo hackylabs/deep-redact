@@ -30,7 +30,7 @@ function normaliseOutput(output: unknown): unknown {
 }
 
 describe('benchmark output equivalence contract', () => {
-  const manifest = readJson(path.join(repoRoot, 'test/bench/manifest.json')) as { rows: BenchmarkRow[] }
+  const manifest = readJson(path.join(repoRoot, 'test/bench/speed-manifest.json')) as { rows: BenchmarkRow[] }
 
   it('produces equivalent redacted output for every benchmark row', () => {
     for (const row of manifest.rows) {
