@@ -178,6 +178,39 @@ const redact = deepRedact({ keys: ['secret'] })
 const same = createRedactor({ keys: ['secret'] })
 ```
 
+## Documentation
+
+### Worked examples
+
+- [Key targeting](docs/examples/key-targeting.md)
+- [Fuzzy and case-insensitive key matching](docs/examples/fuzzy-key-matching.md)
+- [Path targeting](docs/examples/path-targeting.md)
+- [Wildcard path segments and ignore selectors](docs/examples/path-segment-ignore.md)
+- [Regex property matching](docs/examples/regex-property-matching.md)
+- [Per-key rule overrides](docs/examples/per-key-rule-overrides-string.md)
+- [Substring targeting](docs/examples/substring-targeting.md)
+- [Replacement and removal](docs/examples/replacement-and-removal.md)
+- [Structured vs serialised output](docs/examples/serialised-output.md)
+- [Custom transformers](docs/examples/custom-transformer.md)
+- [Value-type allowlist](docs/examples/value-type-allowlist-default.md)
+- [Singleton / service-root setup](docs/examples/singleton-setup.md)
+- [Console redaction adapter](docs/examples/console-redaction.md)
+
+### Migration guides
+
+- [Migrating from Deep Redact v3](docs/migration/from-v3.md)
+- [Migrating from fast-redact](docs/migration/from-fast-redact.md)
+
+### Architecture and design
+
+- [Rule precedence and evaluation order](docs/architecture/precedence.md)
+- [Serialised output: transformer dispatch and marker shapes](docs/architecture/serialise-output.md)
+- [One-way redaction contract](docs/architecture/one-way-redaction.md)
+
+### Platform and security teams
+
+- [Standardisation guide](docs/platform/standardisation-guide.md) — supported capabilities, targeting semantics, verification evidence, and adoption decision scope
+
 ## Scripts
 
 - `pnpm run build`
