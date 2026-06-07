@@ -2,6 +2,10 @@ name: Publish package to npmjs
 on:
   release:
     types: [created]
+
+permissions:
+  contents: read
+
 jobs:
   verify-install-matrix:
     runs-on: ubuntu-latest
