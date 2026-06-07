@@ -10,7 +10,7 @@ Libraries like `fast-redact` require an explicit path for every location where a
 - **Exact and structured path targeting** — pin redaction to a specific location when precision is needed
 - **Regex property matching** — match field names by regular expression
 - **Substring targeting** — redact a sensitive string that appears inside a larger value, not just whole-value replacement
-- **Wildcard and exclusion path selectors** — handle repeated structures at virtually any depth (`['records.**.addresses.*', { ignore: 'records.**.addresses.country' }]`) without listing every index
+- **Wildcard and exclusion path selectors** — handle repeated structures at virtually any depth (`['addresses.*', { ignore: 'country' }]`) without listing every index
 - **Structured and serialised output** — return a live object graph or a guaranteed-JSON-safe string (`serialise: true`)
 - **Built-in and custom transformers** — override how specific runtime types are represented in serialised output
 - **Built-in security** — prevent prototype pollution and DoS by memory exhaustion
