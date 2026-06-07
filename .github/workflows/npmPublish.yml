@@ -17,6 +17,7 @@ jobs:
           - '24.14.1'
     steps:
       - uses: actions/checkout@v4
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
@@ -25,7 +26,6 @@ jobs:
         with:
           deno-version: v2.x
       - uses: oven-sh/setup-bun@v2
-      - run: corepack enable
       - run: corepack prepare pnpm@10.33.0 --activate
       - run: corepack prepare yarn@stable --activate
       - run: pnpm install --frozen-lockfile
@@ -39,12 +39,12 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: '24.14.1'
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
-      - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm run lint
       - run: pnpm run test
