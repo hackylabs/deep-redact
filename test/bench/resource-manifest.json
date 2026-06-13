@@ -61,6 +61,26 @@
       "runtime": "node24",
       "command": "node --expose-gc --experimental-strip-types ./scripts/run-resource-benchmarks.ts --id wildcard-single-object-json-stringify-regex-node24",
       "outputArtefact": "wildcard-single-object-json-stringify-regex-node24.json"
+    },
+    {
+      "id": "path-based-single-object-v2-node24",
+      "fixtureDir": "test/bench/fixtures/path-based-single-object",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/deep-redact-v2",
+      "competitorConfigFile": "competitor-config-deep-redact-v2.json",
+      "runtime": "node24",
+      "command": "node --expose-gc --experimental-strip-types ./scripts/run-resource-benchmarks.ts --id path-based-single-object-v2-node24",
+      "outputArtefact": "path-based-single-object-v2-node24.json"
+    },
+    {
+      "id": "wildcard-single-object-v2-node24",
+      "fixtureDir": "test/bench/fixtures/wildcard-single-object",
+      "workloadClass": "wildcard",
+      "competitor": "./test/bench/competitors/deep-redact-v2",
+      "competitorConfigFile": "competitor-config-deep-redact-v2.json",
+      "runtime": "node24",
+      "command": "node --expose-gc --experimental-strip-types ./scripts/run-resource-benchmarks.ts --id wildcard-single-object-v2-node24",
+      "outputArtefact": "wildcard-single-object-v2-node24.json"
     }
   ]
 }

@@ -1,5 +1,5 @@
 {
-  "id": "wildcard-single-object-v3-node24",
+  "id": "wildcard-single-object-v2-node24",
   "workloadClass": "wildcard",
   "runtime": "node24",
   "conditions": {
@@ -13,8 +13,8 @@
     "gcExposed": true
   },
   "comparator": {
-    "name": "./test/bench/competitors/deep-redact-v3",
-    "version": "3.0.5"
+    "name": "./test/bench/competitors/deep-redact-v2",
+    "version": "2.2.1"
   },
   "subject": {
     "name": "@hackylabs/deep-redact",
@@ -22,22 +22,22 @@
   },
   "measurements": {
     "subject": {
-      "baselineHeapUsedBytes": 9236960,
-      "peakHeapUsedBytes": 13345704,
-      "afterGcHeapUsedBytes": 9236960,
+      "baselineHeapUsedBytes": 9375896,
+      "peakHeapUsedBytes": 13484640,
+      "afterGcHeapUsedBytes": 9375896,
       "heapDeltaBeforeGcBytes": 4108744,
       "heapDeltaAfterGcBytes": 0,
-      "baselineRssBytes": 95436800,
-      "peakRssBytes": 95436800
+      "baselineRssBytes": 97681408,
+      "peakRssBytes": 97681408
     },
     "comparator": {
-      "baselineHeapUsedBytes": 9284072,
-      "peakHeapUsedBytes": 13467784,
-      "afterGcHeapUsedBytes": 9287712,
-      "heapDeltaBeforeGcBytes": 4183712,
-      "heapDeltaAfterGcBytes": 3640,
-      "baselineRssBytes": 95502336,
-      "peakRssBytes": 95535104
+      "baselineHeapUsedBytes": 9466744,
+      "peakHeapUsedBytes": 13680624,
+      "afterGcHeapUsedBytes": 9466912,
+      "heapDeltaBeforeGcBytes": 4213880,
+      "heapDeltaAfterGcBytes": 168,
+      "baselineRssBytes": 99319808,
+      "peakRssBytes": 99319808
     }
   },
   "generatingPlatform": {
@@ -45,5 +45,5 @@
     "arch": "arm64",
     "nodeVersion": "v24.14.1"
   },
-  "generatedAt": "2026-06-13T08:57:30.871Z"
+  "generatedAt": "2026-06-13T08:57:33.404Z"
 }

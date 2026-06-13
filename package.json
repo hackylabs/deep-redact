@@ -89,7 +89,7 @@
     "verify:speed-benchmarks": "pnpm run build && node --experimental-strip-types ./scripts/verify-speed-benchmarks.ts"
   },
   "//": [
-    "deep-redact-v3 and fast-redact are installed only as internal benchmark comparisons and are not used in the library",
+    "deep-redact-v2, deep-redact-v3 and fast-redact are installed only as internal benchmark comparisons and are not used in the library",
     "all dependencies are for development purposes only"
   ],
   "devDependencies": {
@@ -97,6 +97,7 @@
     "@stylistic/eslint-plugin": "4.4.1",
     "@types/fast-redact": "3.0.4",
     "@types/node": "24.1.0",
+    "deep-redact-v2": "npm:@hackylabs/deep-redact@2.2.1",
     "deep-redact-v3": "npm:@hackylabs/deep-redact@^3.0.0",
     "eslint": "9.39.4",
     "eslint-plugin-unicorn": "59.0.1",

@@ -28,6 +28,7 @@ const formatOps = (ops: number): string => {
 const COLOURS: Record<string, string> = {
   'deep-redact v4': '#2563eb',
   'deep-redact v3': '#64748b',
+  'deep-redact v2': '#475569',
   'fast-redact †': '#f59e0b',
   'json-stringify-regex †': '#94a3b8',
 }
@@ -60,6 +61,7 @@ function buildSerialisedRows(): ChartRow[] {
   return (['Path-based', 'Wildcard'] as const).flatMap((label) => {
     const prefix = label === 'Path-based' ? 'path-based' : 'wildcard'
     const v3Art = loadArtefact(`${prefix}-serialised-v3-node24`)
+    const v2Art = loadArtefact(`${prefix}-serialised-v2-node24`)
     const frArt = loadArtefact(`${prefix}-serialised-fast-redact-node24`)
     const jsrArt = loadArtefact(`${prefix}-serialised-json-stringify-regex-node24`)
     return [
@@ -67,6 +69,7 @@ function buildSerialisedRows(): ChartRow[] {
       row(label, 'fast-redact †', opsPerSec(frArt.measurements.comparator.median)),
       row(label, 'json-stringify-regex †', opsPerSec(jsrArt.measurements.comparator.median)),
       row(label, 'deep-redact v3', opsPerSec(v3Art.measurements.comparator.median)),
+      row(label, 'deep-redact v2', opsPerSec(v2Art.measurements.comparator.median)),
     ]
   })
 }
@@ -75,11 +78,13 @@ function buildNonSerialisedRows(): ChartRow[] {
   return (['Path-based', 'Wildcard'] as const).flatMap((label) => {
     const prefix = label === 'Path-based' ? 'path-based' : 'wildcard'
     const v3Art = loadArtefact(`${prefix}-non-serialised-v3-node24`)
+    const v2Art = loadArtefact(`${prefix}-non-serialised-v2-node24`)
     const frArt = loadArtefact(`${prefix}-non-serialised-fast-redact-node24`)
     return [
       row(label, 'deep-redact v4', opsPerSec(v3Art.measurements.subject.median)),
       row(label, 'fast-redact †', opsPerSec(frArt.measurements.comparator.median)),
       row(label, 'deep-redact v3', opsPerSec(v3Art.measurements.comparator.median)),
+      row(label, 'deep-redact v2', opsPerSec(v2Art.measurements.comparator.median)),
     ]
   })
 }

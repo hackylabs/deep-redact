@@ -169,6 +169,74 @@
         "maxOverheadPct": 75,
         "runScope": ["protected-branch", "release-candidate"]
       }
+    },
+    {
+      "id": "path-based-non-serialised-v2-node24",
+      "fixtureDir": "test/bench/fixtures/path-based-single-object",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/deep-redact-v2",
+      "competitorConfigFile": "competitor-config-deep-redact-v2.json",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id path-based-non-serialised-v2-node24",
+      "outputArtefact": "path-based-non-serialised-v2-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
+        "maxOverheadPct": 1000,
+        "runScope": ["informational"]
+      }
+    },
+    {
+      "id": "path-based-serialised-v2-node24",
+      "fixtureDir": "test/bench/fixtures/path-based-single-object-serialised",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/deep-redact-v2",
+      "competitorConfigFile": "competitor-config-deep-redact-v2.json",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id path-based-serialised-v2-node24",
+      "outputArtefact": "path-based-serialised-v2-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
+        "maxOverheadPct": 1000,
+        "runScope": ["informational"]
+      }
+    },
+    {
+      "id": "wildcard-non-serialised-v2-node24",
+      "fixtureDir": "test/bench/fixtures/wildcard-single-object",
+      "workloadClass": "wildcard",
+      "competitor": "./test/bench/competitors/deep-redact-v2",
+      "competitorConfigFile": "competitor-config-deep-redact-v2.json",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id wildcard-non-serialised-v2-node24",
+      "outputArtefact": "wildcard-non-serialised-v2-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
+        "maxOverheadPct": 1000,
+        "runScope": ["informational"]
+      }
+    },
+    {
+      "id": "wildcard-serialised-v2-node24",
+      "fixtureDir": "test/bench/fixtures/wildcard-single-object-serialised",
+      "workloadClass": "wildcard",
+      "competitor": "./test/bench/competitors/deep-redact-v2",
+      "competitorConfigFile": "competitor-config-deep-redact-v2.json",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id wildcard-serialised-v2-node24",
+      "outputArtefact": "wildcard-serialised-v2-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
+        "maxOverheadPct": 1000,
+        "runScope": ["informational"]
+      }
     }
   ]
 }

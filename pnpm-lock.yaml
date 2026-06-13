@@ -20,6 +20,9 @@ importers:
       '@types/node':
         specifier: 24.1.0
         version: 24.1.0
+      deep-redact-v2:
+        specifier: npm:@hackylabs/deep-redact@2.2.1
+        version: '@hackylabs/deep-redact@2.2.1'
       deep-redact-v3:
         specifier: npm:@hackylabs/deep-redact@^3.0.0
         version: '@hackylabs/deep-redact@3.0.5'
@@ -135,6 +138,9 @@ packages:
   '@eslint/plugin-kit@0.4.1':
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@hackylabs/deep-redact@2.2.1':
+    resolution: {integrity: sha512-QQA3mBQVOkU0G2nl4luiajvVMQ5hntTid7PfpZfuzVKq0YYIxbwK3iZxIZ7TyHZoeun/N6Xxm9/3osXwtwL53g==}
 
   '@hackylabs/deep-redact@3.0.5':
     resolution: {integrity: sha512-CI6TJytOngHiD9RCjBBwsBrg5kCkyK74RBxawLCQ8b6yOzDgIPN4/zRI/YvL6IV18Xcb6HI93Fo2bzJ19efNqQ==}
@@ -1702,6 +1708,8 @@ snapshots:
     dependencies:
       '@eslint/core': 0.17.0
       levn: 0.4.1
+
+  '@hackylabs/deep-redact@2.2.1': {}
 
   '@hackylabs/deep-redact@3.0.5': {}
 
