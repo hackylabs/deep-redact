@@ -1,6 +1,6 @@
 {
   "name": "@hackylabs/deep-redact",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "description": "Deeply redact sensitive data from objects, arrays and arbitrary strings (e.g. XML or raw cookies data) with a composable, function-first API.",
   "private": false,
   "license": "MIT",
