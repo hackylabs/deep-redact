@@ -1,0 +1,9 @@
+{
+  "blacklistedKeys": [
+    "password",
+    "email",
+    "firstName",
+    "ip"
+  ],
+  "serialise": false
+}

@@ -1,0 +1,5 @@
+{
+  "name": "deep-redact-v4-baseline-adapter",
+  "version": "4.0.0",
+  "main": "index.cjs"
+}

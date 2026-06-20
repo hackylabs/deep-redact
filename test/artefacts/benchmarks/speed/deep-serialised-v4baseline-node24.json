@@ -1,0 +1,53 @@
+{
+  "id": "deep-serialised-v4baseline-node24",
+  "workloadClass": "path-based",
+  "runtime": "node24",
+  "conditions": {
+    "nodeVersion": "v24.14.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "iterations": 100000,
+    "warmupIterations": 10000
+  },
+  "comparator": {
+    "name": "./test/bench/competitors/deep-redact-v4-baseline",
+    "version": "4.0.0"
+  },
+  "subject": {
+    "name": "@hackylabs/deep-redact",
+    "version": "4.0.0"
+  },
+  "measurements": {
+    "subject": {
+      "median": 0.28552473399992595,
+      "mean": 0.29922305373999436,
+      "min": 0.28007257000004027,
+      "max": 0.6181356879999949,
+      "unit": "ms"
+    },
+    "comparator": {
+      "median": 0.2885853599999682,
+      "mean": 0.2943906578799806,
+      "min": 0.27957407399991646,
+      "max": 0.39006276799975603,
+      "unit": "ms"
+    }
+  },
+  "overheadPct": -1.06,
+  "generatingPlatform": {
+    "os": "darwin",
+    "arch": "arm64",
+    "nodeVersion": "v24.14.1"
+  },
+  "thresholdDecision": {
+    "passed": true,
+    "metric": "median",
+    "minOverheadPct": -100,
+    "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
+    "maxOverheadPct": 100000,
+    "runScope": [
+      "informational"
+    ]
+  },
+  "generatedAt": "2026-06-20T09:03:41.866Z"
+}

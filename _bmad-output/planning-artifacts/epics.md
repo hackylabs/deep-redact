@@ -194,6 +194,13 @@ Restore two differentiated v3 capabilities that were absent from the v4.0.0 surf
 **Technical constraints supported:** performance-neutral restoration (no benchmark threshold change), deterministic output across both traversal engines, v3 migration fidelity
 **Status:** release-blocking for the public v4 release.
 
+### Epic 10: Eliminate the Serialised-Output Depth Cliff and Reconcile the Circular-Marker Contract
+Remove the depth-scaling per-node path/identity overhead from the serialise-only output adapter (Story 8.3) so `serialise: true` stops degrading non-linearly with payload depth, and fix the serialised circular-marker `path` bug for `Map`/`Set` values (the marker leaks the transformer's synthetic `value` wrapper). The initialisation/configuration API, the runtime input contract, all object-mode output, and every non-Map/Set marker are unchanged; the only output change is the **corrected Map/Set circular-marker `path`**, treated as a bug fix and shipped as a **patch on the v4 line (4.0.x)**.
+**FRs covered:** none (internal performance plus a serialised-output bug fix)
+**FRs supported:** FR26 (deterministic, no-throw serialised output)
+**Technical constraints supported:** no change to the initialisation or runtime-input API; the only output change is the corrected Map/Set circular-marker path (bug fix); preserve the Story 8.3 two-pass boundary (no fuse)
+**Status:** patch on the v4 line (4.0.x); not blocking any release.
+
 ### Late-Epic Dependency Matrix
 
 - Story 7.5 is cancelled and remains historical context only; no future work should extend the superseded compiled fast lane.
@@ -201,6 +208,7 @@ Restore two differentiated v3 capabilities that were absent from the v4.0.0 surf
 - Story 5.12 absorbs the *former* worked-example gap so FR31 remains in the rollout and documentation epic. This is unrelated to the current Epic 9, which is the v3 capability-parity epic (FR39, FR40); the worked-example concept was reabsorbed into Epic 5 and the Epic 9 number is now reused for capability parity.
 - Stories 8.7 to 8.12 are pre-release hardening stories for the rule-driven engine; they must not reopen completed Stories 8.1 to 8.6 except by adding focused follow-up evidence.
 - Epic 9 depends on the completed Epic 8 rule-driven engine and serialise-only output adapter (Story 8.3): the value-type allowlist (Story 9.1) must gate both the rule-driven and generic engines at the shared leaf-replacement boundary, and relies on transformation being a serialise-stage concern so a type-vetoed value still transforms when `serialise: true`. Story 9.3 depends on Stories 9.1 and 9.2 landing the engine capabilities before the v3 migration matrix and worked examples are updated.
+- Epic 10 depends on the completed serialise-only output adapter (Story 8.3). Story 10.1 fixes the Map/Set circular-marker `path` bug (a patch-level output correction; initialisation and runtime-input APIs unchanged) and must land before Story 10.2 (lazy path tracking), which refactors to that corrected contract and is output-neutral against it. Epic 10 ships as a patch on the v4 line (4.0.x) and does not fuse the adapter into the general traversal.
 
 ## Epic 1: Enable Service-Wide Redaction with One Configuration
 
@@ -3004,3 +3012,62 @@ so that the documented carry-over and parity match the actual v4 behaviour and t
   **When** capability documentation and the deferred-work audit are reviewed
   **Then** the value-type allowlist and full `KeyRule` parity are documented as supported
   **And** any related deferred-work audit items are recorded as addressed.
+
+## Epic 10: Eliminate the Serialised-Output Depth Cliff and Reconcile the Circular-Marker Contract
+
+Remove the depth-scaling per-node overhead from the serialise-only output adapter (`buildSafeGraph`, Story 8.3) so that `serialise: true` no longer degrades non-linearly with payload depth, and reconcile the inconsistent circular-marker `path` semantics inherited from Story 8.3 into one canonical form.
+
+**Classification & versioning:** this is a **bug fix plus an internal performance improvement, shipped as a patch on the v4 line (4.0.x)**. The initialisation/configuration API (`deepRedact` / `createRedactor` factories, every configuration option, exported types) and the runtime input contract are unchanged, as is all object-mode output and every non-Map/Set serialised marker. The single output change is the **correction of the buggy Map/Set circular-marker `path`** (it currently leaks the transformer's synthetic `value` wrapper — see Story 10.1), treated as fixing incorrect behaviour rather than a breaking contract change. The correction should still be called out in the changelog for any consumer that parses circular markers in Map/Set payloads.
+
+**Context:** `serialise: true` is the primary safe-logging path. Object-mode output is unsafe for a caller's own `JSON.stringify` (it throws on `BigInt` and circular references and silently collapses `Map`/`Set` to `{}` and drops `undefined`); the serialise adapter exists to guarantee no-throw, no-silent-loss output. An ad-hoc scaling experiment (2026-06-13, v4 vs deep-redact-v2 2.2.1, matched configs, frozen shared input) found the serialised gap stable at ~1.8× under breadth but blowing out to ~7× under depth, because `buildSafeGraph` eagerly builds a path string per node (including a `bareIdentifierPattern.test` per object key) whose only observable product — the circular-marker `path` — is consumed only when a cycle is actually emitted. There is deliberately **no telemetry** on this package, so prioritisation rests on purpose (safe logging is the dominant job) rather than usage data.
+
+**Key design decision:** the Map/Set circular-marker `path` bug from the 8.3 review — the marker leaks the transformer's synthetic `value` wrapper, affecting both root and nested cycles — is fixed now (Story 10.1) as a patch-level output correction. The corrected `path` (logical, no synthetic `value` segment) is chosen to be cheap to materialise from an ancestor chain, aligning with the performance refactor. The adapter then attacks the depth cost (Story 10.2): cycle detection retains an ancestor-identity structure, and the concrete marker path is materialised only when a circular reference is emitted — eliminating the per-node descent work. The adapter stays a separate pass from the general traversal (the Story 8.3 decoupling is preserved — **no fuse**, for leak-safety and maintainability reasons that output latitude does not change). The breadth ~1.8× gap is left untouched as noise. Story 10.2 is **output-neutral relative to the reconciled Story 10.1 contract** — it changes performance, not output.
+
+### Story 10.1: Reconcile the Serialised Circular-Marker Semantics
+
+**Type:** Bug fix (patch, 4.0.x).
+
+As a maintainer,
+I want the serialised circular-marker `path` for cycles through `Map`/`Set` corrected so it reads consistently with object/array cycle paths and with the marker's own `value` field,
+so that the circular-marker contract is consistent, a now-known serialisation bug is fixed, and Story 10.2 has a stable target contract to refactor against.
+
+**Acceptance Criteria:**
+
+- **Given** the probe matrix (root and nested Set/Map self-cycles, with object/array/mutual cycles as controls)
+  **When** current output is characterised
+  **Then** the buggy Map/Set marker `path` strings are recorded as the baseline being corrected.
+- **Given** a cycle through a `Set` or `Map`
+  **When** the circular marker is emitted
+  **Then** its `path` drops the transformer's synthetic `value` segment and reads consistently with object/array cycle paths and the marker's `value` field — `value.0`→`0`, `value.me`→`me`, `roles.value.0`→`roles.0`, `meta.value.me`→`meta.me` — in both root and nested positions, asserted by golden tests.
+- **Given** the public API and unaffected output
+  **Then** the initialisation/configuration API, the runtime input contract, all object-mode output, every non-Map/Set marker, and the marker `value` field are unchanged.
+- **Given** the classification
+  **Then** the change ships as a patch (4.0.x) with a changelog entry calling out the corrected Map/Set circular-marker `path`.
+- **Given** this story addresses the 8.3-review deferred marker item
+  **When** it is marked done
+  **Then** that entry is removed from `deferred-work-audit.md` per the addressed-item cleanup rule.
+
+**Addresses deferred item:** "Root array/Set/Map self-cycle circular-marker `path` semantics inconsistency" (8.3 review, 2026-05-31) — now confirmed to affect nested Set/Map too.
+
+### Story 10.2: Eliminate the Serialise-Output Depth Cliff with Lazy Path Tracking
+
+As a backend engineer logging redacted payloads,
+I want the serialise adapter to stop building a path string and per-key work on every node during descent, materialising the reference path only when a circular reference is emitted,
+so that `serialise: true` no longer degrades non-linearly with payload depth.
+
+**Acceptance Criteria:**
+
+- **Given** an acyclic payload under `serialise: true`
+  **Then** `buildSafeGraph` constructs no per-node path string and runs no per-key `bareIdentifierPattern.test` on descent.
+- **Given** a detected cycle or `cycleRegistry` back-edge
+  **Then** the emitted marker `path`/`value` matches the reconciled Story 10.1 contract, materialised lazily, preserving `isStrictDescendantPath` semantics.
+- **Given** the byte-equivalence gate against the Story 10.1 reconciled baseline, plus exotic-type/getter/deep-shape coverage
+  **Then** Story 10.2 introduces no further output change and all tests pass.
+- **Given** the change
+  **Then** the public API is unchanged on both surfaces (initialisation/configuration and runtime input), `buildSafeGraph` remains a separate pass from `redactValue` (no fuse), and the breadth ~1.8× gap is left untouched.
+- **Given** the released 4.0.0 baseline (npm comparator `@hackylabs/deep-redact@4.0.0`) and the candidate
+  **Then** the candidate is measurably faster on the serialised depth workload and not regressed on acyclic/breadth/object-mode — a required before/after gate for the 4.0.1 release.
+
+**Depends on:** Story 10.1 (reconciled marker contract as the refactor target).
+
+**Out of scope:** fusing the serialise adapter into the general traversal; the breadth ~1.8× gap; promoting the ad-hoc benchmark fixtures into the canonical suite (pending user decision).

@@ -81,6 +81,94 @@
       "runtime": "node24",
       "command": "node --expose-gc --experimental-strip-types ./scripts/run-resource-benchmarks.ts --id wildcard-single-object-v2-node24",
       "outputArtefact": "wildcard-single-object-v2-node24.json"
+    },
+    {
+      "id": "deep-non-serialised-v4baseline-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/deep-redact-v4-baseline",
+      "competitorConfigFile": "competitor-config-deep-redact-v4-baseline.json",
+      "runtime": "node24",
+      "command": "node --expose-gc --experimental-strip-types ./scripts/run-resource-benchmarks.ts --id deep-non-serialised-v4baseline-node24",
+      "outputArtefact": "deep-non-serialised-v4baseline-node24.json"
+    },
+    {
+      "id": "deep-non-serialised-v3-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/deep-redact-v3",
+      "competitorConfigFile": "competitor-config-deep-redact-v3.json",
+      "runtime": "node24",
+      "command": "node --expose-gc --experimental-strip-types ./scripts/run-resource-benchmarks.ts --id deep-non-serialised-v3-node24",
+      "outputArtefact": "deep-non-serialised-v3-node24.json"
+    },
+    {
+      "id": "deep-non-serialised-fast-redact-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object",
+      "workloadClass": "path-based",
+      "competitor": "fast-redact",
+      "runtime": "node24",
+      "command": "node --expose-gc --experimental-strip-types ./scripts/run-resource-benchmarks.ts --id deep-non-serialised-fast-redact-node24",
+      "outputArtefact": "deep-non-serialised-fast-redact-node24.json"
+    },
+    {
+      "id": "deep-non-serialised-v2-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/deep-redact-v2",
+      "competitorConfigFile": "competitor-config-deep-redact-v2.json",
+      "runtime": "node24",
+      "command": "node --expose-gc --experimental-strip-types ./scripts/run-resource-benchmarks.ts --id deep-non-serialised-v2-node24",
+      "outputArtefact": "deep-non-serialised-v2-node24.json"
+    },
+    {
+      "id": "deep-serialised-v4baseline-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object-serialised",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/deep-redact-v4-baseline",
+      "competitorConfigFile": "competitor-config-deep-redact-v4-baseline.json",
+      "runtime": "node24",
+      "command": "node --expose-gc --experimental-strip-types ./scripts/run-resource-benchmarks.ts --id deep-serialised-v4baseline-node24",
+      "outputArtefact": "deep-serialised-v4baseline-node24.json"
+    },
+    {
+      "id": "deep-serialised-v3-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object-serialised",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/deep-redact-v3",
+      "competitorConfigFile": "competitor-config-deep-redact-v3.json",
+      "runtime": "node24",
+      "command": "node --expose-gc --experimental-strip-types ./scripts/run-resource-benchmarks.ts --id deep-serialised-v3-node24",
+      "outputArtefact": "deep-serialised-v3-node24.json"
+    },
+    {
+      "id": "deep-serialised-fast-redact-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object-serialised",
+      "workloadClass": "path-based",
+      "competitor": "fast-redact",
+      "runtime": "node24",
+      "command": "node --expose-gc --experimental-strip-types ./scripts/run-resource-benchmarks.ts --id deep-serialised-fast-redact-node24",
+      "outputArtefact": "deep-serialised-fast-redact-node24.json"
+    },
+    {
+      "id": "deep-serialised-json-stringify-regex-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object-serialised",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/json-stringify-regex",
+      "competitorConfigFile": "competitor-config-json-stringify-regex.json",
+      "runtime": "node24",
+      "command": "node --expose-gc --experimental-strip-types ./scripts/run-resource-benchmarks.ts --id deep-serialised-json-stringify-regex-node24",
+      "outputArtefact": "deep-serialised-json-stringify-regex-node24.json"
+    },
+    {
+      "id": "deep-serialised-v2-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object-serialised",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/deep-redact-v2",
+      "competitorConfigFile": "competitor-config-deep-redact-v2.json",
+      "runtime": "node24",
+      "command": "node --expose-gc --experimental-strip-types ./scripts/run-resource-benchmarks.ts --id deep-serialised-v2-node24",
+      "outputArtefact": "deep-serialised-v2-node24.json"
     }
   ]
 }

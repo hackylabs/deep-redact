@@ -35,7 +35,7 @@
 # - Scrum Master typically creates the next story after the previous one is 'done'
 
 generated: 2026-04-13T09:43:13+0100
-last_updated: 2026-06-06T00:00:00+0100
+last_updated: 2026-06-13T00:00:00+0100
 project: deep-redact
 project_key: NOKEY
 tracking_system: file-system
@@ -131,3 +131,8 @@ development_status:
   9-3-update-v3-migration-matrix-generated-doc-and-worked-examples-for-restored-capabilities: done
   9-4-scope-rule-invalid-combination-checks-to-same-rule-options: cancelled
   epic-9-retrospective: optional
+
+  epic-10: in-progress
+  10-1-reconcile-serialised-circular-marker-semantics: ready-for-dev
+  10-2-eliminate-serialise-output-depth-cliff-with-lazy-path-tracking: ready-for-dev
+  epic-10-retrospective: optional

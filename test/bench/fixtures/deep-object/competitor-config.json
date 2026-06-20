@@ -1,0 +1,9 @@
+{
+  "paths": [
+    "user.password",
+    "user.email",
+    "user.firstName",
+    "user.ip"
+  ],
+  "serialize": false
+}

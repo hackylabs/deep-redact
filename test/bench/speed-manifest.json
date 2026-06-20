@@ -18,7 +18,10 @@
         "minOverheadPct": -100,
         "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 0,
-        "runScope": ["protected-branch", "release-candidate"]
+        "runScope": [
+          "protected-branch",
+          "release-candidate"
+        ]
       }
     },
     {
@@ -34,7 +37,10 @@
         "minOverheadPct": -100,
         "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 1000,
-        "runScope": ["protected-branch", "release-candidate"]
+        "runScope": [
+          "protected-branch",
+          "release-candidate"
+        ]
       }
     },
     {
@@ -51,7 +57,10 @@
         "minOverheadPct": -100,
         "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 1000,
-        "runScope": ["protected-branch", "release-candidate"]
+        "runScope": [
+          "protected-branch",
+          "release-candidate"
+        ]
       }
     },
     {
@@ -68,7 +77,10 @@
         "minOverheadPct": -100,
         "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 0,
-        "runScope": ["protected-branch", "release-candidate"]
+        "runScope": [
+          "protected-branch",
+          "release-candidate"
+        ]
       }
     },
     {
@@ -84,7 +96,10 @@
         "minOverheadPct": -100,
         "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 1000,
-        "runScope": ["protected-branch", "release-candidate"]
+        "runScope": [
+          "protected-branch",
+          "release-candidate"
+        ]
       }
     },
     {
@@ -101,7 +116,10 @@
         "minOverheadPct": -100,
         "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 1000,
-        "runScope": ["protected-branch", "release-candidate"]
+        "runScope": [
+          "protected-branch",
+          "release-candidate"
+        ]
       }
     },
     {
@@ -118,7 +136,10 @@
         "minOverheadPct": -100,
         "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 0,
-        "runScope": ["protected-branch", "release-candidate"]
+        "runScope": [
+          "protected-branch",
+          "release-candidate"
+        ]
       }
     },
     {
@@ -134,7 +155,10 @@
         "minOverheadPct": -100,
         "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 300,
-        "runScope": ["protected-branch", "release-candidate"]
+        "runScope": [
+          "protected-branch",
+          "release-candidate"
+        ]
       }
     },
     {
@@ -151,7 +175,10 @@
         "minOverheadPct": -100,
         "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 0,
-        "runScope": ["protected-branch", "release-candidate"]
+        "runScope": [
+          "protected-branch",
+          "release-candidate"
+        ]
       }
     },
     {
@@ -167,7 +194,10 @@
         "minOverheadPct": -100,
         "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 75,
-        "runScope": ["protected-branch", "release-candidate"]
+        "runScope": [
+          "protected-branch",
+          "release-candidate"
+        ]
       }
     },
     {
@@ -184,7 +214,9 @@
         "minOverheadPct": -100,
         "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 1000,
-        "runScope": ["informational"]
+        "runScope": [
+          "informational"
+        ]
       }
     },
     {
@@ -201,7 +233,9 @@
         "minOverheadPct": -100,
         "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 1000,
-        "runScope": ["informational"]
+        "runScope": [
+          "informational"
+        ]
       }
     },
     {
@@ -218,7 +252,9 @@
         "minOverheadPct": -100,
         "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 1000,
-        "runScope": ["informational"]
+        "runScope": [
+          "informational"
+        ]
       }
     },
     {
@@ -235,7 +271,178 @@
         "minOverheadPct": -100,
         "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
         "maxOverheadPct": 1000,
-        "runScope": ["informational"]
+        "runScope": [
+          "informational"
+        ]
+      }
+    },
+    {
+      "id": "deep-non-serialised-v4baseline-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/deep-redact-v4-baseline",
+      "competitorConfigFile": "competitor-config-deep-redact-v4-baseline.json",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id deep-non-serialised-v4baseline-node24",
+      "outputArtefact": "deep-non-serialised-v4baseline-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
+        "maxOverheadPct": 100000,
+        "runScope": [
+          "informational"
+        ]
+      }
+    },
+    {
+      "id": "deep-non-serialised-v3-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/deep-redact-v3",
+      "competitorConfigFile": "competitor-config-deep-redact-v3.json",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id deep-non-serialised-v3-node24",
+      "outputArtefact": "deep-non-serialised-v3-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
+        "maxOverheadPct": 100000,
+        "runScope": [
+          "informational"
+        ]
+      }
+    },
+    {
+      "id": "deep-non-serialised-fast-redact-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object",
+      "workloadClass": "path-based",
+      "competitor": "fast-redact",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id deep-non-serialised-fast-redact-node24",
+      "outputArtefact": "deep-non-serialised-fast-redact-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
+        "maxOverheadPct": 100000,
+        "runScope": [
+          "informational"
+        ]
+      }
+    },
+    {
+      "id": "deep-non-serialised-v2-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/deep-redact-v2",
+      "competitorConfigFile": "competitor-config-deep-redact-v2.json",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id deep-non-serialised-v2-node24",
+      "outputArtefact": "deep-non-serialised-v2-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
+        "maxOverheadPct": 100000,
+        "runScope": [
+          "informational"
+        ]
+      }
+    },
+    {
+      "id": "deep-serialised-v4baseline-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object-serialised",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/deep-redact-v4-baseline",
+      "competitorConfigFile": "competitor-config-deep-redact-v4-baseline.json",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id deep-serialised-v4baseline-node24",
+      "outputArtefact": "deep-serialised-v4baseline-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
+        "maxOverheadPct": 100000,
+        "runScope": [
+          "informational"
+        ]
+      }
+    },
+    {
+      "id": "deep-serialised-v3-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object-serialised",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/deep-redact-v3",
+      "competitorConfigFile": "competitor-config-deep-redact-v3.json",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id deep-serialised-v3-node24",
+      "outputArtefact": "deep-serialised-v3-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
+        "maxOverheadPct": 100000,
+        "runScope": [
+          "informational"
+        ]
+      }
+    },
+    {
+      "id": "deep-serialised-fast-redact-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object-serialised",
+      "workloadClass": "path-based",
+      "competitor": "fast-redact",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id deep-serialised-fast-redact-node24",
+      "outputArtefact": "deep-serialised-fast-redact-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
+        "maxOverheadPct": 100000,
+        "runScope": [
+          "informational"
+        ]
+      }
+    },
+    {
+      "id": "deep-serialised-json-stringify-regex-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object-serialised",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/json-stringify-regex",
+      "competitorConfigFile": "competitor-config-json-stringify-regex.json",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id deep-serialised-json-stringify-regex-node24",
+      "outputArtefact": "deep-serialised-json-stringify-regex-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
+        "maxOverheadPct": 100000,
+        "runScope": [
+          "informational"
+        ]
+      }
+    },
+    {
+      "id": "deep-serialised-v2-node24",
+      "fixtureDir": "test/bench/fixtures/deep-object-serialised",
+      "workloadClass": "path-based",
+      "competitor": "./test/bench/competitors/deep-redact-v2",
+      "competitorConfigFile": "competitor-config-deep-redact-v2.json",
+      "runtime": "node24",
+      "command": "node --experimental-strip-types ./scripts/run-benchmarks.ts --id deep-serialised-v2-node24",
+      "outputArtefact": "deep-serialised-v2-node24.json",
+      "thresholdPolicy": {
+        "comparatorMetric": "median",
+        "minOverheadPct": -100,
+        "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
+        "maxOverheadPct": 100000,
+        "runScope": [
+          "informational"
+        ]
       }
     }
   ]

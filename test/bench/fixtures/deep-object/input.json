@@ -1,0 +1,417 @@
+{
+  "user": {
+    "id": 1,
+    "firstName": "Emily",
+    "lastName": "Johnson",
+    "email": "emily.johnson@example.com",
+    "password": "emilyspass",
+    "ip": "42.48.100.32",
+    "address": {
+      "street": "123 Maple Avenue",
+      "city": "Springfield",
+      "postalCode": "62701"
+    }
+  },
+  "requestId": "req-abc-123",
+  "ok": true,
+  "trace": {
+    "level": 0,
+    "label": "span-0",
+    "value": 0,
+    "child": {
+      "level": 1,
+      "label": "span-1",
+      "value": 2,
+      "child": {
+        "level": 2,
+        "label": "span-2",
+        "value": 4,
+        "child": {
+          "level": 3,
+          "label": "span-3",
+          "value": 6,
+          "child": {
+            "level": 4,
+            "label": "span-4",
+            "value": 8,
+            "child": {
+              "level": 5,
+              "label": "span-5",
+              "value": 10,
+              "child": {
+                "level": 6,
+                "label": "span-6",
+                "value": 12,
+                "child": {
+                  "level": 7,
+                  "label": "span-7",
+                  "value": 14,
+                  "child": {
+                    "level": 8,
+                    "label": "span-8",
+                    "value": 16,
+                    "child": {
+                      "level": 9,
+                      "label": "span-9",
+                      "value": 18,
+                      "child": {
+                        "level": 10,
+                        "label": "span-10",
+                        "value": 20,
+                        "child": {
+                          "level": 11,
+                          "label": "span-11",
+                          "value": 22,
+                          "child": {
+                            "level": 12,
+                            "label": "span-12",
+                            "value": 24,
+                            "child": {
+                              "level": 13,
+                              "label": "span-13",
+                              "value": 26,
+                              "child": {
+                                "level": 14,
+                                "label": "span-14",
+                                "value": 28,
+                                "child": {
+                                  "level": 15,
+                                  "label": "span-15",
+                                  "value": 30,
+                                  "child": {
+                                    "level": 16,
+                                    "label": "span-16",
+                                    "value": 32,
+                                    "child": {
+                                      "level": 17,
+                                      "label": "span-17",
+                                      "value": 34,
+                                      "child": {
+                                        "level": 18,
+                                        "label": "span-18",
+                                        "value": 36,
+                                        "child": {
+                                          "level": 19,
+                                          "label": "span-19",
+                                          "value": 38,
+                                          "child": {
+                                            "level": 20,
+                                            "label": "span-20",
+                                            "value": 40,
+                                            "child": {
+                                              "level": 21,
+                                              "label": "span-21",
+                                              "value": 42,
+                                              "child": {
+                                                "level": 22,
+                                                "label": "span-22",
+                                                "value": 44,
+                                                "child": {
+                                                  "level": 23,
+                                                  "label": "span-23",
+                                                  "value": 46,
+                                                  "child": {
+                                                    "level": 24,
+                                                    "label": "span-24",
+                                                    "value": 48,
+                                                    "child": {
+                                                      "level": 25,
+                                                      "label": "span-25",
+                                                      "value": 50,
+                                                      "child": {
+                                                        "level": 26,
+                                                        "label": "span-26",
+                                                        "value": 52,
+                                                        "child": {
+                                                          "level": 27,
+                                                          "label": "span-27",
+                                                          "value": 54,
+                                                          "child": {
+                                                            "level": 28,
+                                                            "label": "span-28",
+                                                            "value": 56,
+                                                            "child": {
+                                                              "level": 29,
+                                                              "label": "span-29",
+                                                              "value": 58,
+                                                              "child": {
+                                                                "level": 30,
+                                                                "label": "span-30",
+                                                                "value": 60,
+                                                                "child": {
+                                                                  "level": 31,
+                                                                  "label": "span-31",
+                                                                  "value": 62,
+                                                                  "child": {
+                                                                    "level": 32,
+                                                                    "label": "span-32",
+                                                                    "value": 64,
+                                                                    "child": {
+                                                                      "level": 33,
+                                                                      "label": "span-33",
+                                                                      "value": 66,
+                                                                      "child": {
+                                                                        "level": 34,
+                                                                        "label": "span-34",
+                                                                        "value": 68,
+                                                                        "child": {
+                                                                          "level": 35,
+                                                                          "label": "span-35",
+                                                                          "value": 70,
+                                                                          "child": {
+                                                                            "level": 36,
+                                                                            "label": "span-36",
+                                                                            "value": 72,
+                                                                            "child": {
+                                                                              "level": 37,
+                                                                              "label": "span-37",
+                                                                              "value": 74,
+                                                                              "child": {
+                                                                                "level": 38,
+                                                                                "label": "span-38",
+                                                                                "value": 76,
+                                                                                "child": {
+                                                                                  "level": 39,
+                                                                                  "label": "span-39",
+                                                                                  "value": 78,
+                                                                                  "child": {
+                                                                                    "level": 40,
+                                                                                    "label": "span-40",
+                                                                                    "value": 80,
+                                                                                    "child": {
+                                                                                      "level": 41,
+                                                                                      "label": "span-41",
+                                                                                      "value": 82,
+                                                                                      "child": {
+                                                                                        "level": 42,
+                                                                                        "label": "span-42",
+                                                                                        "value": 84,
+                                                                                        "child": {
+                                                                                          "level": 43,
+                                                                                          "label": "span-43",
+                                                                                          "value": 86,
+                                                                                          "child": {
+                                                                                            "level": 44,
+                                                                                            "label": "span-44",
+                                                                                            "value": 88,
+                                                                                            "child": {
+                                                                                              "level": 45,
+                                                                                              "label": "span-45",
+                                                                                              "value": 90,
+                                                                                              "child": {
+                                                                                                "level": 46,
+                                                                                                "label": "span-46",
+                                                                                                "value": 92,
+                                                                                                "child": {
+                                                                                                  "level": 47,
+                                                                                                  "label": "span-47",
+                                                                                                  "value": 94,
+                                                                                                  "child": {
+                                                                                                    "level": 48,
+                                                                                                    "label": "span-48",
+                                                                                                    "value": 96,
+                                                                                                    "child": {
+                                                                                                      "level": 49,
+                                                                                                      "label": "span-49",
+                                                                                                      "value": 98,
+                                                                                                      "child": {
+                                                                                                        "level": 50,
+                                                                                                        "label": "span-50",
+                                                                                                        "value": 100,
+                                                                                                        "child": {
+                                                                                                          "level": 51,
+                                                                                                          "label": "span-51",
+                                                                                                          "value": 102,
+                                                                                                          "child": {
+                                                                                                            "level": 52,
+                                                                                                            "label": "span-52",
+                                                                                                            "value": 104,
+                                                                                                            "child": {
+                                                                                                              "level": 53,
+                                                                                                              "label": "span-53",
+                                                                                                              "value": 106,
+                                                                                                              "child": {
+                                                                                                                "level": 54,
+                                                                                                                "label": "span-54",
+                                                                                                                "value": 108,
+                                                                                                                "child": {
+                                                                                                                  "level": 55,
+                                                                                                                  "label": "span-55",
+                                                                                                                  "value": 110,
+                                                                                                                  "child": {
+                                                                                                                    "level": 56,
+                                                                                                                    "label": "span-56",
+                                                                                                                    "value": 112,
+                                                                                                                    "child": {
+                                                                                                                      "level": 57,
+                                                                                                                      "label": "span-57",
+                                                                                                                      "value": 114,
+                                                                                                                      "child": {
+                                                                                                                        "level": 58,
+                                                                                                                        "label": "span-58",
+                                                                                                                        "value": 116,
+                                                                                                                        "child": {
+                                                                                                                          "level": 59,
+                                                                                                                          "label": "span-59",
+                                                                                                                          "value": 118,
+                                                                                                                          "child": {
+                                                                                                                            "level": 60,
+                                                                                                                            "label": "span-60",
+                                                                                                                            "value": 120,
+                                                                                                                            "child": {
+                                                                                                                              "level": 61,
+                                                                                                                              "label": "span-61",
+                                                                                                                              "value": 122,
+                                                                                                                              "child": {
+                                                                                                                                "level": 62,
+                                                                                                                                "label": "span-62",
+                                                                                                                                "value": 124,
+                                                                                                                                "child": {
+                                                                                                                                  "level": 63,
+                                                                                                                                  "label": "span-63",
+                                                                                                                                  "value": 126,
+                                                                                                                                  "child": {
+                                                                                                                                    "level": 64,
+                                                                                                                                    "label": "span-64",
+                                                                                                                                    "value": 128,
+                                                                                                                                    "child": {
+                                                                                                                                      "level": 65,
+                                                                                                                                      "label": "span-65",
+                                                                                                                                      "value": 130,
+                                                                                                                                      "child": {
+                                                                                                                                        "level": 66,
+                                                                                                                                        "label": "span-66",
+                                                                                                                                        "value": 132,
+                                                                                                                                        "child": {
+                                                                                                                                          "level": 67,
+                                                                                                                                          "label": "span-67",
+                                                                                                                                          "value": 134,
+                                                                                                                                          "child": {
+                                                                                                                                            "level": 68,
+                                                                                                                                            "label": "span-68",
+                                                                                                                                            "value": 136,
+                                                                                                                                            "child": {
+                                                                                                                                              "level": 69,
+                                                                                                                                              "label": "span-69",
+                                                                                                                                              "value": 138,
+                                                                                                                                              "child": {
+                                                                                                                                                "level": 70,
+                                                                                                                                                "label": "span-70",
+                                                                                                                                                "value": 140,
+                                                                                                                                                "child": {
+                                                                                                                                                  "level": 71,
+                                                                                                                                                  "label": "span-71",
+                                                                                                                                                  "value": 142,
+                                                                                                                                                  "child": {
+                                                                                                                                                    "level": 72,
+                                                                                                                                                    "label": "span-72",
+                                                                                                                                                    "value": 144,
+                                                                                                                                                    "child": {
+                                                                                                                                                      "level": 73,
+                                                                                                                                                      "label": "span-73",
+                                                                                                                                                      "value": 146,
+                                                                                                                                                      "child": {
+                                                                                                                                                        "level": 74,
+                                                                                                                                                        "label": "span-74",
+                                                                                                                                                        "value": 148,
+                                                                                                                                                        "child": {
+                                                                                                                                                          "level": 75,
+                                                                                                                                                          "label": "span-75",
+                                                                                                                                                          "value": 150,
+                                                                                                                                                          "child": {
+                                                                                                                                                            "level": 76,
+                                                                                                                                                            "label": "span-76",
+                                                                                                                                                            "value": 152,
+                                                                                                                                                            "child": {
+                                                                                                                                                              "level": 77,
+                                                                                                                                                              "label": "span-77",
+                                                                                                                                                              "value": 154,
+                                                                                                                                                              "child": {
+                                                                                                                                                                "level": 78,
+                                                                                                                                                                "label": "span-78",
+                                                                                                                                                                "value": 156,
+                                                                                                                                                                "child": {
+                                                                                                                                                                  "level": 79,
+                                                                                                                                                                  "label": "span-79",
+                                                                                                                                                                  "value": 158
+                                                                                                                                                                }
+                                                                                                                                                              }
+                                                                                                                                                            }
+                                                                                                                                                          }
+                                                                                                                                                        }
+                                                                                                                                                      }
+                                                                                                                                                    }
+                                                                                                                                                  }
+                                                                                                                                                }
+                                                                                                                                              }
+                                                                                                                                            }
+                                                                                                                                          }
+                                                                                                                                        }
+                                                                                                                                      }
+                                                                                                                                    }
+                                                                                                                                  }
+                                                                                                                                }
+                                                                                                                              }
+                                                                                                                            }
+                                                                                                                          }
+                                                                                                                        }
+                                                                                                                      }
+                                                                                                                    }
+                                                                                                                  }
+                                                                                                                }
+                                                                                                              }
+                                                                                                            }
+                                                                                                          }
+                                                                                                        }
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -519,3 +519,336 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** informational
 **Result:** PASSED
+
+## deep-non-serialised-v4baseline-node24
+
+**Workload class:** path-based
+**Runtime:** node24
+
+### Conditions
+
+| Parameter | Value |
+|-----------|-------|
+| Node version | v24.14.1 |
+| Platform | darwin |
+| Architecture | arm64 |
+| Iterations | 100000 |
+| Warmup iterations | 10000 |
+
+### Comparator
+
+**Name:** ./test/bench/competitors/deep-redact-v4-baseline
+**Version:** 4.0.0
+
+### Measurements
+
+| Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v4-baseline 4.0.0 |
+|--------|------------------------------|--------------------------------------------------------|
+| Median | 0.000505 ms | 0.000490 ms |
+| Mean | 0.000506 ms | 0.000498 ms |
+| Min | 0.000388 ms | 0.000384 ms |
+| Max | 0.000693 ms | 0.000726 ms |
+
+### Threshold
+
+**Overhead:** 2.96%
+**Policy:** median within -100% to 100000%
+**Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
+**Gate scope:** informational
+**Result:** PASSED
+
+## deep-non-serialised-v3-node24
+
+**Workload class:** path-based
+**Runtime:** node24
+
+### Conditions
+
+| Parameter | Value |
+|-----------|-------|
+| Node version | v24.14.1 |
+| Platform | darwin |
+| Architecture | arm64 |
+| Iterations | 100000 |
+| Warmup iterations | 10000 |
+
+### Comparator
+
+**Name:** ./test/bench/competitors/deep-redact-v3
+**Version:** 3.0.5
+
+### Measurements
+
+| Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v3 3.0.5 |
+|--------|------------------------------|-----------------------------------------------|
+| Median | 0.000503 ms | 0.249869 ms |
+| Mean | 0.000503 ms | 0.252494 ms |
+| Min | 0.000389 ms | 0.236374 ms |
+| Max | 0.000766 ms | 0.340408 ms |
+
+### Threshold
+
+**Overhead:** -99.8%
+**Policy:** median within -100% to 100000%
+**Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
+**Gate scope:** informational
+**Result:** PASSED
+
+## deep-non-serialised-fast-redact-node24
+
+**Workload class:** path-based
+**Runtime:** node24
+
+### Conditions
+
+| Parameter | Value |
+|-----------|-------|
+| Node version | v24.14.1 |
+| Platform | darwin |
+| Architecture | arm64 |
+| Iterations | 100000 |
+| Warmup iterations | 10000 |
+
+### Comparator
+
+**Name:** fast-redact
+**Version:** 3.5.0
+
+### Measurements
+
+| Metric | @hackylabs/deep-redact 4.0.0 | fast-redact 3.5.0 |
+|--------|------------------------------|-------------------|
+| Median | 0.000601 ms | 0.000194 ms |
+| Mean | 0.000597 ms | 0.000202 ms |
+| Min | 0.000410 ms | 0.000175 ms |
+| Max | 0.001298 ms | 0.000404 ms |
+
+### Threshold
+
+**Overhead:** 210.44%
+**Policy:** median within -100% to 100000%
+**Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
+**Gate scope:** informational
+**Result:** PASSED
+
+## deep-non-serialised-v2-node24
+
+**Workload class:** path-based
+**Runtime:** node24
+
+### Conditions
+
+| Parameter | Value |
+|-----------|-------|
+| Node version | v24.14.1 |
+| Platform | darwin |
+| Architecture | arm64 |
+| Iterations | 100000 |
+| Warmup iterations | 10000 |
+
+### Comparator
+
+**Name:** ./test/bench/competitors/deep-redact-v2
+**Version:** 2.2.1
+
+### Measurements
+
+| Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v2 2.2.1 |
+|--------|------------------------------|-----------------------------------------------|
+| Median | 0.000591 ms | 0.102007 ms |
+| Mean | 0.000610 ms | 0.102790 ms |
+| Min | 0.000417 ms | 0.097535 ms |
+| Max | 0.001385 ms | 0.122243 ms |
+
+### Threshold
+
+**Overhead:** -99.42%
+**Policy:** median within -100% to 100000%
+**Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
+**Gate scope:** informational
+**Result:** PASSED
+
+## deep-serialised-v4baseline-node24
+
+**Workload class:** path-based
+**Runtime:** node24
+
+### Conditions
+
+| Parameter | Value |
+|-----------|-------|
+| Node version | v24.14.1 |
+| Platform | darwin |
+| Architecture | arm64 |
+| Iterations | 100000 |
+| Warmup iterations | 10000 |
+
+### Comparator
+
+**Name:** ./test/bench/competitors/deep-redact-v4-baseline
+**Version:** 4.0.0
+
+### Measurements
+
+| Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v4-baseline 4.0.0 |
+|--------|------------------------------|--------------------------------------------------------|
+| Median | 0.285525 ms | 0.288585 ms |
+| Mean | 0.299223 ms | 0.294391 ms |
+| Min | 0.280073 ms | 0.279574 ms |
+| Max | 0.618136 ms | 0.390063 ms |
+
+### Threshold
+
+**Overhead:** -1.06%
+**Policy:** median within -100% to 100000%
+**Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
+**Gate scope:** informational
+**Result:** PASSED
+
+## deep-serialised-v3-node24
+
+**Workload class:** path-based
+**Runtime:** node24
+
+### Conditions
+
+| Parameter | Value |
+|-----------|-------|
+| Node version | v24.14.1 |
+| Platform | darwin |
+| Architecture | arm64 |
+| Iterations | 100000 |
+| Warmup iterations | 10000 |
+
+### Comparator
+
+**Name:** ./test/bench/competitors/deep-redact-v3
+**Version:** 3.0.5
+
+### Measurements
+
+| Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v3 3.0.5 |
+|--------|------------------------------|-----------------------------------------------|
+| Median | 0.280255 ms | 0.226632 ms |
+| Mean | 0.280391 ms | 0.226933 ms |
+| Min | 0.277138 ms | 0.223471 ms |
+| Max | 0.287847 ms | 0.235629 ms |
+
+### Threshold
+
+**Overhead:** 23.66%
+**Policy:** median within -100% to 100000%
+**Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
+**Gate scope:** informational
+**Result:** PASSED
+
+## deep-serialised-fast-redact-node24
+
+**Workload class:** path-based
+**Runtime:** node24
+
+### Conditions
+
+| Parameter | Value |
+|-----------|-------|
+| Node version | v24.14.1 |
+| Platform | darwin |
+| Architecture | arm64 |
+| Iterations | 100000 |
+| Warmup iterations | 10000 |
+
+### Comparator
+
+**Name:** fast-redact
+**Version:** 3.5.0
+
+### Measurements
+
+| Metric | @hackylabs/deep-redact 4.0.0 | fast-redact 3.5.0 |
+|--------|------------------------------|-------------------|
+| Median | 0.280534 ms | 0.010500 ms |
+| Mean | 0.281208 ms | 0.010541 ms |
+| Min | 0.277921 ms | 0.010353 ms |
+| Max | 0.311441 ms | 0.011035 ms |
+
+### Threshold
+
+**Overhead:** 2571.78%
+**Policy:** median within -100% to 100000%
+**Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
+**Gate scope:** informational
+**Result:** PASSED
+
+## deep-serialised-json-stringify-regex-node24
+
+**Workload class:** path-based
+**Runtime:** node24
+
+### Conditions
+
+| Parameter | Value |
+|-----------|-------|
+| Node version | v24.14.1 |
+| Platform | darwin |
+| Architecture | arm64 |
+| Iterations | 100000 |
+| Warmup iterations | 10000 |
+
+### Comparator
+
+**Name:** ./test/bench/competitors/json-stringify-regex
+**Version:** 1.0.0
+
+### Measurements
+
+| Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/json-stringify-regex 1.0.0 |
+|--------|------------------------------|-----------------------------------------------------|
+| Median | 0.279655 ms | 0.031438 ms |
+| Mean | 0.281840 ms | 0.031527 ms |
+| Min | 0.277704 ms | 0.031212 ms |
+| Max | 0.540157 ms | 0.035061 ms |
+
+### Threshold
+
+**Overhead:** 789.54%
+**Policy:** median within -100% to 100000%
+**Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
+**Gate scope:** informational
+**Result:** PASSED
+
+## deep-serialised-v2-node24
+
+**Workload class:** path-based
+**Runtime:** node24
+
+### Conditions
+
+| Parameter | Value |
+|-----------|-------|
+| Node version | v24.14.1 |
+| Platform | darwin |
+| Architecture | arm64 |
+| Iterations | 100000 |
+| Warmup iterations | 10000 |
+
+### Comparator
+
+**Name:** ./test/bench/competitors/deep-redact-v2
+**Version:** 2.2.1
+
+### Measurements
+
+| Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v2 2.2.1 |
+|--------|------------------------------|-----------------------------------------------|
+| Median | 0.279787 ms | 0.086746 ms |
+| Mean | 0.280109 ms | 0.086825 ms |
+| Min | 0.278045 ms | 0.085658 ms |
+| Max | 0.295766 ms | 0.090209 ms |
+
+### Threshold
+
+**Overhead:** 222.54%
+**Policy:** median within -100% to 100000%
+**Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
+**Gate scope:** informational
+**Result:** PASSED

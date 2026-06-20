@@ -38,12 +38,13 @@ const stylisticRules = {
 export default tseslint.config(
   {
     ignores: [
+      '_bmad',
+      '_bmad-output',
       '**/coverage/**',
       '**/dist/**',
-      'benchmark.json',
-      'load-test-results.json',
       'test/bench/**',
       'test/unit/**',
+      '.claude',
     ],
   },
   {
