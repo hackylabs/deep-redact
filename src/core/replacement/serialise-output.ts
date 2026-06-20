@@ -24,6 +24,27 @@ const bareIdentifierPattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 // unbounded recursion.
 const MAX_SERIALISE_DEPTH = 3000
 
+// Sentinel for the array-index slot of a descent step: a real array step always carries an index
+// >= 0, so -1 unambiguously marks "this step is not an array index" (object key or path-transparent).
+const NO_INDEX = -1
+
+// Lazy descent bookkeeping. Story 10.2 moves path-string construction off the hot descent path:
+// instead of threading a `currentPath` string and rebuilding child paths (with a `bareIdentifierPattern`
+// test) on every node, each container node retains a single linked frame that records (a) its parent
+// frame, (b) the *step* taken from the parent to reach it, and (c) the runtime `identity` registered in
+// `seen` at that frame. The concrete path string is materialised on demand — only when a circular
+// marker is actually emitted — by walking this chain back to the root. A frame's step is encoded as:
+//   - `index >= 0`            → array element (parentPath -> `${parentPath}.${index}`)
+//   - `index === NO_INDEX` and `key !== undefined` → object property (via buildObjectChildPath)
+//   - `index === NO_INDEX` and `key === undefined` → path-transparent (the transformer `value`
+//     wrapper, and the root frame) — the node shares its parent frame's path.
+interface PathFrame {
+  readonly parent: PathFrame | undefined;
+  readonly key: string | undefined;
+  readonly index: number;
+  readonly identity: object | undefined;
+}
+
 const buildObjectChildPath = (parentPath: string | undefined, key: string): string => {
   if (!bareIdentifierPattern.test(key)) {
     return `${parentPath ?? ''}["${key.replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)}"]`
@@ -45,12 +66,77 @@ const isStrictDescendantPath = (ancestor: string, path: string): boolean => {
   return path.startsWith(`${ancestor}.`) || path.startsWith(`${ancestor}[`)
 }
 
+// Walk a retained frame chain back to the root, replaying the exact sequence of
+// `buildObjectChildPath` / `buildArrayChildPath` steps the eager descent used to take. Returns
+// `undefined` for the root path (matching the old `currentPath` convention where the root was
+// `undefined`, rendered as `''` by callers). Only ever called from a circular-marker emission site,
+// so the per-node descent never pays for it.
+const materialiseFramePath = (frame: PathFrame | undefined): string | undefined => {
+  const chain: PathFrame[] = []
+
+  for (let node = frame; node !== undefined; node = node.parent) {
+    chain.push(node)
+  }
+
+  let path: string | undefined
+
+  for (let i = chain.length - 1; i >= 0; i -= 1) {
+    const node = chain[i]!
+
+    if (node.index >= 0) {
+      path = buildArrayChildPath(path, node.index)
+    } else if (node.key !== undefined) {
+      path = buildObjectChildPath(path, node.key)
+    }
+    // else: path-transparent (root or transformer `value` wrapper) — path unchanged.
+  }
+
+  return path
+}
+
+// Materialise the path of the *current* (not-yet-registered) node from its parent frame plus the
+// pending descent step. Used at the two emission sites that fire before the node is added to the
+// frame chain (the plain object/array `seen` and `cycleRegistry` branches, and the supported-kind
+// `seen` branch).
+const materialiseStepPath = (
+  parentFrame: PathFrame | undefined,
+  key: string | undefined,
+  index: number,
+): string | undefined => {
+  const parentPath = materialiseFramePath(parentFrame)
+
+  if (index >= 0) {
+    return buildArrayChildPath(parentPath, index)
+  }
+
+  if (key !== undefined) {
+    return buildObjectChildPath(parentPath, key)
+  }
+
+  return parentPath
+}
+
+// The marker `value` for a `seen`-based cycle is the path where the back-edge target identity was
+// *first* seen. Because `seen` only ever holds identities currently on the active descent stack, the
+// target is always an ancestor of the current node — so we find its frame by identity and materialise
+// that frame's path, rather than the old eager `identityPaths` WeakMap lookup.
+const materialiseAncestorPath = (frame: PathFrame | undefined, identity: object): string | undefined => {
+  for (let node = frame; node !== undefined; node = node.parent) {
+    if (node.identity === identity) {
+      return materialiseFramePath(node)
+    }
+  }
+
+  return undefined
+}
+
 const buildSafeGraph = (
   value: unknown,
   transformers: CompiledTransformersPlan,
   seen: WeakSet<object>,
-  identityPaths: WeakMap<object, string>,
-  currentPath: string | undefined,
+  parentFrame: PathFrame | undefined,
+  stepKey: string | undefined,
+  stepIndex: number,
   cycleRegistry: WeakMap<object, string> | undefined,
   depth: number,
 ): unknown => {
@@ -85,17 +171,20 @@ const buildSafeGraph = (
     // transformed again indefinitely.
     const runtimeIdentity = supportedKind === 'bigint' ? undefined : (value as object)
 
-    if (runtimeIdentity !== undefined) {
-      if (seen.has(runtimeIdentity)) {
-        return {
-          _transformer: 'circular',
-          path: currentPath ?? '',
-          value: identityPaths.get(runtimeIdentity) ?? '',
-        }
+    if (runtimeIdentity !== undefined && seen.has(runtimeIdentity)) {
+      return {
+        _transformer: 'circular',
+        path: materialiseStepPath(parentFrame, stepKey, stepIndex) ?? '',
+        value: materialiseAncestorPath(parentFrame, runtimeIdentity) ?? '',
       }
+    }
 
-      const currentPathStr = currentPath ?? ''
-      identityPaths.set(runtimeIdentity, currentPathStr)
+    // Retain this node's frame so the transformed graph (which occupies the same logical path) and
+    // any descendant cycle can be materialised lazily. bigint has no trackable identity but still
+    // needs a frame to anchor its wrapper's transparent descent.
+    const frame: PathFrame = { parent: parentFrame, key: stepKey, index: stepIndex, identity: runtimeIdentity }
+
+    if (runtimeIdentity !== undefined) {
       seen.add(runtimeIdentity)
     }
 
@@ -106,7 +195,7 @@ const buildSafeGraph = (
         return '[UNSUPPORTED]'
       }
 
-      return buildTransformedGraph(transformed, transformers, seen, identityPaths, currentPath, cycleRegistry, depth + 1)
+      return buildTransformedGraph(transformed, transformers, seen, frame, cycleRegistry, depth + 1)
     } catch {
       return '[UNSUPPORTED]'
     } finally {
@@ -123,8 +212,8 @@ const buildSafeGraph = (
   if (seen.has(identity)) {
     return {
       _transformer: 'circular',
-      path: currentPath ?? '',
-      value: identityPaths.get(identity) ?? '',
+      path: materialiseStepPath(parentFrame, stepKey, stepIndex) ?? '',
+      value: materialiseAncestorPath(parentFrame, identity) ?? '',
     }
   }
 
@@ -134,18 +223,18 @@ const buildSafeGraph = (
   // can emit the correct circular marker without re-traversing the unredacted source object.
   if (cycleRegistry?.has(identity)) {
     const registryPath = cycleRegistry.get(identity)!
+    const currentPath = materialiseStepPath(parentFrame, stepKey, stepIndex) ?? ''
 
-    if (isStrictDescendantPath(registryPath, currentPath ?? '')) {
+    if (isStrictDescendantPath(registryPath, currentPath)) {
       return {
         _transformer: 'circular',
-        path: currentPath ?? '',
+        path: currentPath,
         value: registryPath,
       }
     }
   }
 
-  const currentPathStr = currentPath ?? ''
-  identityPaths.set(identity, currentPathStr)
+  const frame: PathFrame = { parent: parentFrame, key: stepKey, index: stepIndex, identity }
   seen.add(identity)
 
   try {
@@ -162,8 +251,9 @@ const buildSafeGraph = (
           (value as unknown[])[index],
           transformers,
           seen,
-          identityPaths,
-          buildArrayChildPath(currentPath, index),
+          frame,
+          undefined,
+          index,
           cycleRegistry,
           depth + 1,
         )
@@ -180,8 +270,9 @@ const buildSafeGraph = (
           (value as Record<string, unknown>)[key],
           transformers,
           seen,
-          identityPaths,
-          buildObjectChildPath(currentPath, key),
+          frame,
+          key,
+          NO_INDEX,
           cycleRegistry,
           depth + 1,
         )
@@ -197,7 +288,7 @@ const buildSafeGraph = (
       const transformed = resolveTransformedValue(value, transformers)
 
       if (transformed !== undefined) {
-        return buildTransformedGraph(transformed, transformers, seen, identityPaths, currentPath, cycleRegistry, depth + 1)
+        return buildTransformedGraph(transformed, transformers, seen, frame, cycleRegistry, depth + 1)
       }
     } catch {
       return '[UNSUPPORTED]'
@@ -216,14 +307,14 @@ const buildSafeGraph = (
 // into the wrapper generically would append `value` to the path (e.g. `roles.value.0` instead of
 // the logical `roles.0`), making Set/Map cycle paths inconsistent with object/array cycle paths
 // and with the marker's own `value` field. Treat the `value` key as path-transparent (rooted at
-// the container) while any other wrapper key extends the path normally. The corrected, logical
-// rendering also stays cheap to rebuild from a retained ancestor chain (Story 10.2).
+// the container, reusing its frame) while any other wrapper key extends the path normally. The
+// container's frame is passed straight through, so the corrected, logical rendering stays cheap to
+// rebuild from the retained ancestor chain (Story 10.2).
 const buildTransformedGraph = (
   transformed: unknown,
   transformers: CompiledTransformersPlan,
   seen: WeakSet<object>,
-  identityPaths: WeakMap<object, string>,
-  currentPath: string | undefined,
+  containerFrame: PathFrame,
   cycleRegistry: WeakMap<object, string> | undefined,
   depth: number,
 ): unknown => {
@@ -237,13 +328,14 @@ const buildTransformedGraph = (
 
     for (const key of Object.keys(wrapper)) {
       result[key] = key === 'value'
-        ? buildSafeGraph(wrapper.value, transformers, seen, identityPaths, currentPath, cycleRegistry, depth + 1)
+        ? buildSafeGraph(wrapper.value, transformers, seen, containerFrame, undefined, NO_INDEX, cycleRegistry, depth + 1)
         : buildSafeGraph(
           wrapper[key],
           transformers,
           seen,
-          identityPaths,
-          buildObjectChildPath(currentPath, key),
+          containerFrame,
+          key,
+          NO_INDEX,
           cycleRegistry,
           depth + 1,
         )
@@ -252,7 +344,7 @@ const buildTransformedGraph = (
     return result
   }
 
-  return buildSafeGraph(transformed, transformers, seen, identityPaths, currentPath, cycleRegistry, depth + 1)
+  return buildSafeGraph(transformed, transformers, seen, containerFrame, undefined, NO_INDEX, cycleRegistry, depth + 1)
 }
 
 export const serialiseOutput = (
@@ -271,8 +363,9 @@ export const serialiseOutput = (
       value,
       transformers,
       new WeakSet<object>(),
-      new WeakMap<object, string>(),
       undefined,
+      undefined,
+      NO_INDEX,
       cycleRegistry,
       0,
     )

@@ -5221,6 +5221,96 @@ describe('Circular references and revisited identities', () => {
     expect(() => { output = redact(new Recursive()) }).not.toThrow()
     expect(output).toContain('[UNSUPPORTED]')
   })
+
+  // Story 10.2 — path/value tracking is now lazy (a retained ancestor chain materialised only at
+  // emission) rather than an eager per-node string. These deep fixtures pin that the chain-walk
+  // reconstructs the *same* path/value strings regardless of depth, including a non-bareword
+  // segment (bracket-quoted) and a path-transparent transformer (`Set`) frame at depth.
+  it('materialises a deep back-edge to the root with the full descent path and an empty value', () => {
+    const redact = deepRedact({ serialise: true })
+    const depth = 120
+
+    const root: Record<string, unknown> = { id: 0 }
+    let cursor = root
+    for (let i = 1; i <= depth; i += 1) {
+      const next: Record<string, unknown> = { id: i }
+      cursor.child = next
+      cursor = next
+    }
+    cursor.loop = root
+
+    const parsed = JSON.parse(redact(root) as string) as Record<string, unknown>
+    let node = parsed
+    for (let i = 0; i < depth; i += 1) {
+      node = node.child as Record<string, unknown>
+    }
+
+    const expectedPath = `${Array.from({ length: depth }, () => 'child').join('.')}.loop`
+    expect(node.loop).toStrictEqual(circularMarker(expectedPath, ''))
+  })
+
+  it('materialises a deep back-edge to a mid-chain ancestor with the ancestor first-seen path', () => {
+    const redact = deepRedact({ serialise: true })
+
+    // anchor is reached at path `a.b`; the cycle two levels deeper points back to it.
+    const anchor: Record<string, unknown> = { id: 'anchor' }
+    const payload = { a: { b: anchor } }
+    anchor.deeper = { evenDeeper: anchor }
+
+    expect(redact(payload)).toBe(JSON.stringify({
+      a: {
+        b: {
+          id: 'anchor',
+          deeper: {
+            evenDeeper: circularMarker('a.b.deeper.evenDeeper', 'a.b'),
+          },
+        },
+      },
+    }))
+  })
+
+  it('bracket-quotes a non-bareword segment when materialising a deep cycle path', () => {
+    const redact = deepRedact({ serialise: true })
+
+    const inner: Record<string, unknown> = { ok: true }
+    const payload: Record<string, unknown> = { 'weird-key': { nested: inner } }
+    inner.back = inner
+
+    expect(redact(payload)).toBe(JSON.stringify({
+      'weird-key': {
+        nested: {
+          ok: true,
+          back: circularMarker('["weird-key"].nested.back', '["weird-key"].nested'),
+        },
+      },
+    }))
+  })
+
+  it('keeps a Set transformer frame path-transparent when a cycle sits below it at depth', () => {
+    const redact = deepRedact({ serialise: true })
+
+    const set = new Set<unknown>()
+    const holder: Record<string, unknown> = { items: set }
+    set.add({ loopBack: holder })
+
+    // The Set's `value` array element is rooted at `outer.items.0` (the `value` wrapper segment is
+    // path-transparent — not `outer.items.value.0`); the back-edge resolves at the re-encountered
+    // Set identity (`outer.items.0.loopBack.items`) whose first-seen path is `outer.items`.
+    expect(redact({ outer: holder })).toBe(JSON.stringify({
+      outer: {
+        items: {
+          _transformer: 'set',
+          value: [
+            {
+              loopBack: {
+                items: circularMarker('outer.items.0.loopBack.items', 'outer.items'),
+              },
+            },
+          ],
+        },
+      },
+    }))
+  })
 })
 
 describe('Serialised-output safety matrix — serialise: true (AC 5)', () => {

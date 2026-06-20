@@ -92,6 +92,10 @@ All four solutions return a JSON string.
 
 v4 remains faster than v3 in serialised mode. fast-redact and json-stringify-regex have a throughput advantage because their output path is oriented entirely toward string production.
 
+Against deep-redact v2 the serialised picture is mixed: v4 is roughly at parity on path-based workloads but slower on breadth-heavy (wildcard) ones. That gap is the cost of safety v2 does not provide — under `serialise: true`, v4 runs the type transformers that make `BigInt`, `Date`, `Map`, `Set`, `Error`, `RegExp`, and `URL` values JSON-safe, and it detects and neutralises circular references instead of throwing on them. (Node and depth budgeting via `maxNodes`/`maxDepth` is opt-in and unlimited by default, so it adds nothing unless you enable it.)
+
+These safety passes are intrinsic to `serialise: true` and cannot be switched off individually. If you do not need those guarantees and want to match v2's throughput (or better), set `serialise: false` and run your own `JSON.stringify`: the structured-output path skips the transformer and circular-reference passes entirely. This restores v2's trade-offs too — your `JSON.stringify` will throw on `BigInt` and circular references, `Map`/`Set` serialise as `{}`, and `undefined` is dropped.
+
 Full speed and resource benchmark results: [`docs/benchmarks/speed-results.md`](docs/benchmarks/speed-results.md) and [`docs/benchmarks/resource-results.md`](docs/benchmarks/resource-results.md).
 
 ## Configuration

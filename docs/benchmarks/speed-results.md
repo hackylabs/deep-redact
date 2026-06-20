@@ -26,14 +26,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v3 3.0.5 |
 |--------|------------------------------|-----------------------------------------------|
-| Median | 0.004522 ms | 0.006844 ms |
-| Mean | 0.004532 ms | 0.006901 ms |
-| Min | 0.004297 ms | 0.006596 ms |
-| Max | 0.005140 ms | 0.008011 ms |
+| Median | 0.003850 ms | 0.006817 ms |
+| Mean | 0.003887 ms | 0.006833 ms |
+| Min | 0.003805 ms | 0.006588 ms |
+| Max | 0.004389 ms | 0.007487 ms |
 
 ### Threshold
 
-**Overhead:** -33.92%
+**Overhead:** -43.52%
 **Policy:** median within -100% to 0%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** protected-branch, release-candidate
@@ -63,14 +63,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | fast-redact 3.5.0 |
 |--------|------------------------------|-------------------|
-| Median | 0.004465 ms | 0.000603 ms |
-| Mean | 0.004477 ms | 0.000608 ms |
-| Min | 0.004308 ms | 0.000583 ms |
-| Max | 0.005296 ms | 0.000719 ms |
+| Median | 0.003847 ms | 0.000596 ms |
+| Mean | 0.003871 ms | 0.000601 ms |
+| Min | 0.003810 ms | 0.000586 ms |
+| Max | 0.004250 ms | 0.000678 ms |
 
 ### Threshold
 
-**Overhead:** 640.33%
+**Overhead:** 545.71%
 **Policy:** median within -100% to 1000%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** protected-branch, release-candidate
@@ -100,14 +100,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/json-stringify-regex 1.0.0 |
 |--------|------------------------------|-----------------------------------------------------|
-| Median | 0.004432 ms | 0.001647 ms |
-| Mean | 0.004450 ms | 0.001658 ms |
-| Min | 0.004310 ms | 0.001600 ms |
-| Max | 0.005022 ms | 0.001779 ms |
+| Median | 0.003863 ms | 0.001621 ms |
+| Mean | 0.003872 ms | 0.001629 ms |
+| Min | 0.003805 ms | 0.001579 ms |
+| Max | 0.004175 ms | 0.001713 ms |
 
 ### Threshold
 
-**Overhead:** 169.07%
+**Overhead:** 138.35%
 **Policy:** median within -100% to 1000%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** protected-branch, release-candidate
@@ -137,14 +137,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v3 3.0.5 |
 |--------|------------------------------|-----------------------------------------------|
-| Median | 0.006899 ms | 0.007002 ms |
-| Mean | 0.006908 ms | 0.007021 ms |
-| Min | 0.006717 ms | 0.006769 ms |
-| Max | 0.007319 ms | 0.008122 ms |
+| Median | 0.006285 ms | 0.006866 ms |
+| Mean | 0.006308 ms | 0.006911 ms |
+| Min | 0.006180 ms | 0.006718 ms |
+| Max | 0.006818 ms | 0.008760 ms |
 
 ### Threshold
 
-**Overhead:** -1.46%
+**Overhead:** -8.46%
 **Policy:** median within -100% to 0%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** protected-branch, release-candidate
@@ -174,14 +174,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | fast-redact 3.5.0 |
 |--------|------------------------------|-------------------|
-| Median | 0.006909 ms | 0.000984 ms |
-| Mean | 0.006959 ms | 0.000991 ms |
-| Min | 0.006692 ms | 0.000956 ms |
-| Max | 0.008453 ms | 0.001265 ms |
+| Median | 0.006372 ms | 0.000963 ms |
+| Mean | 0.006400 ms | 0.000974 ms |
+| Min | 0.006231 ms | 0.000950 ms |
+| Max | 0.007212 ms | 0.001206 ms |
 
 ### Threshold
 
-**Overhead:** 602.35%
+**Overhead:** 561.41%
 **Policy:** median within -100% to 1000%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** protected-branch, release-candidate
@@ -211,14 +211,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/json-stringify-regex 1.0.0 |
 |--------|------------------------------|-----------------------------------------------------|
-| Median | 0.006903 ms | 0.001634 ms |
-| Mean | 0.006908 ms | 0.001647 ms |
-| Min | 0.006650 ms | 0.001592 ms |
-| Max | 0.007642 ms | 0.001809 ms |
+| Median | 0.006356 ms | 0.001616 ms |
+| Mean | 0.006365 ms | 0.001622 ms |
+| Min | 0.006215 ms | 0.001580 ms |
+| Max | 0.006817 ms | 0.001766 ms |
 
 ### Threshold
 
-**Overhead:** 322.41%
+**Overhead:** 293.3%
 **Policy:** median within -100% to 1000%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** protected-branch, release-candidate
@@ -248,14 +248,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v3 3.0.5 |
 |--------|------------------------------|-----------------------------------------------|
-| Median | 0.000383 ms | 0.006537 ms |
-| Mean | 0.000393 ms | 0.006724 ms |
-| Min | 0.000366 ms | 0.006323 ms |
-| Max | 0.000586 ms | 0.015291 ms |
+| Median | 0.000380 ms | 0.006405 ms |
+| Mean | 0.000390 ms | 0.006409 ms |
+| Min | 0.000368 ms | 0.006251 ms |
+| Max | 0.000644 ms | 0.006630 ms |
 
 ### Threshold
 
-**Overhead:** -94.14%
+**Overhead:** -94.06%
 **Policy:** median within -100% to 0%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** protected-branch, release-candidate
@@ -285,14 +285,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | fast-redact 3.5.0 |
 |--------|------------------------------|-------------------|
-| Median | 0.000416 ms | 0.000161 ms |
-| Mean | 0.000442 ms | 0.000163 ms |
-| Min | 0.000399 ms | 0.000156 ms |
-| Max | 0.000988 ms | 0.000274 ms |
+| Median | 0.000409 ms | 0.000162 ms |
+| Mean | 0.000421 ms | 0.000163 ms |
+| Min | 0.000397 ms | 0.000157 ms |
+| Max | 0.000586 ms | 0.000252 ms |
 
 ### Threshold
 
-**Overhead:** 159.01%
+**Overhead:** 152.8%
 **Policy:** median within -100% to 300%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** protected-branch, release-candidate
@@ -322,14 +322,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v3 3.0.5 |
 |--------|------------------------------|-----------------------------------------------|
-| Median | 0.000650 ms | 0.006586 ms |
-| Mean | 0.000678 ms | 0.006708 ms |
-| Min | 0.000624 ms | 0.006336 ms |
-| Max | 0.000998 ms | 0.010638 ms |
+| Median | 0.000637 ms | 0.006429 ms |
+| Mean | 0.000651 ms | 0.006426 ms |
+| Min | 0.000622 ms | 0.006243 ms |
+| Max | 0.000765 ms | 0.006661 ms |
 
 ### Threshold
 
-**Overhead:** -90.14%
+**Overhead:** -90.09%
 **Policy:** median within -100% to 0%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** protected-branch, release-candidate
@@ -359,14 +359,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | fast-redact 3.5.0 |
 |--------|------------------------------|-------------------|
-| Median | 0.000665 ms | 0.000505 ms |
-| Mean | 0.000697 ms | 0.000531 ms |
-| Min | 0.000626 ms | 0.000486 ms |
-| Max | 0.001077 ms | 0.000798 ms |
+| Median | 0.000640 ms | 0.000553 ms |
+| Mean | 0.000658 ms | 0.000582 ms |
+| Min | 0.000626 ms | 0.000537 ms |
+| Max | 0.000848 ms | 0.000851 ms |
 
 ### Threshold
 
-**Overhead:** 31.7%
+**Overhead:** 15.8%
 **Policy:** median within -100% to 75%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** protected-branch, release-candidate
@@ -396,14 +396,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v2 2.2.1 |
 |--------|------------------------------|-----------------------------------------------|
-| Median | 0.000405 ms | 0.003247 ms |
-| Mean | 0.000420 ms | 0.003271 ms |
-| Min | 0.000389 ms | 0.003048 ms |
-| Max | 0.000767 ms | 0.003807 ms |
+| Median | 0.000403 ms | 0.003160 ms |
+| Mean | 0.000409 ms | 0.003168 ms |
+| Min | 0.000389 ms | 0.003044 ms |
+| Max | 0.000582 ms | 0.003733 ms |
 
 ### Threshold
 
-**Overhead:** -87.54%
+**Overhead:** -87.24%
 **Policy:** median within -100% to 1000%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** informational
@@ -433,14 +433,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v2 2.2.1 |
 |--------|------------------------------|-----------------------------------------------|
-| Median | 0.004484 ms | 0.003982 ms |
-| Mean | 0.004518 ms | 0.004058 ms |
-| Min | 0.004329 ms | 0.003788 ms |
-| Max | 0.005251 ms | 0.009099 ms |
+| Median | 0.003913 ms | 0.004053 ms |
+| Mean | 0.003920 ms | 0.004123 ms |
+| Min | 0.003836 ms | 0.003859 ms |
+| Max | 0.004361 ms | 0.006600 ms |
 
 ### Threshold
 
-**Overhead:** 12.6%
+**Overhead:** -3.46%
 **Policy:** median within -100% to 1000%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** informational
@@ -470,14 +470,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v2 2.2.1 |
 |--------|------------------------------|-----------------------------------------------|
-| Median | 0.000646 ms | 0.003455 ms |
-| Mean | 0.000668 ms | 0.003464 ms |
-| Min | 0.000625 ms | 0.003304 ms |
-| Max | 0.000948 ms | 0.003897 ms |
+| Median | 0.000644 ms | 0.003558 ms |
+| Mean | 0.000656 ms | 0.003558 ms |
+| Min | 0.000629 ms | 0.003426 ms |
+| Max | 0.000784 ms | 0.003869 ms |
 
 ### Threshold
 
-**Overhead:** -81.3%
+**Overhead:** -81.91%
 **Policy:** median within -100% to 1000%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** informational
@@ -507,14 +507,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v2 2.2.1 |
 |--------|------------------------------|-----------------------------------------------|
-| Median | 0.007060 ms | 0.003923 ms |
-| Mean | 0.007093 ms | 0.003944 ms |
-| Min | 0.006831 ms | 0.003773 ms |
-| Max | 0.007758 ms | 0.004254 ms |
+| Median | 0.006617 ms | 0.004002 ms |
+| Mean | 0.006601 ms | 0.003994 ms |
+| Min | 0.006426 ms | 0.003852 ms |
+| Max | 0.006991 ms | 0.004226 ms |
 
 ### Threshold
 
-**Overhead:** 79.95%
+**Overhead:** 65.36%
 **Policy:** median within -100% to 1000%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** informational
@@ -544,14 +544,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v4-baseline 4.0.0 |
 |--------|------------------------------|--------------------------------------------------------|
-| Median | 0.000505 ms | 0.000490 ms |
-| Mean | 0.000506 ms | 0.000498 ms |
-| Min | 0.000388 ms | 0.000384 ms |
-| Max | 0.000693 ms | 0.000726 ms |
+| Median | 0.000441 ms | 0.000409 ms |
+| Mean | 0.000542 ms | 0.000427 ms |
+| Min | 0.000421 ms | 0.000393 ms |
+| Max | 0.011541 ms | 0.000615 ms |
 
 ### Threshold
 
-**Overhead:** 2.96%
+**Overhead:** 7.8%
 **Policy:** median within -100% to 100000%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** informational
@@ -581,14 +581,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v3 3.0.5 |
 |--------|------------------------------|-----------------------------------------------|
-| Median | 0.000503 ms | 0.249869 ms |
-| Mean | 0.000503 ms | 0.252494 ms |
-| Min | 0.000389 ms | 0.236374 ms |
-| Max | 0.000766 ms | 0.340408 ms |
+| Median | 0.000432 ms | 0.234896 ms |
+| Mean | 0.000438 ms | 0.236474 ms |
+| Min | 0.000422 ms | 0.233004 ms |
+| Max | 0.000629 ms | 0.301212 ms |
 
 ### Threshold
 
-**Overhead:** -99.8%
+**Overhead:** -99.82%
 **Policy:** median within -100% to 100000%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** informational
@@ -618,14 +618,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | fast-redact 3.5.0 |
 |--------|------------------------------|-------------------|
-| Median | 0.000601 ms | 0.000194 ms |
-| Mean | 0.000597 ms | 0.000202 ms |
-| Min | 0.000410 ms | 0.000175 ms |
-| Max | 0.001298 ms | 0.000404 ms |
+| Median | 0.000441 ms | 0.000198 ms |
+| Mean | 0.000455 ms | 0.000198 ms |
+| Min | 0.000428 ms | 0.000192 ms |
+| Max | 0.000752 ms | 0.000248 ms |
 
 ### Threshold
 
-**Overhead:** 210.44%
+**Overhead:** 122.91%
 **Policy:** median within -100% to 100000%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** informational
@@ -655,14 +655,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v2 2.2.1 |
 |--------|------------------------------|-----------------------------------------------|
-| Median | 0.000591 ms | 0.102007 ms |
-| Mean | 0.000610 ms | 0.102790 ms |
-| Min | 0.000417 ms | 0.097535 ms |
-| Max | 0.001385 ms | 0.122243 ms |
+| Median | 0.000440 ms | 0.105571 ms |
+| Mean | 0.000454 ms | 0.105569 ms |
+| Min | 0.000428 ms | 0.105037 ms |
+| Max | 0.000761 ms | 0.106293 ms |
 
 ### Threshold
 
-**Overhead:** -99.42%
+**Overhead:** -99.58%
 **Policy:** median within -100% to 100000%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** informational
@@ -692,17 +692,17 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v4-baseline 4.0.0 |
 |--------|------------------------------|--------------------------------------------------------|
-| Median | 0.285525 ms | 0.288585 ms |
-| Mean | 0.299223 ms | 0.294391 ms |
-| Min | 0.280073 ms | 0.279574 ms |
-| Max | 0.618136 ms | 0.390063 ms |
+| Median | 0.263696 ms | 0.278784 ms |
+| Mean | 0.263797 ms | 0.278699 ms |
+| Min | 0.262109 ms | 0.277296 ms |
+| Max | 0.268914 ms | 0.279683 ms |
 
 ### Threshold
 
-**Overhead:** -1.06%
-**Policy:** median within -100% to 100000%
+**Overhead:** -5.41%
+**Policy:** median within -100% to 0%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
-**Gate scope:** informational
+**Gate scope:** protected-branch, release-candidate
 **Result:** PASSED
 
 ## deep-serialised-v3-node24
@@ -729,14 +729,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v3 3.0.5 |
 |--------|------------------------------|-----------------------------------------------|
-| Median | 0.280255 ms | 0.226632 ms |
-| Mean | 0.280391 ms | 0.226933 ms |
-| Min | 0.277138 ms | 0.223471 ms |
-| Max | 0.287847 ms | 0.235629 ms |
+| Median | 0.263928 ms | 0.224697 ms |
+| Mean | 0.264039 ms | 0.224735 ms |
+| Min | 0.262376 ms | 0.223748 ms |
+| Max | 0.271047 ms | 0.225887 ms |
 
 ### Threshold
 
-**Overhead:** 23.66%
+**Overhead:** 17.46%
 **Policy:** median within -100% to 100000%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** informational
@@ -766,14 +766,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | fast-redact 3.5.0 |
 |--------|------------------------------|-------------------|
-| Median | 0.280534 ms | 0.010500 ms |
-| Mean | 0.281208 ms | 0.010541 ms |
-| Min | 0.277921 ms | 0.010353 ms |
-| Max | 0.311441 ms | 0.011035 ms |
+| Median | 0.264066 ms | 0.010450 ms |
+| Mean | 0.264200 ms | 0.010493 ms |
+| Min | 0.263275 ms | 0.010392 ms |
+| Max | 0.269364 ms | 0.010858 ms |
 
 ### Threshold
 
-**Overhead:** 2571.78%
+**Overhead:** 2426.89%
 **Policy:** median within -100% to 100000%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** informational
@@ -803,14 +803,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/json-stringify-regex 1.0.0 |
 |--------|------------------------------|-----------------------------------------------------|
-| Median | 0.279655 ms | 0.031438 ms |
-| Mean | 0.281840 ms | 0.031527 ms |
-| Min | 0.277704 ms | 0.031212 ms |
-| Max | 0.540157 ms | 0.035061 ms |
+| Median | 0.263957 ms | 0.031440 ms |
+| Mean | 0.264040 ms | 0.031469 ms |
+| Min | 0.262936 ms | 0.031328 ms |
+| Max | 0.268681 ms | 0.031922 ms |
 
 ### Threshold
 
-**Overhead:** 789.54%
+**Overhead:** 739.55%
 **Policy:** median within -100% to 100000%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** informational
@@ -840,14 +840,14 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 | Metric | @hackylabs/deep-redact 4.0.0 | ./test/bench/competitors/deep-redact-v2 2.2.1 |
 |--------|------------------------------|-----------------------------------------------|
-| Median | 0.279787 ms | 0.086746 ms |
-| Mean | 0.280109 ms | 0.086825 ms |
-| Min | 0.278045 ms | 0.085658 ms |
-| Max | 0.295766 ms | 0.090209 ms |
+| Median | 0.264186 ms | 0.097181 ms |
+| Mean | 0.264324 ms | 0.097188 ms |
+| Min | 0.263073 ms | 0.096402 ms |
+| Max | 0.269970 ms | 0.097924 ms |
 
 ### Threshold
 
-**Overhead:** 222.54%
+**Overhead:** 171.85%
 **Policy:** median within -100% to 100000%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** informational

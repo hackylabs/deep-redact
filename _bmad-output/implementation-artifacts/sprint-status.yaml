@@ -1,5 +1,5 @@
 # generated: 2026-04-13T09:43:13+0100
-# last_updated: 2026-06-06T00:00:00+0100
+# last_updated: 2026-06-20T00:00:00+0100
 # project: deep-redact
 # project_key: NOKEY
 # tracking_system: file-system
@@ -134,5 +134,5 @@ development_status:
 
   epic-10: in-progress
   10-1-reconcile-serialised-circular-marker-semantics: done
-  10-2-eliminate-serialise-output-depth-cliff-with-lazy-path-tracking: ready-for-dev
+  10-2-eliminate-serialise-output-depth-cliff-with-lazy-path-tracking: done
   epic-10-retrospective: optional

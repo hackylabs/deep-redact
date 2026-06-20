@@ -22,22 +22,22 @@
   },
   "measurements": {
     "subject": {
-      "baselineHeapUsedBytes": 8578312,
-      "peakHeapUsedBytes": 10703312,
-      "afterGcHeapUsedBytes": 8579720,
-      "heapDeltaBeforeGcBytes": 2125000,
+      "baselineHeapUsedBytes": 8586664,
+      "peakHeapUsedBytes": 10711744,
+      "afterGcHeapUsedBytes": 8588072,
+      "heapDeltaBeforeGcBytes": 2125080,
       "heapDeltaAfterGcBytes": 1408,
-      "baselineRssBytes": 87392256,
-      "peakRssBytes": 87457792
+      "baselineRssBytes": 87687168,
+      "peakRssBytes": 87736320
     },
     "comparator": {
-      "baselineHeapUsedBytes": 8728640,
-      "peakHeapUsedBytes": 12979312,
-      "afterGcHeapUsedBytes": 8730296,
-      "heapDeltaBeforeGcBytes": 4250672,
+      "baselineHeapUsedBytes": 8736992,
+      "peakHeapUsedBytes": 12957352,
+      "afterGcHeapUsedBytes": 8738648,
+      "heapDeltaBeforeGcBytes": 4220360,
       "heapDeltaAfterGcBytes": 1656,
-      "baselineRssBytes": 88326144,
-      "peakRssBytes": 92389376
+      "baselineRssBytes": 88539136,
+      "peakRssBytes": 92864512
     }
   },
   "generatingPlatform": {
@@ -45,5 +45,5 @@
     "arch": "arm64",
     "nodeVersion": "v24.14.1"
   },
-  "generatedAt": "2026-06-13T08:57:27.483Z"
+  "generatedAt": "2026-06-20T12:05:51.844Z"
 }

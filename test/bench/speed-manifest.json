@@ -364,9 +364,10 @@
         "comparatorMetric": "median",
         "minOverheadPct": -100,
         "minOverheadRationale": "The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.",
-        "maxOverheadPct": 100000,
+        "maxOverheadPct": 0,
         "runScope": [
-          "informational"
+          "protected-branch",
+          "release-candidate"
         ]
       }
     },
