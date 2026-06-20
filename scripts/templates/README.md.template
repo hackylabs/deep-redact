@@ -65,6 +65,8 @@ v4, v3, and fast-redact all return a plain JavaScript object.
 
 ![Speed comparison — structured output](docs/benchmarks/charts/speed-comparison-non-serialised.svg)
 
+_† fast-redact is a third-party library, not a deep-redact version. It is shown as a throughput reference; its feature set and guarantees differ from deep-redact's, so it is not a like-for-like comparison._
+
 v4 is **~{{SPEED_PATH_V3_TIMES_FASTER}}× faster** than v3 on path-based workloads and **~{{SPEED_WILDCARD_V3_TIMES_FASTER}}× faster** on wildcard workloads.
 
 ### Serialised output (`serialise: true`)
@@ -72,6 +74,8 @@ v4 is **~{{SPEED_PATH_V3_TIMES_FASTER}}× faster** than v3 on path-based workloa
 All four solutions return a JSON string.
 
 ![Speed comparison — serialised output](docs/benchmarks/charts/speed-comparison-serialised.svg)
+
+_† fast-redact is a third-party library; json-stringify-regex is a naive native approach (`JSON.stringify(value).replace(pattern, replacement)`), not a library. Neither performs deep-redact's structured redaction or offers its guarantees, so both are shown as throughput references rather than like-for-like comparisons._
 
 v4 remains faster than v3 in serialised mode. fast-redact and json-stringify-regex have a throughput advantage because their output path is oriented entirely toward string production.
 
