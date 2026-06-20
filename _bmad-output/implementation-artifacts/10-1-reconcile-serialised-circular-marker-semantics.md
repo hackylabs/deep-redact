@@ -45,7 +45,7 @@ This story precedes Story 10.2: 10.2's lazy-path refactor must reproduce a *sett
    **Then** the initialisation/configuration API, the runtime input contract, all object-mode output, every non-Map/Set marker, and the marker `value` field are unchanged.
 
 4. **Given** the classification
-   **Then** the change ships as a **patch (4.0.x)** with a changelog entry calling out the corrected Map/Set circular-marker `path`.
+   **Then** the change ships as a **patch (4.0.1)**. There is no `CHANGELOG.md`/changeset in the package; the changelog entry is carried by a **conventional commit** (`fix:` …) on branch **`release/v4.0.1`**, and the commit body calls out the corrected Map/Set circular-marker `path` for any consumer that parses circular markers in Map/Set payloads.
 
 5. **Given** Story 10.2's performance goal
    **When** the corrected `path` format is implemented
@@ -53,7 +53,7 @@ This story precedes Story 10.2: 10.2's lazy-path refactor must reproduce a *sett
 
 6. **Given** this story addresses the 8.3-review deferred item
    **When** it is marked `done`
-   **Then** the corresponding entry is removed from `deferred-work-audit.md` per the addressed-deferred-item cleanup rule (the `Deferred from:` reference below drives that removal).
+   **Then** the corresponding entry in `deferred-work-audit.md` (the `[Open]` "Root array/Set/Map self-cycle circular-marker `path` semantics inconsistency" under the 8-3 review section) is re-prefixed **`[Addressed]`** and annotated with a resolution note — matching this audit file's retain-with-note convention, **not** deleted (the `Deferred from:` reference below identifies the entry).
 
 7. **Given** the full suite
    **When** it runs
@@ -65,8 +65,8 @@ This story precedes Story 10.2: 10.2's lazy-path refactor must reproduce a *sett
 - [ ] AC 2, 5 — Correct the marker `path` for transformed-container cycles (drop the synthetic `value` segment; render the logical path), chosen to be lazy-materialisable (AC: 2, 5)
   - [ ] Update golden tests to the corrected strings (`test/contract/api/create-redactor.test.ts` and/or a dedicated serialise-output test)
 - [ ] AC 3 — Confirm init/config API, runtime input, object-mode output, non-Map/Set markers, and the `value` field unchanged (AC: 3)
-- [ ] AC 4 — Add the changelog entry; classify as a patch (AC: 4)
-- [ ] AC 6 — Keep the `Deferred from:` reference; register removal is a done-time action (AC: 6)
+- [ ] AC 4 — Classify as patch 4.0.1; record the changelog via a `fix:` conventional commit on branch `release/v4.0.1` (no `CHANGELOG.md` in-package) (AC: 4)
+- [ ] AC 6 — Keep the `Deferred from:` reference; at done-time, re-prefix the audit entry `[Addressed]` with a resolution note (not delete) (AC: 6)
 - [ ] AC 7 — `source .agents/initialise-env.sh && pnpm run test && pnpm lint`
 
 ## Dev Notes
