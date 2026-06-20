@@ -1,6 +1,10 @@
+---
+baseline_commit: fb1240991f1084768926b1a255cf2b066ec12446
+---
+
 # Story 10.1: Reconcile the Serialised Circular-Marker Semantics
 
-Status: ready-for-dev
+Status: done
 
 **Type:** Bug fix (patch on the v4 line, 4.0.x)
 
@@ -61,13 +65,20 @@ This story precedes Story 10.2: 10.2's lazy-path refactor must reproduce a *sett
 
 ## Tasks / Subtasks
 
-- [ ] AC 1 — Characterise current Map/Set marker output (root + nested) as the buggy baseline (AC: 1)
-- [ ] AC 2, 5 — Correct the marker `path` for transformed-container cycles (drop the synthetic `value` segment; render the logical path), chosen to be lazy-materialisable (AC: 2, 5)
-  - [ ] Update golden tests to the corrected strings (`test/contract/api/create-redactor.test.ts` and/or a dedicated serialise-output test)
-- [ ] AC 3 — Confirm init/config API, runtime input, object-mode output, non-Map/Set markers, and the `value` field unchanged (AC: 3)
-- [ ] AC 4 — Classify as patch 4.0.1; record the changelog via a `fix:` conventional commit on branch `release/v4.0.1` (no `CHANGELOG.md` in-package) (AC: 4)
-- [ ] AC 6 — Keep the `Deferred from:` reference; at done-time, re-prefix the audit entry `[Addressed]` with a resolution note (not delete) (AC: 6)
-- [ ] AC 7 — `source .agents/initialise-env.sh && pnpm run test && pnpm lint`
+- [x] AC 1 — Characterise current Map/Set marker output (root + nested) as the buggy baseline (AC: 1)
+- [x] AC 2, 5 — Correct the marker `path` for transformed-container cycles (drop the synthetic `value` segment; render the logical path), chosen to be lazy-materialisable (AC: 2, 5)
+  - [x] Update golden tests to the corrected strings (`test/contract/api/create-redactor.test.ts` and/or a dedicated serialise-output test)
+- [x] AC 3 — Confirm init/config API, runtime input, object-mode output, non-Map/Set markers, and the `value` field unchanged (AC: 3)
+- [ ] AC 4 — Classify as patch 4.0.1; record the changelog via a `fix:` conventional commit on branch `release/v4.0.1` (no `CHANGELOG.md` in-package) (AC: 4) — **still outstanding: the fix is uncommitted on `main`; the `fix:` release commit on `release/v4.0.1` is to be made at the release stage per maintainer decision**
+- [x] AC 6 — Keep the `Deferred from:` reference; at done-time, re-prefix the audit entry `[Addressed]` with a resolution note (not delete) (AC: 6) — done 2026-06-20: `deferred-work-audit.md` entry re-prefixed `[Addressed]` with a resolution note (retained per the audit file's convention and the maintainer's retain-with-note decision)
+- [x] AC 7 — `source .agents/initialise-env.sh && pnpm run test && pnpm lint`
+
+### Review Findings
+
+_Code review 2026-06-20 (bmad-code-review). Core fix verified correct: AC 1, 2, 3, 5, 7 met; full suite (737) + lint clean. Blind-Hunter "high" findings (wrapper `seen` bookkeeping, nested re-leak, user-data false-positive) refuted against source. 7 findings dismissed as noise/false-positive._
+
+- [x] [Review][Decision→Dismissed] `buildTransformedGraph` generalisation scope — the helper treats *any* `{ _transformer: <string>, value }` shape as path-transparent and lets non-`value` keys extend the path; latent identity-registration order gap for multi-key/metadata-`value` wrappers. **Dismissed as YAGNI (Ben, 2026-06-20):** no built-in transformer emits such shapes, so there is no current trigger; output is correct for every shipping transformer. [`src/core/replacement/serialise-output.ts:204-226`]
+- [x] [Review][Patch] Recursion-depth budget for the `buildTransformedGraph` ↔ `buildSafeGraph` mutual recursion — a custom transformer that manufactures a fresh wrapped identity per call recurses unboundedly (each level is a new identity, so `seen` never matches), defeating the no-throw guarantee. **Fixed (2026-06-20):** added `MAX_SERIALISE_DEPTH = 3000` and threaded a `depth` counter through `buildSafeGraph`/`buildTransformedGraph`; the descent now degrades to `[UNSUPPORTED]` instead of overflowing the stack or the downstream `JSON.stringify`. Limit chosen to sit above any realistic default-`maxDepth` structure (~1500) and below the `JSON.stringify` recursion ceiling. Regression test added (`degrades to a marker instead of overflowing when a transformer manufactures fresh identities`). Suite 738 pass, lint clean. [`src/core/replacement/serialise-output.ts`]
 
 ## Dev Notes
 
@@ -102,14 +113,33 @@ This story precedes Story 10.2: 10.2's lazy-path refactor must reproduce a *sett
 
 ### Agent Model Used
 
+claude-opus-4-8 (Claude Code, BMad Dev Story workflow)
+
 ### Debug Log References
+
+- Characterised the buggy baseline (AC 1) by adding the corrected golden assertions first and running them red: root Set self-cycle emitted `path:"value.0"` (expected `0`); the same `value` leak confirmed for root Map (`value.me`), nested Set (`roles.value.0`) and nested Map (`meta.value.me`).
+- After the fix: `pnpm run test` → 737 passed (20 files); `pnpm lint` (eslint + `tsc --noEmit`) → clean. Evidence captured 2026-06-20.
 
 ### Completion Notes List
 
+- **Root cause.** A `Set`/`Map` is transformed to `{ _transformer, value }` before recursion. `buildSafeGraph` recursed into that wrapper generically, so the synthetic `value` key was appended to the traversal path like an ordinary segment; a cycle through the container therefore reported `…value.<k>` instead of the logical `…<k>`.
+- **Fix.** Added `buildTransformedGraph` in `src/core/replacement/serialise-output.ts`. When a transformer wrapper (`{ _transformer: <string>, value: … }`) is recursed, the `value` payload is treated as **path-transparent** — its children build their paths from the container's own path — while any other wrapper key extends the path normally. The two transform dispatch sites (supported-kind containers and custom non-plain objects) now route through this helper. This drops the synthetic `value` segment for Set/Map cycle paths and generalises to any future transformer-wrapped reference-holding container (AC 2). The marker's `value` field already used the logical container path (via `identityPaths`) and is unchanged.
+- **Lazy-materialisable (AC 5).** The corrected rendering is the logical ancestor path plus the child index/key, with no synthetic `value` level — directly rebuildable from a retained ancestor chain, the format Story 10.2 will materialise lazily.
+- **Unchanged surface (AC 3).** Change is confined to the serialise-output marker `path` field. Object-mode output, the runtime input contract, the init/config API, every non-Map/Set marker, and the marker `value` field are untouched; the full suite (737 tests) passes. Fallback/`byType` transformer shapes that carry a `value` key but no `_transformer` key (e.g. `{ bucket, value }`) are not treated as wrappers, so their behaviour is preserved.
+- **Golden tests (AC 2).** Updated three existing buggy-baseline assertions (root Map self-cycle, nested Map, nested Set) and added a dedicated root+nested Set/Map matrix test in the "Circular references and revisited identities" block. Object/array/mutual cycle tests were left untouched as clean controls.
+- **AC 4 — release commit deferred to the code-review stage** (maintainer decision, 2026-06-20). The fix is left uncommitted in the working tree on `main`; no `release/v4.0.1` branch/commit was created by this run. The `fix:` conventional commit (body calling out the corrected Map/Set marker `path`) remains outstanding and will be made at the code-review/release stage.
+- **AC 6 — deferred-audit handling deferred to done-time** (maintainer decision, 2026-06-20). No change made to `deferred-work-audit.md` now (the story is at `review`, not `done`); the `[Open]` 8-3 entry is left intact and the `Deferred from:` linkage in Dev Notes is preserved. The unresolved conflict — AC 6's retain-with-note vs the project-context "Addressed Deferred Item Cleanup" HARD RULE and standing memory (both require deleting resolved entries on done) — is to be settled when the review/done workflow runs.
+
 ### File List
+
+- `src/core/replacement/serialise-output.ts` (modified) — added `buildTransformedGraph`; routed both transform dispatch sites through it.
+- `test/contract/api/create-redactor.test.ts` (modified) — corrected three buggy Map/Set marker assertions; added the root+nested Set/Map circular-path matrix golden test.
+- `_bmad-output/implementation-artifacts/10-1-reconcile-serialised-circular-marker-semantics.md` (modified) — story bookkeeping (frontmatter, tasks, Dev Agent Record, Change Log, status).
 
 ## Change Log
 
 - 2026-06-13: Story drafted to lock-then-defer the circular-marker fix to v5.
 - 2026-06-13: Revised — output-only break accepted; marker reconciled now under a major (v5.0.0).
 - 2026-06-13: Reclassified — the Set/Map marker `path` is a serialisation **bug** (leaks the transformer's synthetic `value` wrapper, affecting root and nested cycles); fixing it ships as a **patch (4.0.x)**, not a major. Concrete corrections recorded (`value.0`→`0`, etc.).
+- 2026-06-20: Implemented the fix (`buildTransformedGraph` path-transparency for transformer wrappers). Corrected golden tests + added root/nested Set/Map matrix test. Full suite (737) and lint pass. Status → review. Per maintainer decision: AC 4 (release-branch `fix:` commit) deferred to the code-review/release stage — fix left uncommitted; AC 6 (deferred-audit handling, plus the retain-vs-delete conflict) deferred to done-time — audit file unchanged.
+- 2026-06-20: Code review (bmad-code-review). Core fix verified correct (AC 1, 2, 3, 5, 7 met; suite + lint clean); three Blind-Hunter "high" findings refuted against source. D1 (generalisation-scope latent gap) dismissed as YAGNI (no built-in trigger). W1 (unbounded recursion via identity-manufacturing custom transformers) patched: added `MAX_SERIALISE_DEPTH = 3000` recursion guard threaded through `buildSafeGraph`/`buildTransformedGraph`, degrading to `[UNSUPPORTED]`; regression test added. Suite now 738 pass, lint clean. AC 4 and AC 6 remain outstanding (deferred to release/done stage).

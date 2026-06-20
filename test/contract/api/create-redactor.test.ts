@@ -3933,7 +3933,7 @@ describe('Built-in and custom transformer resolution', () => {
       value: {
         left: { secret: 'value' },
         right: { secret: 'value' },
-        self: circularMarker('value.self'),
+        self: circularMarker('self'),
       },
     }))
   })
@@ -4579,13 +4579,13 @@ describe('Ignored value types suppress descendant redaction inside transformed r
       map: {
         _transformer: 'map',
         value: {
-          self: circularMarker('map.value.self', 'map'),
+          self: circularMarker('map.self', 'map'),
         },
       },
       set: {
         _transformer: 'set',
         value: [
-          circularMarker('set.value.0', 'set'),
+          circularMarker('set.0', 'set'),
         ],
       },
     }))
@@ -5151,6 +5151,75 @@ describe('Circular references and revisited identities', () => {
         },
       },
     }))
+  })
+
+  // Story 10.1 — a cycle through a transformer-wrapped container (Set/Set) must report a
+  // *logical* circular-marker `path` that reads consistently with object/array cycle paths and
+  // with the marker's own `value` field. The previous output leaked the transformer's synthetic
+  // `value` wrapper segment (`value.0`, `value.me`, `roles.value.0`, `meta.value.me`); the
+  // corrected paths drop it (`0`, `me`, `roles.0`, `meta.me`), in both root and nested positions.
+  it('renders logical circular-marker paths for self-cyclic Set and Map values (root and nested)', () => {
+    const redact = deepRedact({ serialise: true })
+
+    const rootSet = new Set<unknown>()
+    rootSet.add(rootSet)
+
+    expect(redact(rootSet)).toBe(JSON.stringify({
+      _transformer: 'set',
+      value: [circularMarker('0', '')],
+    }))
+
+    const rootMap = new Map<string, unknown>()
+    rootMap.set('me', rootMap)
+
+    expect(redact(rootMap)).toBe(JSON.stringify({
+      _transformer: 'map',
+      value: { me: circularMarker('me', '') },
+    }))
+
+    const nestedSet = new Set<unknown>()
+    nestedSet.add(nestedSet)
+
+    expect(redact({ roles: nestedSet })).toBe(JSON.stringify({
+      roles: {
+        _transformer: 'set',
+        value: [circularMarker('roles.0', 'roles')],
+      },
+    }))
+
+    const nestedMap = new Map<string, unknown>()
+    nestedMap.set('me', nestedMap)
+
+    expect(redact({ meta: nestedMap })).toBe(JSON.stringify({
+      meta: {
+        _transformer: 'map',
+        value: { me: circularMarker('meta.me', 'meta') },
+      },
+    }))
+  })
+
+  // Story 10.1 review (W1) — `seen`-based cycle detection cannot stop a custom transformer that
+  // manufactures a *fresh* identity on every call, so the serialise pass must bound its own
+  // descent and degrade to the unsupported marker rather than overflowing the call stack (or the
+  // downstream JSON.stringify), preserving the no-throw serialisation guarantee.
+  it('degrades to a marker instead of overflowing when a transformer manufactures fresh identities', () => {
+    class Recursive {}
+
+    const redact = deepRedact({
+      serialise: true,
+      transformers: {
+        byConstructor: {
+          custom: [{
+            constructor: Recursive,
+            transformers: [(): unknown => ({ _transformer: 'recursive', value: new Recursive() })],
+          }],
+        },
+      },
+    })
+
+    let output: unknown
+    expect(() => { output = redact(new Recursive()) }).not.toThrow()
+    expect(output).toContain('[UNSUPPORTED]')
   })
 })
 

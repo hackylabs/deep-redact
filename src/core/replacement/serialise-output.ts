@@ -8,6 +8,22 @@ import { isPlainObject } from '../runtime/redact-value.js'
 
 const bareIdentifierPattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 
+// Recursion guard for the serialise pass. Cycle detection (the `seen` WeakSet) neutralises any
+// graph that points back at a previously-seen identity, but a misbehaving custom transformer can
+// manufacture a *fresh* identity on every call (e.g. `(v) => ({ _transformer: 'x', value: new
+// Widget(v) })`); each level is a new object, so `seen` never matches and the mutual recursion
+// `buildSafeGraph` <-> `buildTransformedGraph` would grow until the call stack overflows, breaking
+// the no-throw serialisation guarantee. This budget caps that descent and degrades to the
+// `[UNSUPPORTED]` marker instead. It is deliberately decoupled from the configurable `maxDepth`
+// (which already bounds the *redacted* graph reaching this pass) and chosen to sit comfortably
+// between two limits: above any realistic structure — under the default `maxDepth` of 500 the
+// transformer-wrapping multiplier (~2x) keeps a valid graph below ~1500 levels — so it never
+// rejects a structure the main pass accepted; and below the depth at which the downstream
+// `JSON.stringify` (the default serialiser, itself recursive) would overflow, so the degraded
+// output still serialises and the no-throw guarantee holds end to end. It fires only on genuinely
+// unbounded recursion.
+const MAX_SERIALISE_DEPTH = 3000
+
 const buildObjectChildPath = (parentPath: string | undefined, key: string): string => {
   if (!bareIdentifierPattern.test(key)) {
     return `${parentPath ?? ''}["${key.replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)}"]`
@@ -36,7 +52,14 @@ const buildSafeGraph = (
   identityPaths: WeakMap<object, string>,
   currentPath: string | undefined,
   cycleRegistry: WeakMap<object, string> | undefined,
+  depth: number,
 ): unknown => {
+  // Bound the descent before any further recursion (see MAX_SERIALISE_DEPTH): an identity-
+  // manufacturing transformer evades cycle detection, so this is the only stop for it.
+  if (depth > MAX_SERIALISE_DEPTH) {
+    return '[UNSUPPORTED]'
+  }
+
   // Primitives (except bigint) pass through unchanged.
   if (value === null || typeof value === 'string' || typeof value === 'number'
     || typeof value === 'boolean' || value === undefined) {
@@ -83,7 +106,7 @@ const buildSafeGraph = (
         return '[UNSUPPORTED]'
       }
 
-      return buildSafeGraph(transformed, transformers, seen, identityPaths, currentPath, cycleRegistry)
+      return buildTransformedGraph(transformed, transformers, seen, identityPaths, currentPath, cycleRegistry, depth + 1)
     } catch {
       return '[UNSUPPORTED]'
     } finally {
@@ -142,6 +165,7 @@ const buildSafeGraph = (
           identityPaths,
           buildArrayChildPath(currentPath, index),
           cycleRegistry,
+          depth + 1,
         )
       }
 
@@ -159,6 +183,7 @@ const buildSafeGraph = (
           identityPaths,
           buildObjectChildPath(currentPath, key),
           cycleRegistry,
+          depth + 1,
         )
       }
 
@@ -172,7 +197,7 @@ const buildSafeGraph = (
       const transformed = resolveTransformedValue(value, transformers)
 
       if (transformed !== undefined) {
-        return buildSafeGraph(transformed, transformers, seen, identityPaths, currentPath, cycleRegistry)
+        return buildTransformedGraph(transformed, transformers, seen, identityPaths, currentPath, cycleRegistry, depth + 1)
       }
     } catch {
       return '[UNSUPPORTED]'
@@ -182,6 +207,52 @@ const buildSafeGraph = (
   } finally {
     seen.delete(identity)
   }
+}
+
+// A transformer represents its subject as `{ _transformer, value }`. The `value` payload occupies
+// the same logical position as the original container, so when a reference-holding container
+// (Set, Map, or any future transformer-wrapped container) holds a cycle, the circular marker's
+// `path` must be rooted at the container — not at the synthetic `value` wrapper segment. Recursing
+// into the wrapper generically would append `value` to the path (e.g. `roles.value.0` instead of
+// the logical `roles.0`), making Set/Map cycle paths inconsistent with object/array cycle paths
+// and with the marker's own `value` field. Treat the `value` key as path-transparent (rooted at
+// the container) while any other wrapper key extends the path normally. The corrected, logical
+// rendering also stays cheap to rebuild from a retained ancestor chain (Story 10.2).
+const buildTransformedGraph = (
+  transformed: unknown,
+  transformers: CompiledTransformersPlan,
+  seen: WeakSet<object>,
+  identityPaths: WeakMap<object, string>,
+  currentPath: string | undefined,
+  cycleRegistry: WeakMap<object, string> | undefined,
+  depth: number,
+): unknown => {
+  if (
+    isPlainObject(transformed)
+    && typeof (transformed as Record<string, unknown>)._transformer === 'string'
+    && 'value' in transformed
+  ) {
+    const wrapper = transformed as Record<string, unknown>
+    const result: Record<string, unknown> = {}
+
+    for (const key of Object.keys(wrapper)) {
+      result[key] = key === 'value'
+        ? buildSafeGraph(wrapper.value, transformers, seen, identityPaths, currentPath, cycleRegistry, depth + 1)
+        : buildSafeGraph(
+          wrapper[key],
+          transformers,
+          seen,
+          identityPaths,
+          buildObjectChildPath(currentPath, key),
+          cycleRegistry,
+          depth + 1,
+        )
+    }
+
+    return result
+  }
+
+  return buildSafeGraph(transformed, transformers, seen, identityPaths, currentPath, cycleRegistry, depth + 1)
 }
 
 export const serialiseOutput = (
@@ -203,6 +274,7 @@ export const serialiseOutput = (
       new WeakMap<object, string>(),
       undefined,
       cycleRegistry,
+      0,
     )
 
   if (serialise === true) {
