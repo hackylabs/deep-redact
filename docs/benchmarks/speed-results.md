@@ -135,20 +135,20 @@ Generated from canonical benchmark artefacts in `test/artefacts/benchmarks/speed
 
 ### Measurements
 
-| Metric | @hackylabs/deep-redact 4.0.1 | ./test/bench/competitors/deep-redact-v3 3.0.5 |
+| Metric | @hackylabs/deep-redact 4.0.2 | ./test/bench/competitors/deep-redact-v3 3.0.5 |
 |--------|------------------------------|-----------------------------------------------|
-| Median | 0.005125 ms | 0.004850 ms |
-| Mean | 0.005101 ms | 0.004850 ms |
-| Min | 0.004711 ms | 0.004511 ms |
-| Max | 0.005255 ms | 0.005188 ms |
+| Median | 0.006368 ms | 0.006717 ms |
+| Mean | 0.006391 ms | 0.006786 ms |
+| Min | 0.006296 ms | 0.006576 ms |
+| Max | 0.006942 ms | 0.007737 ms |
 
 ### Threshold
 
-**Overhead:** 5.68%
+**Overhead:** -5.2%
 **Policy:** median within -100% to 0%
 **Lower-bound rationale:** The benchmark-output-equivalence-contract test verifies this row's subject and comparator produce matching redacted fixture output, so work-elision risk is guarded separately from the broad lower floor.
 **Gate scope:** protected-branch, release-candidate
-**Result:** FAILED
+**Result:** PASSED
 
 ## wildcard-serialised-fast-redact-node24
 
