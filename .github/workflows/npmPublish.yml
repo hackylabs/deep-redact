@@ -55,6 +55,9 @@ jobs:
       - run: pnpm run verify:speed-benchmarks
         env:
           DEEP_REDACT_BENCH_RUN_SCOPE: release-candidate
-      - run: pnpm publish --provenance --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Tokenless publish via npm OIDC Trusted Publishing.
+      # Requires a trusted publisher configured on npmjs.com for this repo +
+      # workflow (see below). No NPM_TOKEN: the id-token: write permission above
+      # lets npm (>= 11.5.1, bundled with Node 24) exchange an OIDC token at
+      # publish time. --provenance attaches a signed build attestation.
+      - run: npm publish --provenance --access public
