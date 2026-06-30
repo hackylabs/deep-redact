@@ -1715,6 +1715,247 @@ describe('Reusable redactor factory contract', () => {
     expect(passwordKey.lastIndex).toBe(7)
   })
 
+  describe('runtime container traversal for keys and paths', () => {
+    class AccountRecord {
+      token = 'class-secret'
+      profile = {
+        token: 'nested-class-secret',
+      }
+    }
+
+    it('redacts own enumerable class fields at the root and nested positions through keys', () => {
+      const redact = deepRedact({ keys: ['token'], caseSensitiveKeyMatch: false })
+      const root = new AccountRecord()
+      const nested = new AccountRecord()
+
+      expect(redact(root)).toEqual({
+        profile: {
+          token: '[REDACTED]',
+        },
+        token: '[REDACTED]',
+      })
+      expect(root.token).toBe('class-secret')
+      expect(root.profile.token).toBe('nested-class-secret')
+
+      expect(redact({ account: nested })).toEqual({
+        account: {
+          profile: {
+            token: '[REDACTED]',
+          },
+          token: '[REDACTED]',
+        },
+      })
+      expect(nested.token).toBe('class-secret')
+      expect(nested.profile.token).toBe('nested-class-secret')
+    })
+
+    it('redacts Map entry values and nested Map contents through keys', () => {
+      const redact = deepRedact({ keys: ['token'] })
+      const mapValue = new Map<unknown, unknown>([
+        ['token', 'map-secret'],
+        [1, 'numeric-safe'],
+        ['nested', { token: 'nested-map-secret' }],
+      ])
+      const result = redact({ account: mapValue }) as { account: Map<unknown, unknown> }
+
+      expect(result.account).toBeInstanceOf(Map)
+      expect(result.account).not.toBe(mapValue)
+      expect(result.account.get('token')).toBe('[REDACTED]')
+      expect(result.account.get(1)).toBe('numeric-safe')
+      expect(result.account.get('nested')).toEqual({ token: '[REDACTED]' })
+      expect(mapValue.get('token')).toBe('map-secret')
+      expect(mapValue.get('nested')).toEqual({ token: 'nested-map-secret' })
+    })
+
+    it('redacts Set member objects through keys without matching synthetic Set indexes', () => {
+      const redact = deepRedact({ keys: ['token', '0'] })
+      const secretMember = { token: 'set-secret' }
+      const setValue = new Set<unknown>([
+        secretMember,
+        'index-zero-should-not-be-key-redacted',
+      ])
+      const result = redact({ roles: setValue }) as { roles: Set<unknown> }
+
+      expect(result.roles).toBeInstanceOf(Set)
+      expect(result.roles).not.toBe(setValue)
+      expect([...result.roles.values()]).toStrictEqual([
+        { token: '[REDACTED]' },
+        'index-zero-should-not-be-key-redacted',
+      ])
+      expect(secretMember.token).toBe('set-secret')
+    })
+
+    it('follows exact and wildcard paths through class instances, Maps, and Sets', () => {
+      const redact = deepRedact({
+        paths: [
+          'account.profile.token',
+          'runtime.map.token',
+          'runtime.map.nested.token',
+          'runtime.set.0.token',
+          'runtime.set.*.code',
+        ],
+      })
+      const account = new AccountRecord()
+      const mapValue = new Map<unknown, unknown>([
+        ['token', 'map-secret'],
+        ['nested', { token: 'nested-map-secret' }],
+      ])
+      const setValue = new Set<unknown>([
+        { token: 'set-token-secret', code: 'first-code-secret' },
+        { code: 'second-code-secret' },
+      ])
+
+      expect(redact({
+        account,
+        runtime: {
+          map: mapValue,
+          set: setValue,
+        },
+      })).toEqual({
+        account: {
+          profile: {
+            token: '[REDACTED]',
+          },
+          token: 'class-secret',
+        },
+        runtime: {
+          map: new Map<unknown, unknown>([
+            ['token', '[REDACTED]'],
+            ['nested', { token: '[REDACTED]' }],
+          ]),
+          set: new Set<unknown>([
+            { code: '[REDACTED]', token: '[REDACTED]' },
+            { code: '[REDACTED]' },
+          ]),
+        },
+      })
+    })
+
+    it('retains and removes Map and Set descendants without mutating caller-owned containers', () => {
+      const mapValue = new Map<unknown, unknown>([
+        ['token', 'map-secret'],
+        ['profile', { token: 'nested-map-secret', count: 2 }],
+      ])
+      const setValue = new Set<unknown>([
+        { token: 'set-secret', count: 1 },
+        'set-leaf-secret',
+      ])
+      const retained = deepRedact({
+        paths: [
+          { path: 'map', retainStructure: true, censor: '[HIDDEN]' },
+          { path: 'set', retainStructure: true, censor: '[HIDDEN]' },
+        ],
+      })({ map: mapValue, set: setValue }) as { map: Map<unknown, unknown>; set: Set<unknown> }
+
+      expect(retained.map).toEqual(new Map<unknown, unknown>([
+        ['token', '[HIDDEN]'],
+        ['profile', { count: 2, token: '[HIDDEN]' }],
+      ]))
+      expect(retained.set).toEqual(new Set<unknown>([
+        { count: 1, token: '[HIDDEN]' },
+        '[HIDDEN]',
+      ]))
+      expect(mapValue.get('token')).toBe('map-secret')
+      expect([...setValue.values()][1]).toBe('set-leaf-secret')
+
+      const removed = deepRedact({
+        keys: [{ key: 'token', remove: true }],
+        paths: [{ path: 'set.0', remove: true }],
+        types: ['object', 'string'],
+      })({ map: mapValue, set: setValue }) as { map: Map<unknown, unknown>; set: Set<unknown> }
+
+      expect(removed.map).toEqual(new Map<unknown, unknown>([
+        ['profile', { count: 2 }],
+      ]))
+      expect(removed.set).toEqual(new Set<unknown>(['set-leaf-secret']))
+    })
+
+    it('does not traverse ignored Map and Set branches unless the container itself is redacted wholesale', () => {
+      const ignored = deepRedact({
+        ignoredValueTypes: {
+          Map: true,
+          Set: true,
+        },
+        keys: ['token'],
+        paths: ['set.0.token'],
+      })
+      const mapValue = new Map<unknown, unknown>([
+        ['token', 'map-secret'],
+        ['nested', { token: 'nested-map-secret' }],
+      ])
+      const setValue = new Set<unknown>([{ token: 'set-secret' }])
+
+      expect(ignored({ map: mapValue, set: setValue })).toEqual({
+        map: mapValue,
+        set: setValue,
+      })
+
+      const wholesale = deepRedact({
+        ignoredValueTypes: {
+          Map: true,
+        },
+        keys: ['map'],
+        types: ['object'],
+      })
+
+      expect(wholesale({ map: mapValue })).toEqual({ map: '[REDACTED]' })
+    })
+
+    it('keeps built-in scalar transformer objects as terminal values under serialise false', () => {
+      const dateValue = new Date('2020-01-01T00:00:00.000Z') as Date & { token?: string }
+      dateValue.token = 'date-secret'
+      const errorValue = createStoryError('visible-error') as StoryTransformerError & { token?: string }
+      errorValue.token = 'error-secret'
+      const regexValue = /visible/gi as RegExp & { token?: string }
+      regexValue.token = 'regex-secret'
+      const urlValue = new URL('https://example.test/?token=visible') as URL & { token?: string }
+      urlValue.token = 'url-secret'
+
+      const result = deepRedact({ keys: ['token'] })({
+        dateValue,
+        errorValue,
+        regexValue,
+        urlValue,
+      }) as Record<string, unknown>
+
+      expect(result.dateValue).toBe(dateValue)
+      expect(result.errorValue).toBe(errorValue)
+      expect(result.regexValue).toBe(regexValue)
+      expect(result.urlValue).toBe(urlValue)
+      expect(dateValue.token).toBe('date-secret')
+      expect(errorValue.token).toBe('error-secret')
+      expect(regexValue.token).toBe('regex-secret')
+      expect(urlValue.token).toBe('url-secret')
+    })
+
+    it('preserves circular Map and Set paths after descendant redaction under serialise true', () => {
+      const mapValue = new Map<string, unknown>()
+      mapValue.set('token', 'map-secret')
+      mapValue.set('self', mapValue)
+      const setValue = new Set<unknown>()
+      setValue.add({ token: 'set-secret' })
+      setValue.add(setValue)
+      const redact = deepRedact({ keys: ['token'], serialise: true })
+
+      expect(redact({ mapValue, setValue })).toBe(JSON.stringify({
+        mapValue: {
+          _transformer: 'map',
+          value: {
+            token: '[REDACTED]',
+            self: circularMarker('mapValue.self', 'mapValue'),
+          },
+        },
+        setValue: {
+          _transformer: 'set',
+          value: [
+            { token: '[REDACTED]' },
+            circularMarker('setValue.1', 'setValue'),
+          ],
+        },
+      }))
+    })
+  })
+
   describe('Fuzzy and case-insensitive literal key matching', () => {
     it.each([
       [

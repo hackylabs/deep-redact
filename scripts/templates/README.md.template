@@ -115,6 +115,8 @@ Full speed and resource benchmark results: [`docs/benchmarks/speed-results.md`](
 
 Each entry in `keys` may be a plain `string`, a `RegExp`, or a `KeyRule` object for per-key overrides.
 
+`keys` traverses plain objects, arrays, class instances' own enumerable fields, and `Map`/`Set` contents. `Map` entry keys are matched by their rendered string form while preserving the original key object in structured output; `Set` members are traversed in insertion order, but their numeric positions are path segments rather than synthetic keys.
+
 | Field | Type | Default | Required | Description |
 |-------|------|---------|----------|-------------|
 | `key` | `string \| RegExp` | — | Yes | The key to match |

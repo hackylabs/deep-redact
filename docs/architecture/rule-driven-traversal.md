@@ -235,26 +235,20 @@ wins, no descent, no delegation), mirroring the exact-terminal behaviour. This
 document defines the **contract** the modes must honour; the flag's
 implementation lives in the compiler.
 
-After a non-plain-prototype delegation, the configured terminal beneath (or at)
-the non-plain container **remains unredacted**. Neither traversal mode descends a
-non-plain container for path matching: the rule-driven engine delegates rather
-than walk it, and the general traversal it delegates to does not treat a
-non-plain object's properties as path-addressable either. A rule whose path
-passes through — or terminates beyond — a non-plain prototype therefore does not
-apply, and the non-plain container is carried into the output by identity,
-unchanged. For example, with `paths: ['secret']` and a root whose prototype is
-non-plain, the output is the input returned unchanged with `secret` still raw;
-with `paths: ['a.b']` and `a` carrying a non-plain prototype, `a` is passed
-through untraversed and `a.b` is left raw. This is the **intended** behaviour of
-the prototype-pollution guard, not a missed redaction: a non-plain prototype is
-treated as a signal that the container is not a trusted plain data object, so the
-engine neither descends it nor writes redactions into it (which could trigger
-prototype-pollution side effects or mishandle exotic objects). Callers who need a
-value beneath a non-plain container redacted must target a plain-object position,
-or use a breadth-visiting targeting mode. These two invariants — non-plain root
-and non-plain intermediate, each leaving the configured terminal unredacted — are
+After a non-plain-prototype delegation, the general traversal treats the
+container's **own enumerable** fields as path-addressable object-record fields.
+Inherited prototype fields are still not materialised. For example, with
+`paths: ['secret']` and a root whose prototype is non-plain, the delegated
+general traversal returns a copied object with its own `secret` field redacted
+and without inherited prototype data; with `paths: ['a.b']` and `a` carrying a
+non-plain prototype, `a` is copied because its own enumerable `b` field changes.
+This keeps the prototype-pollution guard centred on inherited and special
+prototype state while allowing class-like data records to participate in the
+same redaction contract as plain data objects. These two invariants — non-plain
+root and non-plain intermediate, each redacting only own enumerable fields — are
 pinned by active contract tests.
 
 The non-plain root/intermediate container cases above are governed by the
-existing prototype-pollution guard. A fuller prototype-handling contract remains
-deferred; this document records only the traversal-mode boundary.
+existing prototype-pollution guard plus the class-like object-record traversal
+contract. A fuller prototype-handling contract remains deferred; this document
+records only the traversal-mode boundary.

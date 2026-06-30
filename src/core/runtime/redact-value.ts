@@ -43,7 +43,10 @@ import {
   isSupportedTransformableValue,
 } from '../../transformers/resolve-transformer.js'
 
-type TraversableContainer = Record<string, unknown> | unknown[]
+type TraversableContainer = Map<unknown, unknown> | Record<string, unknown> | Set<unknown> | unknown[]
+type TraversableContainerKind = 'array' | 'map' | 'object-record' | 'plain-object' | 'set'
+type ExtendedTraversableContainerKind = Exclude<TraversableContainerKind, 'array' | 'plain-object'>
+type PlainTraversableContainer = Record<string, unknown> | unknown[]
 type TrackableIdentity = object
 type PolicySource = 'dynamic-path' | 'exact-key' | 'exact-path' | 'regex-key'
 
@@ -136,12 +139,118 @@ export const isPlainObject = (value: unknown): value is Record<string, unknown> 
   return prototype === Object.prototype || prototype === null
 }
 
+const isScalarTransformableObject = (value: unknown): boolean => {
+  return value instanceof Date
+    || value instanceof Error
+    || value instanceof RegExp
+    || value instanceof URL
+}
+
+const resolveExtendedObjectContainerKind = (value: object): ExtendedTraversableContainerKind | undefined => {
+  if (value instanceof Map) {
+    return 'map'
+  }
+
+  if (value instanceof Set) {
+    return 'set'
+  }
+
+  if (
+    ArrayBuffer.isView(value)
+    || value instanceof ArrayBuffer
+    || isScalarTransformableObject(value)
+  ) {
+    return undefined
+  }
+
+  return 'object-record'
+}
+
+const resolveTraversableContainerKind = (value: unknown): TraversableContainerKind | undefined => {
+  if (Array.isArray(value)) {
+    return 'array'
+  }
+
+  if (isPlainObject(value)) {
+    return 'plain-object'
+  }
+
+  return value !== null && typeof value === 'object'
+    ? resolveExtendedObjectContainerKind(value)
+    : undefined
+}
+
 export const isTraversableContainer = (value: unknown): value is TraversableContainer => {
+  return resolveTraversableContainerKind(value) !== undefined
+}
+
+const isPlainTraversableContainer = (value: unknown): value is PlainTraversableContainer => {
   return Array.isArray(value) || isPlainObject(value)
 }
 
 const canRetainStructure = (value: unknown): boolean => {
-  return isTraversableContainer(value) || isSupportedTransformableValue(value)
+  return isPlainTraversableContainer(value)
+    || (value !== null && typeof value === 'object' && resolveExtendedObjectContainerKind(value) !== undefined)
+    || isSupportedTransformableValue(value)
+}
+
+const hasPotentialExactPathDescendant = (
+  plan: CompiledRedactorPlan,
+  canonicalPath: string | undefined,
+): boolean => {
+  if (canonicalPath === undefined) {
+    return Object.keys(plan.exactPathRules).length > 0
+  }
+
+  for (const exactPath of Object.keys(plan.exactPathRules)) {
+    if (
+      exactPath === canonicalPath
+      || exactPath.startsWith(`${canonicalPath}.`)
+      || exactPath.startsWith(`${canonicalPath}[`)
+    ) {
+      return true
+    }
+  }
+
+  return false
+}
+
+const shouldTraverseExtendedRuntimeContainer = (
+  plan: CompiledRedactorPlan,
+  context: TraversalContext,
+  activePolicy: ActivePolicyMatch | undefined,
+): boolean => {
+  if (activePolicy !== undefined) {
+    return true
+  }
+
+  return plan.exactKeyRules.literalMatchers.length > 0
+    || plan.regexKeyRules.matchers.length > 0
+    || plan.substringRules.length > 0
+    || plan.dynamicPathRules.length > 0
+    || hasPotentialExactPathDescendant(plan, context.canonicalPath)
+}
+
+const isIgnoredTraversalValue = (
+  value: unknown,
+  plan: CompiledRedactorPlan,
+): boolean => {
+  const ignoredValueTypes = plan.ignoredValueTypes
+
+  if (typeof value === 'bigint') {
+    return ignoredValueTypes.bigint
+  }
+
+  if (value === null || typeof value !== 'object') {
+    return false
+  }
+
+  return (ignoredValueTypes.Map && value instanceof Map)
+    || (ignoredValueTypes.Set && value instanceof Set)
+    || (ignoredValueTypes.Date && value instanceof Date)
+    || (ignoredValueTypes.Error && value instanceof Error)
+    || (ignoredValueTypes.RegExp && value instanceof RegExp)
+    || (ignoredValueTypes.URL && value instanceof URL)
 }
 
 const hasLookupValue = <T>(
@@ -952,6 +1061,7 @@ const transformObject = (
   suppressDescendantRedaction: boolean | undefined,
   state: TraversalState,
   branchState: TraversalBranchState,
+  serialiseUnchanged: boolean,
 ): TraversalResult => {
   const cacheValue: Record<string, unknown> = {}
   const snapshotEntries: CompletedObjectSnapshotEntry[] = []
@@ -1038,13 +1148,153 @@ const transformObject = (
 
   storeCompletedSnapshot(state, value, { entries: snapshotEntries, kind: 'object' })
 
-  const serialiseSnapshotOnly = !changed && Boolean(plan.serialise)
+  const serialiseSnapshotOnly = !changed && Boolean(plan.serialise) && serialiseUnchanged
 
   return {
     cacheValue,
     changed: changed || serialiseSnapshotOnly,
     pathStable: serialiseSnapshotOnly ? false : pathStable,
     value: changed || serialiseSnapshotOnly ? transformedValue : value,
+  }
+}
+
+const transformMap = (
+  value: Map<unknown, unknown>,
+  plan: CompiledRedactorPlan,
+  inheritedPolicy: ActivePolicyMatch | undefined,
+  canonicalPath: string | undefined,
+  pathSegments: ExactPathSegment[],
+  rootInput: unknown,
+  suppressDescendantRedaction: boolean | undefined,
+  state: TraversalState,
+  branchState: TraversalBranchState,
+): TraversalResult => {
+  const cacheValue = new Map<unknown, unknown>()
+  const transformedValue = new Map<unknown, unknown>()
+  let changed = false
+  let pathStable = true
+
+  for (const [entryKey, entryValue] of value.entries()) {
+    const renderedKey = String(entryKey)
+    const pathSegment = createPropertyPathSegment(renderedKey)
+    const entryPath = appendCanonicalPathSegment(canonicalPath, pathSegment)
+    pathSegments.push(pathSegment)
+
+    try {
+      const entryContext: TraversalContext = {
+        canonicalPath: entryPath,
+        directKeyMatch: plan.exactKeyRules.literalMatchers.length === 0 && plan.regexKeyRules.matchers.length === 0
+          ? undefined
+          : resolveDirectKeyMatch(plan, renderedKey),
+        inheritedPolicy,
+        pathSegments,
+        rootInput,
+        suppressDescendantRedaction,
+      }
+      const entryResult = transformNestedNode(entryValue, plan, entryContext, state, branchState)
+      pathStable &&= entryResult.pathStable
+
+      if (isRemovedValue(entryResult.value)) {
+        changed = true
+        continue
+      }
+
+      cacheValue.set(entryKey, entryResult.cacheValue)
+      transformedValue.set(entryKey, entryResult.value)
+
+      if (!entryResult.changed) {
+        continue
+      }
+
+      changed = true
+    } finally {
+      pathSegments.pop()
+    }
+  }
+
+  if (!changed) {
+    return {
+      cacheValue,
+      changed: false,
+      pathStable,
+      value,
+    }
+  }
+
+  return {
+    cacheValue,
+    changed,
+    pathStable,
+    value: transformedValue,
+  }
+}
+
+const transformSet = (
+  value: Set<unknown>,
+  plan: CompiledRedactorPlan,
+  inheritedPolicy: ActivePolicyMatch | undefined,
+  canonicalPath: string | undefined,
+  pathSegments: ExactPathSegment[],
+  rootInput: unknown,
+  suppressDescendantRedaction: boolean | undefined,
+  state: TraversalState,
+  branchState: TraversalBranchState,
+): TraversalResult => {
+  const cacheValue = new Set<unknown>()
+  const transformedValue = new Set<unknown>()
+  let changed = false
+  let index = 0
+  let pathStable = true
+
+  for (const itemValue of value.values()) {
+    const pathSegment = createIndexPathSegment(index)
+    const itemPath = appendCanonicalPathSegment(canonicalPath, pathSegment)
+    pathSegments.push(pathSegment)
+
+    try {
+      const itemContext: TraversalContext = {
+        canonicalPath: itemPath,
+        inheritedPolicy,
+        pathSegments,
+        rootInput,
+        suppressDescendantRedaction,
+      }
+      const itemResult = transformNestedNode(itemValue, plan, itemContext, state, branchState)
+      pathStable &&= itemResult.pathStable
+
+      if (isRemovedValue(itemResult.value)) {
+        changed = true
+        continue
+      }
+
+      cacheValue.add(itemResult.cacheValue)
+      transformedValue.add(itemResult.value)
+
+      if (!itemResult.changed) {
+        continue
+      }
+
+      changed = true
+    } finally {
+      pathSegments.pop()
+      index += 1
+    }
+  }
+
+  if (!changed) {
+    return {
+      cacheValue,
+      changed: false,
+      pathStable,
+      value,
+    }
+  }
+
+  return {
+    cacheValue,
+    changed,
+    pathStable,
+    value: transformedValue,
   }
 }
 
@@ -1297,7 +1547,76 @@ const transformNode = (
     activePolicy = context.inheritedPolicy
   }
 
-  if (!isTraversableContainer(value)) {
+  const inheritedPolicy = activePolicy
+
+  if (!isPlainTraversableContainer(value)) {
+    if (plan.hasIgnoredValueTypes && isIgnoredTraversalValue(value, plan)) {
+      return {
+        cacheValue: value,
+        changed: false,
+        pathStable: true,
+        value,
+      }
+    }
+
+    const extendedContainerKind = value !== null && typeof value === 'object'
+      ? resolveExtendedObjectContainerKind(value)
+      : undefined
+
+    if (extendedContainerKind !== undefined) {
+      if (!shouldTraverseExtendedRuntimeContainer(plan, context, activePolicy)) {
+        return {
+          cacheValue: value,
+          changed: false,
+          pathStable: true,
+          value,
+        }
+      }
+
+      return transformTrackedIdentity(value as TrackableIdentity, plan, context, activePolicy, state, branchState, () => {
+        if (extendedContainerKind === 'map') {
+          return transformMap(
+            value as Map<unknown, unknown>,
+            plan,
+            inheritedPolicy,
+            context.canonicalPath,
+            context.pathSegments,
+            context.rootInput,
+            context.suppressDescendantRedaction,
+            state,
+            branchState,
+          )
+        }
+
+        if (extendedContainerKind === 'set') {
+          return transformSet(
+            value as Set<unknown>,
+            plan,
+            inheritedPolicy,
+            context.canonicalPath,
+            context.pathSegments,
+            context.rootInput,
+            context.suppressDescendantRedaction,
+            state,
+            branchState,
+          )
+        }
+
+        return transformObject(
+          value as Record<string, unknown>,
+          plan,
+          inheritedPolicy,
+          context.canonicalPath,
+          context.pathSegments,
+          context.rootInput,
+          context.suppressDescendantRedaction,
+          state,
+          branchState,
+          false,
+        )
+      })
+    }
+
     const substringResult = context.suppressDescendantRedaction
       || plan.substringRules.length === 0
       || !isRedactableType(value, plan.valueTypes)
@@ -1316,11 +1635,9 @@ const transformNode = (
     }
   }
 
-  const inheritedPolicy = activePolicy
-
   return transformTrackedIdentity(value, plan, context, activePolicy, state, branchState, () => {
-    return Array.isArray(value)
-      ? transformArray(
+    if (Array.isArray(value)) {
+      return transformArray(
         value,
         plan,
         inheritedPolicy,
@@ -1331,17 +1648,20 @@ const transformNode = (
         state,
         branchState,
       )
-      : transformObject(
-        value,
-        plan,
-        inheritedPolicy,
-        context.canonicalPath,
-        context.pathSegments,
-        context.rootInput,
-        context.suppressDescendantRedaction,
-        state,
-        branchState,
-      )
+    }
+
+    return transformObject(
+      value,
+      plan,
+      inheritedPolicy,
+      context.canonicalPath,
+      context.pathSegments,
+      context.rootInput,
+      context.suppressDescendantRedaction,
+      state,
+      branchState,
+      true,
+    )
   })
 }
 

@@ -685,6 +685,8 @@ describe('compiled exact-selector rule plan', () => {
     ignoredValueTypes.URL = true
 
     expect(Object.isFrozen(plan.ignoredValueTypes)).toBe(true)
+    expect(compileRedactorPlan({}).hasIgnoredValueTypes).toBe(false)
+    expect(plan.hasIgnoredValueTypes).toBe(true)
     expect(plan.ignoredValueTypes).toEqual({
       bigint: true,
       Date: false,

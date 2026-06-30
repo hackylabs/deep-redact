@@ -18,26 +18,26 @@
   },
   "subject": {
     "name": "@hackylabs/deep-redact",
-    "version": "4.0.0"
+    "version": "4.0.1"
   },
   "measurements": {
     "subject": {
-      "baselineHeapUsedBytes": 9859864,
-      "peakHeapUsedBytes": 76942688,
-      "afterGcHeapUsedBytes": 9859864,
+      "baselineHeapUsedBytes": 9844392,
+      "peakHeapUsedBytes": 76927216,
+      "afterGcHeapUsedBytes": 9844392,
       "heapDeltaBeforeGcBytes": 67082824,
       "heapDeltaAfterGcBytes": 0,
-      "baselineRssBytes": 229523456,
-      "peakRssBytes": 229523456
+      "baselineRssBytes": 228966400,
+      "peakRssBytes": 228966400
     },
     "comparator": {
-      "baselineHeapUsedBytes": 9927408,
-      "peakHeapUsedBytes": 76461336,
-      "afterGcHeapUsedBytes": 9930480,
-      "heapDeltaBeforeGcBytes": 66533928,
+      "baselineHeapUsedBytes": 9917192,
+      "peakHeapUsedBytes": 76471344,
+      "afterGcHeapUsedBytes": 9920264,
+      "heapDeltaBeforeGcBytes": 66554152,
       "heapDeltaAfterGcBytes": 3072,
-      "baselineRssBytes": 229867520,
-      "peakRssBytes": 229900288
+      "baselineRssBytes": 229507072,
+      "peakRssBytes": 229523456
     }
   },
   "generatingPlatform": {
@@ -45,5 +45,5 @@
     "arch": "arm64",
     "nodeVersion": "v24.14.1"
   },
-  "generatedAt": "2026-06-20T12:06:59.611Z"
+  "generatedAt": "2026-06-30T11:19:24.362Z"
 }

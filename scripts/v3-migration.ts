@@ -722,7 +722,7 @@ export const renderV3MigrationGuide = (
     '',
     'This guide is generated from `test/migration/v3/matrix.json` and the fixture directories under `test/migration/v3/fixtures/`. The same manifest and fixtures drive verification, so documentation drift fails the generated-file checks.',
     '',
-    'Deep Redact v4 replaces the class-based v3 API with a function-first design. The key changes are: replace `new DeepRedact(options)` with `deepRedact(options)`, replace `redactor.redact(payload)` with the directly callable `redactor(payload)`, rename `blacklistedKeys` to `keys`, and rename `replacement` to `censor`. All other options carry over with the same names and semantics.',
+    'Deep Redact v4 replaces the class-based v3 API with a function-first design. The key changes are: replace `new DeepRedact(options)` with `deepRedact(options)`, replace `redactor.redact(payload)` with the directly callable `redactor(payload)`, rename `blacklistedKeys` to `keys`, and rename `replacement` to `censor`. The v3 `blacklistedKeys` name remains rejected by v4 configuration validation; use `keys` after migration. v4 `keys` traversal covers class instances\' own enumerable fields and `Map`/`Set` contents, with `Map` entry keys matched by rendered string form and `Set` members reachable by numeric path position. All other options carry over with the same names and semantics.',
     '',
     'This guide covers the Deep Redact v3-to-v4 migration only. The `fast-redact` migration, worked examples, benchmark evidence, and platform-adoption guidance are documented separately.',
     '',

@@ -1,6 +1,6 @@
 {
   "name": "@hackylabs/deep-redact",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "description": "Deeply redact sensitive data from objects, arrays and arbitrary strings (e.g. XML or raw cookies data) with a composable, function-first API.",
   "private": false,
   "license": "MIT",
@@ -81,6 +81,7 @@
     "verify-generated-files": "node --experimental-strip-types ./scripts/verify-generated-files.ts",
     "generate-example-docs": "node --experimental-strip-types ./scripts/generate-example-docs.ts",
     "bench:resource": "pnpm run build && node --expose-gc --experimental-strip-types ./scripts/run-resource-benchmarks.ts",
+    "bench:runtime-containers": "pnpm run build && node --expose-gc --experimental-strip-types ./scripts/run-runtime-container-benchmarks.ts",
     "bench:resource:generate-doc": "node --experimental-strip-types ./scripts/generate-resource-benchmark-doc.ts",
     "bench:speed": "pnpm run build && node --experimental-strip-types ./scripts/run-benchmarks.ts",
     "bench:speed:generate-doc": "node --experimental-strip-types ./scripts/generate-benchmark-doc.ts",

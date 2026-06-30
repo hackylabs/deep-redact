@@ -49,31 +49,32 @@ describe('Rule-driven traversal contract', () => {
       })
     })
 
-    it('delegates a root container with a non-plain prototype and returns it unchanged (prototype pollution guard)', () => {
+    it('delegates a root container with a non-plain prototype and redacts its own enumerable terminal', () => {
       const payload = Object.create({ poisoned: true }) as Record<string, unknown>
       payload.secret = 'value'
       const redact = deepRedact({ paths: ['secret'] })
 
       const output = redact(payload)
 
-      // The non-plain root delegates; the configured terminal is NOT redacted
-      // and the input is returned unchanged.
-      expect(output).toBe(payload)
-      expect((output as Record<string, unknown>).secret).toBe('value')
+      // The path-driven engine stays conservative and delegates the non-plain root to the
+      // general traversal, which treats own enumerable fields as a traversable object record.
+      expect(output).not.toBe(payload)
+      expect((output as Record<string, unknown>).secret).toBe('[REDACTED]')
+      expect((output as Record<string, unknown>).poisoned).toBeUndefined()
     })
 
-    it('delegates an intermediate container with a non-plain prototype and does not redact the configured terminal (prototype pollution guard)', () => {
+    it('delegates an intermediate container with a non-plain prototype and redacts its own enumerable terminal', () => {
       const a = Object.assign(Object.create({ proto: 1 }), { b: 'secret' })
       const payload = { a }
       const redact = deepRedact({ paths: ['a.b'] })
 
       const output = redact(payload) as { a: { b: string } }
 
-      // The path delegates; the non-plain intermediate `a` is not traversed, so
-      // its `b` is left unredacted. Assert identity too, to prove `a` was passed
-      // through untraversed rather than merely never targeted.
-      expect(output.a).toBe(a)
-      expect(output.a.b).toBe('secret')
+      // The non-plain intermediate delegates to the general traversal and is copied because its
+      // own enumerable `b` field changes. Prototype fields are still not materialised.
+      expect(output.a).not.toBe(a)
+      expect(output.a.b).toBe('[REDACTED]')
+      expect((output.a as Record<string, unknown>).proto).toBeUndefined()
     })
 
     it('applies the censor at a circular reference on a configured terminal without descending or throwing', () => {

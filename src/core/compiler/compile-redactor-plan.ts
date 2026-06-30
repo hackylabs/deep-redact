@@ -110,6 +110,7 @@ export interface CompiledRedactorPlan {
   readonly dynamicPathRules: readonly CompiledDynamicPathRule[];
   readonly exactPathRules: Readonly<Record<string, CompiledExactPathRule>>;
   readonly exactKeyRules: CompiledExactKeyRules;
+  readonly hasIgnoredValueTypes: boolean;
   readonly ignoredValueTypes: CompiledIgnoredValueTypesPlan;
   // Selects the rule-driven navigation engine: the config targets exact string paths and/or
   // single-level `*` wildcard paths exclusively, with no key, regex-key, or stringTest rules,
@@ -418,6 +419,14 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
     && substringRules.length === 0
     && !options.fuzzyKeyMatch
     && options.caseSensitiveKeyMatch !== false
+  const ignoredValueTypes = compileIgnoredValueTypes(options.ignoredValueTypes)
+  const hasIgnoredValueTypes = ignoredValueTypes.bigint
+    || ignoredValueTypes.Date
+    || ignoredValueTypes.Error
+    || ignoredValueTypes.Map
+    || ignoredValueTypes.RegExp
+    || ignoredValueTypes.Set
+    || ignoredValueTypes.URL
 
   return Object.freeze({
     diagnostics: compileDiagnostics(options.diagnostics),
@@ -425,7 +434,8 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
     dynamicPathRules: compiledPathRules.dynamicPathRules,
     exactKeyRules,
     exactPathRules: compiledPathRules.exactPathRules,
-    ignoredValueTypes: compileIgnoredValueTypes(options.ignoredValueTypes),
+    hasIgnoredValueTypes,
+    ignoredValueTypes,
     pathDrivenOnly,
     maxDepth: options.maxDepth ?? DEFAULT_MAX_DEPTH,
     maxNodes: options.maxNodes ?? DEFAULT_MAX_NODES,

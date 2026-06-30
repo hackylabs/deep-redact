@@ -84,7 +84,7 @@ v4, v3, and fast-redact all return a plain JavaScript object.
 
 _† fast-redact is a third-party library, not a deep-redact version. It is shown as a throughput reference; its feature set and guarantees differ from deep-redact's, so it is not a like-for-like comparison._
 
-v4 is **~17× faster** than v3 on path-based workloads and **~10× faster** on wildcard workloads.
+v4 is **~15× faster** than v3 on path-based workloads and **~9× faster** on wildcard workloads.
 
 ### Serialised output (`serialise: true`)
 
@@ -131,6 +131,8 @@ Full speed and resource benchmark results: [`docs/benchmarks/speed-results.md`](
 ### `KeySelector`
 
 Each entry in `keys` may be a plain `string`, a `RegExp`, or a `KeyRule` object for per-key overrides.
+
+`keys` traverses plain objects, arrays, class instances' own enumerable fields, and `Map`/`Set` contents. `Map` entry keys are matched by their rendered string form while preserving the original key object in structured output; `Set` members are traversed in insertion order, but their numeric positions are path segments rather than synthetic keys.
 
 | Field | Type | Default | Required | Description |
 |-------|------|---------|----------|-------------|

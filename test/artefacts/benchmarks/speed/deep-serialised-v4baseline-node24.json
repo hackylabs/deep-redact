@@ -15,25 +15,25 @@
   },
   "subject": {
     "name": "@hackylabs/deep-redact",
-    "version": "4.0.0"
+    "version": "4.0.1"
   },
   "measurements": {
     "subject": {
-      "median": 0.2636964999999909,
-      "mean": 0.2637972856700123,
-      "min": 0.26210888000010163,
-      "max": 0.2689139780003752,
+      "median": 0.21450217200026964,
+      "mean": 0.21448291776001083,
+      "min": 0.21261974999998348,
+      "max": 0.2154900060000655,
       "unit": "ms"
     },
     "comparator": {
-      "median": 0.2787837340007536,
-      "mean": 0.2786988520600142,
-      "min": 0.27729565400013234,
-      "max": 0.2796831099999545,
+      "median": 0.22409091399956377,
+      "mean": 0.22403144756999396,
+      "min": 0.2218893579998112,
+      "max": 0.2276515900005179,
       "unit": "ms"
     }
   },
-  "overheadPct": -5.41,
+  "overheadPct": -4.28,
   "generatingPlatform": {
     "os": "darwin",
     "arch": "arm64",
@@ -50,5 +50,5 @@
       "release-candidate"
     ]
   },
-  "generatedAt": "2026-06-20T12:01:28.115Z"
+  "generatedAt": "2026-06-30T11:14:16.674Z"
 }
