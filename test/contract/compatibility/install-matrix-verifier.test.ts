@@ -775,6 +775,6 @@ describe('install matrix release gate wiring', () => {
     expect(workflow).toContain('pnpm run verify:install-matrix')
     expect(workflow).toContain('publish:')
     expect(workflow).toContain('needs: verify-install-matrix')
-    expect(workflow).toContain('pnpm publish --provenance --access public')
+    expect(workflow).toContain('npm publish --provenance --access public')
   })
 })
