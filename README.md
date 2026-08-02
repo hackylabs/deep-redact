@@ -43,7 +43,7 @@ bun add @hackylabs/deep-redact
 ```json
 {
   "imports": {
-    "@hackylabs/deep-redact": "npm:@hackylabs/deep-redact@4.0.2"
+    "@hackylabs/deep-redact": "npm:@hackylabs/deep-redact@4.1.0"
   }
 }
 ```
