@@ -187,6 +187,15 @@
       "expectedResultFile": "expected.txt"
     },
     {
+      "id": "custom-error-transformer",
+      "category": "runtime",
+      "docTarget": "docs/examples/custom-error-transformer.md",
+      "sourceFile": "docs/examples/examples/custom-error-transformer.ts",
+      "fixtureDir": "docs/examples/fixtures/custom-error-transformer",
+      "assertionMode": "serialised-output",
+      "expectedResultFile": "expected.txt"
+    },
+    {
       "id": "graceful-error-replacement",
       "category": "runtime",
       "docTarget": "docs/examples/graceful-error-replacement.md",

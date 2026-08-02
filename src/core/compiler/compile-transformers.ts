@@ -37,10 +37,24 @@ export interface CompiledCustomConstructorTransformers {
   readonly transformers: readonly Transformer[];
 }
 
+// User per-class transformers eligible to run BEFORE regular traversal (in both serialise modes),
+// converting a class instance to a plain object that normal `keys`/`paths` redaction then scrubs.
+// Deliberately excludes the built-in default transformers so an unconfigured `Error`/`Date`/… stays
+// a terminal leaf; the serialise-pass representation is unchanged (and now deprecated for reliance).
+export interface CompiledPreTraversalTransformers {
+  // True when the user configured at least one eligible per-class transformer: a
+  // `byConstructor.custom` registration, or a `byConstructor.Error` entry.
+  readonly enabled: boolean;
+  // The user-supplied `byConstructor.Error` transformers only — WITHOUT the appended built-in
+  // `errorTransformer` (which remains serialise-only).
+  readonly errorUser: readonly Transformer[];
+}
+
 export interface CompiledTransformersPlan {
   readonly byType: CompiledTransformersByType;
   readonly byConstructor: CompiledTransformersByConstructor;
   readonly fallback: readonly Transformer[];
+  readonly preTraversal: CompiledPreTraversalTransformers;
 }
 
 const mergeTransformers = (
@@ -86,9 +100,18 @@ const compileByConstructor = (
 export const compileTransformers = (
   configured: TransformersOption | undefined,
 ): CompiledTransformersPlan => {
+  const byConstructor = compileByConstructor(configured?.byConstructor)
+  // Read the user Error transformers from the RAW config so the appended built-in default is
+  // excluded (it is the last element of the merged `byConstructor.Error` array).
+  const errorUser = Object.freeze([...(configured?.byConstructor?.Error ?? [])])
+
   return Object.freeze({
     byType: compileByType(configured?.byType),
-    byConstructor: compileByConstructor(configured?.byConstructor),
+    byConstructor,
     fallback: mergeTransformers(configured?.fallback),
+    preTraversal: Object.freeze({
+      enabled: byConstructor.custom.length > 0 || errorUser.length > 0,
+      errorUser,
+    }),
   })
 }

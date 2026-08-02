@@ -1,0 +1,1 @@
+{"name":"RequestError","message":"Request failed with status 401","config":{"data":{"username":"alice","password":"[REDACTED]"}}}

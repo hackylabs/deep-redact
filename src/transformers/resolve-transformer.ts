@@ -94,6 +94,36 @@ const resolveCustomConstructorTransformers = (
   return undefined
 }
 
+// Resolves a conversion for the pre-traversal phase (runs in BOTH serialise modes, before regular
+// traversal). Scope is deliberately narrow: only USER per-class transformers — the user portion of
+// `byConstructor.Error` for `Error` instances, and `byConstructor.custom` for arbitrary class
+// instances. Every other bucket (byType.object, fallback, the built-in defaults, and user Date/Map/
+// RegExp/Set/URL transformers) stays serialise-only, so existing serialise output is unchanged.
+// Returns the converted value, or `undefined` to defer (no eligible transformer changed the value).
+export const resolvePreTraversalTransformedValue = (
+  value: unknown,
+  plan: CompiledTransformersPlan,
+): unknown | undefined => {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+
+  const supportedKind = resolveSupportedConstructorName(value)
+
+  if (supportedKind === 'Error') {
+    return applyFirstChangingTransformer(value, plan.preTraversal.errorUser)
+  }
+
+  if (supportedKind !== undefined) {
+    // Date/Map/RegExp/Set/URL keep their serialise-only representation — never pre-traversed.
+    return undefined
+  }
+
+  const customConstructorTransformers = resolveCustomConstructorTransformers(value, plan) ?? []
+
+  return applyFirstChangingTransformer(value, customConstructorTransformers)
+}
+
 export const resolveTransformedValue = (
   value: unknown,
   plan: CompiledTransformersPlan,
