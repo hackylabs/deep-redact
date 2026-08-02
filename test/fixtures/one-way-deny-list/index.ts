@@ -16,6 +16,7 @@ export const oneWayDeniedOptionNames = deniedPublicIntentTerms
 export const publicValueExportNames = Object.freeze([
   'createRedactor',
   'deepRedact',
+  'getNodeConsoleDiagnosticSink',
 ] as const)
 
 export const publicPackageOwnKeys = Object.freeze([

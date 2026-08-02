@@ -289,7 +289,7 @@ describe('console adapter contract', () => {
     expect(diagnostics).toHaveLength(0)
   })
 
-  it('uses the private Node fallback for redaction failure diagnostics while the adapter is active', async () => {
+  it('stays silent for redaction failure diagnostics without a configured sink while the adapter is active', async () => {
     const { createRedactedConsole } = await importConsoleAdapter()
     const fallbackSpy = vi.spyOn(globalThis.console, 'error').mockImplementation(() => undefined)
     const failingDate = new Date('1999-01-01T00:00:00.000Z')
@@ -417,7 +417,7 @@ describe('console adapter contract', () => {
     expectSanitisedDiagnostic(guardEvents[0]!, 'warn')
   })
 
-  it('uses the private Node fallback for guard diagnostics without forwarding nested arguments through the target', async () => {
+  it('stays silent for guard diagnostics when no sink is configured, without forwarding nested arguments through the target', async () => {
     const { createRedactedConsole } = await importConsoleAdapter()
     const fallbackSpy = vi.spyOn(globalThis.console, 'error').mockImplementation(() => undefined)
     const adaptedReference: {
@@ -443,9 +443,10 @@ describe('console adapter contract', () => {
     expect(adapted.log({
       password: 'outer-secret',
     })).toBe('outer-complete')
+    // The nested re-entrant trace is still blocked; without a configured diagnostics sink the guard
+    // event is silent rather than written to the console (no default console fallback).
     expect(spies.trace).not.toHaveBeenCalled()
-    expect(fallbackSpy).toHaveBeenCalledTimes(1)
-    expectSanitisedDiagnostic(fallbackSpy.mock.calls[0]?.[0] as DiagnosticEvent, 'trace')
+    expect(fallbackSpy).not.toHaveBeenCalled()
     expect(redactor).toHaveBeenCalledTimes(1)
   })
 })

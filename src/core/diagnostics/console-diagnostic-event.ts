@@ -1,5 +1,4 @@
 import type { DiagnosticEvent, DiagnosticSink } from '../../types/diagnostics.js'
-import { getNodeConsoleDiagnosticSink } from './node-console-sink.js'
 
 const consoleRecursionBlockedMessage = 'Nested console adapter call was blocked to prevent a recursive redaction loop.'
 
@@ -17,18 +16,19 @@ export const createConsoleRecursionBlockedDiagnosticEvent = (
   })
 }
 
+// As with the traversal diagnostics, an unconfigured sink is silent. Writing to the console here
+// would be worse than elsewhere: the adapter exists precisely because console output is being
+// redacted, so a console diagnostic would re-enter the surface it is reporting on.
 export const emitConsoleRecursionBlockedDiagnostic = (
   method: string,
   sink?: DiagnosticSink,
 ): void => {
-  const resolvedSink = sink ?? getNodeConsoleDiagnosticSink()
-
-  if (resolvedSink === undefined) {
+  if (sink === undefined) {
     return
   }
 
   try {
-    resolvedSink(createConsoleRecursionBlockedDiagnosticEvent(method))
+    sink(createConsoleRecursionBlockedDiagnosticEvent(method))
   } catch {
     return
   }

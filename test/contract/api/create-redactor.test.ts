@@ -4880,6 +4880,35 @@ describe('Nested runtime failures degrade locally to [UNSUPPORTED] with structur
     expect(serialisedEvent).not.toMatch(/\[REDACTED\]/)
   }
 
+  it('emits no console output when no diagnostics sink is configured (silent by default)', () => {
+    const consoleErrorSpy = vi.spyOn(globalThis.console, 'error').mockImplementation(() => undefined)
+
+    try {
+      // redaction.failure: a throwing enumerable getter is caught, degraded to [UNSUPPORTED], and a
+      // diagnostic is emitted — but with no configured sink nothing reaches the console.
+      const throwingGetter = {}
+      Object.defineProperty(throwingGetter, 'boom', {
+        configurable: true,
+        enumerable: true,
+        get() {
+          throw new Error('getter blew up')
+        },
+      })
+
+      expect(() => deepRedact({ keys: ['token'] })({ wrapper: throwingGetter })).not.toThrow()
+
+      // budget.exceeded: exceeding maxNodes emits a budget diagnostic before throwing the internal
+      // budget error — again, silent without a sink.
+      expect(() => deepRedact({ keys: ['token'], maxNodes: 1 })({ a: 1, b: 2, c: 3 })).toThrow(
+        expect.objectContaining({ code: 'BUDGET_EXCEEDED' }),
+      )
+
+      expect(consoleErrorSpy).not.toHaveBeenCalled()
+    } finally {
+      consoleErrorSpy.mockRestore()
+    }
+  })
+
   it('degrades a failing transformed branch locally while transformed, circular, revisited, and ignored siblings continue', () => {
     const { events, sink } = createDiagnosticSink()
     const circularPayload: Record<string, unknown> = {
