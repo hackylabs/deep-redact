@@ -1,4 +1,5 @@
 import type {
+  BudgetOverflowMode,
   Censor,
   DeepRedactOptions,
   KeyRule,
@@ -121,6 +122,9 @@ export interface CompiledRedactorPlan {
   readonly pathDrivenOnly: boolean;
   readonly maxDepth: number;
   readonly maxNodes: number;
+  // On a `maxDepth`/`maxNodes` breach: `'throw'` (default) raises the internal budget error;
+  // `'truncate'` replaces the offending node with the truncation marker and stops, failing closed.
+  readonly onBudgetExceeded: BudgetOverflowMode;
   readonly regexKeyRules: CompiledRegexKeyRules;
   readonly serialise?: SerialiseOption;
   readonly substringRules: readonly CompiledSubstringRule[];
@@ -439,6 +443,7 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
     pathDrivenOnly,
     maxDepth: options.maxDepth ?? DEFAULT_MAX_DEPTH,
     maxNodes: options.maxNodes ?? DEFAULT_MAX_NODES,
+    onBudgetExceeded: options.onBudgetExceeded ?? 'throw',
     regexKeyRules,
     serialise: options.serialise,
     substringRules,

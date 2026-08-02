@@ -79,7 +79,7 @@ _† fast-redact is a third-party library; json-stringify-regex is a naive nativ
 
 v4 remains faster than v3 in serialised mode. fast-redact and json-stringify-regex have a throughput advantage because their output path is oriented entirely toward string production.
 
-Against deep-redact v2 the serialised picture is mixed: v4 is roughly at parity on path-based workloads but slower on breadth-heavy (wildcard) ones. That gap is the cost of safety v2 does not provide — under `serialise: true`, v4 runs the type transformers that make `BigInt`, `Date`, `Map`, `Set`, `Error`, `RegExp`, and `URL` values JSON-safe, and it detects and neutralises circular references instead of throwing on them. (Node and depth budgeting via `maxNodes`/`maxDepth` is opt-in and unlimited by default, so it adds nothing unless you enable it.)
+Against deep-redact v2 the serialised picture is mixed: v4 is roughly at parity on path-based workloads but slower on breadth-heavy (wildcard) ones. That gap is the cost of safety v2 does not provide — under `serialise: true`, v4 runs the type transformers that make `BigInt`, `Date`, `Map`, `Set`, `Error`, `RegExp`, and `URL` values JSON-safe, and it detects and neutralises circular references instead of throwing on them. (Node and depth budgeting via `maxNodes`/`maxDepth` runs by default — 500 / 50,000 — and throws on breach; the checks are counter increments and add negligible cost. Set `onBudgetExceeded: 'truncate'` to fail closed with a `[TRUNCATED]` marker instead of throwing.)
 
 These safety passes are intrinsic to `serialise: true` and cannot be switched off individually. If you do not need those guarantees and want to match v2's throughput (or better), set `serialise: false` and run your own `JSON.stringify`: the structured-output path skips the transformer and circular-reference passes entirely. This restores v2's trade-offs too — your `JSON.stringify` will throw on `BigInt` and circular references, `Map`/`Set` serialise as `{}`, and `undefined` is dropped.
 
@@ -104,10 +104,11 @@ Full speed and resource benchmark results: [`docs/benchmarks/speed-results.md`](
 | `types` | `ValueTypeName[]` | `['string']` | No | `typeof` categories eligible for redaction; a matched key whose value's type is not listed is left untouched |
 | `fuzzyKeyMatch` | `boolean` | `false` | No | Match when the configured key is a substring of the field name (e.g. `'pass'` matches `'password'`) |
 | `caseSensitiveKeyMatch` | `boolean` | `true` | No | When `false`, normalises key names (strips non-word characters, lowercases) before comparing |
-| `maxDepth` | `number` | unlimited | No | Stop traversal beyond this nesting depth; guards against deeply nested payload DoS |
-| `maxNodes` | `number` | unlimited | No | Stop traversal after this many nodes; guards against excessively large payload DoS |
+| `maxDepth` | `number` | `500` | No | Stop traversal beyond this nesting depth; guards against deeply nested payload DoS |
+| `maxNodes` | `number` | `50000` | No | Stop traversal after this many nodes; guards against excessively large payload DoS |
+| `onBudgetExceeded` | `'throw' \| 'truncate'` | `'throw'` | No | On a `maxDepth`/`maxNodes` breach, `'throw'` raises an internal budget error; `'truncate'` replaces the offending node with `[TRUNCATED]` and stops, failing closed |
 | `transformers` | `TransformersOption` | built-in defaults | No | Override how runtime types are represented in serialised output |
-| `diagnostics` | `DiagnosticsOptions` | — | No | Receive a structured event when a value is degraded to `[UNSUPPORTED]` during serialisation |
+| `diagnostics` | `DiagnosticsOptions` | — | No | Opt-in sink for structured degrade/budget events; silent by default (no console output). Pass `getNodeConsoleDiagnosticSink()` as the `sink` to log to the console |
 
 `ValueTypeName` is one of: `'string'`, `'number'`, `'bigint'`, `'boolean'`, `'object'`, `'function'`, `'symbol'`, `'undefined'`.
 

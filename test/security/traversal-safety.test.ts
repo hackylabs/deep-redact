@@ -5,6 +5,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { deepRedact, type DeepRedactOptions } from '../../src/index.js'
 import { compileRedactorPlan } from '../../src/core/compiler/compile-redactor-plan.js'
 import { buildPathDrivenExecutor } from '../../src/core/runtime/navigate-exact-paths.js'
+import { redactValue } from '../../src/core/runtime/redact-value.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const corpus = JSON.parse(
@@ -136,6 +137,78 @@ describe('traversal safety — custom limits', () => {
       expect.objectContaining({ code: 'BUDGET_EXCEEDED' })
     )
     expect(() => redactNarrow(buildWideObject(4))).not.toThrow()
+  })
+})
+
+describe('traversal safety — onBudgetExceeded: truncate (fail closed)', () => {
+  it('truncates to a [TRUNCATED] marker at a node-budget breach instead of throwing (general traversal)', () => {
+    const redactTruncate = deepRedact({ keys: ['secret'], maxNodes: 3, onBudgetExceeded: 'truncate' })
+
+    let result = {} as Record<string, unknown>
+    expect(() => {
+      result = redactTruncate({ a: 1, secret: 'hide me', b: 2, c: 3, d: 4 }) as Record<string, unknown>
+    }).not.toThrow()
+
+    // Root (1) + a (2) + secret (3) are within budget; b (4) breaches and becomes the marker;
+    // everything after it is dropped (fail closed).
+    expect(result.a).toBe(1)
+    expect(result.secret).toBe('[REDACTED]')
+    expect(result.b).toBe('[TRUNCATED]')
+    expect('c' in result).toBe(false)
+    expect('d' in result).toBe(false)
+  })
+
+  it('truncates to a [TRUNCATED] marker at a depth breach instead of throwing (general traversal)', () => {
+    const redactTruncate = deepRedact({ keys: ['secret'], maxDepth: 3, onBudgetExceeded: 'truncate' })
+
+    let result: unknown
+    expect(() => {
+      result = redactTruncate(buildNestedObject(10))
+    }).not.toThrow()
+
+    expect(JSON.stringify(result)).toContain('[TRUNCATED]')
+  })
+
+  it('does not throw or truncate below the limit', () => {
+    const redactTruncate = deepRedact({ keys: ['secret'], maxNodes: 50, onBudgetExceeded: 'truncate' })
+
+    expect(redactTruncate({ a: 1, secret: 'hide me', b: 2 })).toEqual({
+      a: 1,
+      secret: '[REDACTED]',
+      b: 2,
+    })
+  })
+
+  it('truncates fail-closed in the rule-driven engine by delegating to the general traversal', () => {
+    const options = {
+      paths: ['*.x'],
+      maxNodes: 6,
+      onBudgetExceeded: 'truncate',
+    } satisfies DeepRedactOptions
+
+    // Same config as the throwing AC 9 case, still pathDrivenOnly — under truncate a breach must
+    // delegate rather than throw.
+    expect(compileRedactorPlan(options).pathDrivenOnly).toBe(true)
+
+    const payload = { a: { x: 1 }, b: { x: 2 }, c: { x: 3 }, d: { x: 4 }, e: { x: 5 } }
+
+    let ruleDriven: unknown
+    expect(() => {
+      ruleDriven = deepRedact(options)(payload)
+    }).not.toThrow()
+
+    // Delegation contract: the rule-driven engine hands the whole payload to the general traversal,
+    // so the truncated output equals the general traversal's truncated output for the same plan.
+    expect(JSON.stringify(ruleDriven)).toContain('[TRUNCATED]')
+    expect(ruleDriven).toEqual(redactValue(payload, compileRedactorPlan(options)))
+  })
+
+  it('accepts onBudgetExceeded: "truncate" and rejects invalid modes at initialisation', () => {
+    expect(() => deepRedact({ onBudgetExceeded: 'truncate' })).not.toThrow()
+    expect(() => deepRedact({
+      // @ts-expect-error — an unknown overflow mode is rejected at runtime
+      onBudgetExceeded: 'nope',
+    })).toThrow()
   })
 })
 

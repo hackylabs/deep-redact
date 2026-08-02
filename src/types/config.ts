@@ -5,6 +5,14 @@ import type { TransformersOption } from './transformers.js'
 
 export type SerialiseOption = boolean | ((value: unknown) => string)
 
+// What a `maxDepth`/`maxNodes` breach does. `throw` is the default and the historic behaviour — it
+// aborts the whole call with an internal budget error, the right choice when a truncated result
+// would be worse than none. `truncate` fails closed: the node that breaches the budget is replaced
+// by a `[TRUNCATED]` marker and its un-traversed siblings are dropped, so a host that cannot
+// tolerate a throw (a Sentry `beforeSend`, for example) still receives a bounded result rather than
+// losing the payload.
+export type BudgetOverflowMode = 'throw' | 'truncate'
+
 // A per-key rule reaching parity with the v3 `BlacklistKeyConfig`: `key` may be a literal string
 // or a RegExp, and each rule may carry its own redaction overrides (`censor`, `remove`,
 // `retainStructure`, `replaceStringByLength`) plus the literal-key matching flags. A rule with no
@@ -48,6 +56,7 @@ export interface DeepRedactOptions {
   readonly keys?: readonly KeySelector[];
   readonly maxDepth?: number;
   readonly maxNodes?: number;
+  readonly onBudgetExceeded?: BudgetOverflowMode;
   readonly paths?: readonly PathEntry[];
   readonly remove?: boolean;
   readonly retainStructure?: boolean;

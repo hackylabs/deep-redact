@@ -1,6 +1,6 @@
 import type { PathRule, PathSelector } from '../../types/paths.js'
 import type { IgnoredValueTypesOption } from '../../types/ignored-value-types.js'
-import type { DeepRedactOptions, SerialiseOption, ValueTypeName } from '../../types/public.js'
+import type { BudgetOverflowMode, DeepRedactOptions, SerialiseOption, ValueTypeName } from '../../types/public.js'
 import type { TransformersByConstructor, TransformersByType } from '../../types/transformers.js'
 import { createValidationReport, type ValidationIssue, type ValidationReport } from './validation-report.js'
 import {
@@ -17,6 +17,7 @@ const rootOptionNames = new Set<keyof DeepRedactOptions>([
   'keys',
   'maxDepth',
   'maxNodes',
+  'onBudgetExceeded',
   'paths',
   'remove',
   'replaceStringByLength',
@@ -26,6 +27,11 @@ const rootOptionNames = new Set<keyof DeepRedactOptions>([
   'stringTests',
   'transformers',
   'types',
+])
+
+const budgetOverflowModes = new Set<BudgetOverflowMode>([
+  'throw',
+  'truncate',
 ])
 
 const valueTypeNames = new Set<ValueTypeName>([
@@ -167,6 +173,17 @@ const validatePositiveIntegerOption = (
   if (value === undefined) return
   if (!Number.isInteger(value) || (value as number) < 1) {
     pushIssue(issues, `${path}.${optionName}`, `${optionName} must be a positive integer.`)
+  }
+}
+
+const validateBudgetOverflowModeOption = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): void => {
+  if (value === undefined) return
+  if (typeof value !== 'string' || !budgetOverflowModes.has(value as BudgetOverflowMode)) {
+    pushIssue(issues, `${path}.onBudgetExceeded`, 'onBudgetExceeded must be "throw" or "truncate".')
   }
 }
 
@@ -786,6 +803,7 @@ export const validateConfig = (options: unknown): ValidationReport => {
   validateTransformers(options.transformers, 'options.transformers', issues)
   validatePositiveIntegerOption(options.maxDepth, 'options', 'maxDepth', issues)
   validatePositiveIntegerOption(options.maxNodes, 'options', 'maxNodes', issues)
+  validateBudgetOverflowModeOption(options.onBudgetExceeded, 'options', issues)
   validateBooleanOption(options.remove, 'options', 'remove', issues)
   validateBooleanOption(options.retainStructure, 'options', 'retainStructure', issues)
   validateBooleanOption(options.replaceStringByLength, 'options', 'replaceStringByLength', issues)

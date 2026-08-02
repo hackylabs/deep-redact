@@ -37,6 +37,7 @@ import {
   isBudgetExceededError,
   isDepthExceeded,
   isNodeBudgetExceeded,
+  TRUNCATION_MARKER,
   type TraversalBudget,
 } from './traversal-budget.js'
 import {
@@ -358,11 +359,16 @@ const emitFailureDiagnostic = (
   return diagnostic
 }
 
-const throwBudgetExceeded = (
+// Emits the `budget.exceeded` diagnostic, then either aborts the call (`throw`, the historic and
+// default behaviour) or latches truncation and returns the marker result the caller writes in place
+// of the node that breached the budget (`truncate`). In truncate mode the caller must not descend
+// any further — the marker is the boundary past which nothing from the input reaches the output.
+const reportBudgetExceeded = (
   plan: CompiledRedactorPlan,
   context: TraversalContext,
   kind: 'depth' | 'nodes',
-): never => {
+  state: TraversalState,
+): TraversalResult => {
   const limit = kind === 'depth' ? plan.maxDepth : plan.maxNodes
   emitDiagnosticEvent(plan.diagnostics, Object.freeze({
     details: Object.freeze({ stage: 'traversal', kind, limit }),
@@ -373,7 +379,29 @@ const throwBudgetExceeded = (
     path: context.canonicalPath ?? '',
     valueType: 'unknown',
   }))
-  throw createBudgetExceededError(kind, limit)
+
+  if (plan.onBudgetExceeded !== 'truncate') {
+    throw createBudgetExceededError(kind, limit)
+  }
+
+  state.budget.truncated = true
+
+  return {
+    cacheValue: TRUNCATION_MARKER,
+    changed: true,
+    pathStable: false,
+    value: TRUNCATION_MARKER,
+  }
+}
+
+// True once the node budget is spent and the plan truncates rather than throws, at which point a
+// container loop must stop enumerating: every remaining entry would be dropped anyway, and reading
+// it could invoke an accessor whose result can no longer be inspected.
+const shouldStopEnumerating = (
+  plan: CompiledRedactorPlan,
+  state: TraversalState,
+): boolean => {
+  return plan.onBudgetExceeded === 'truncate' && state.budget.truncated
 }
 
 const createUnsupportedTraversalResult = (): TraversalResult => {
@@ -909,7 +937,9 @@ const transformTrackedIdentity = (
   state.budget.depth += 1
   try {
     if (isDepthExceeded(state.budget, plan.maxDepth)) {
-      throwBudgetExceeded(plan, context, 'depth')
+      // Not recorded against the identity: the breach is a property of where the branch sat in the
+      // graph, not of the value, so a shallower encounter of the same object must traverse afresh.
+      return reportBudgetExceeded(plan, context, 'depth', state)
     }
     return withActiveIdentity(branchState, identity, canonicalPath, () => {
       const result = traverse()
@@ -948,8 +978,16 @@ const transformArray = (
   const removedIndexes: number[] = []
   let changed = false
   let pathStable = true
+  let truncatedLength: number | undefined
 
   for (let index = 0; index < value.length; index += 1) {
+    if (shouldStopEnumerating(plan, state)) {
+      // The budget ran out on an earlier item; the tail is dropped rather than emitted as holes.
+      truncatedLength = index
+      changed = true
+      break
+    }
+
     if (!(index in value)) {
       continue
     }
@@ -1009,6 +1047,12 @@ const transformArray = (
     } finally {
       pathSegments.pop()
     }
+  }
+
+  if (truncatedLength !== undefined) {
+    cacheValue.length = truncatedLength
+    transformedValue.length = truncatedLength
+    snapshotItems.length = truncatedLength
   }
 
   storeCompletedSnapshot(state, value, { items: snapshotItems, kind: 'array' })
@@ -1087,6 +1131,12 @@ const transformObject = (
   }
 
   for (const key of propertyKeys) {
+    if (shouldStopEnumerating(plan, state)) {
+      // The budget ran out earlier; the remaining keys are dropped, never emitted unredacted.
+      changed = true
+      break
+    }
+
     const pathSegment = createPropertyPathSegment(key)
     const propertyPath = appendCanonicalPathSegment(canonicalPath, pathSegment)
     pathSegments.push(pathSegment)
@@ -1175,6 +1225,11 @@ const transformMap = (
   let pathStable = true
 
   for (const [entryKey, entryValue] of value.entries()) {
+    if (shouldStopEnumerating(plan, state)) {
+      changed = true
+      break
+    }
+
     const renderedKey = String(entryKey)
     const pathSegment = createPropertyPathSegment(renderedKey)
     const entryPath = appendCanonicalPathSegment(canonicalPath, pathSegment)
@@ -1247,6 +1302,11 @@ const transformSet = (
   let pathStable = true
 
   for (const itemValue of value.values()) {
+    if (shouldStopEnumerating(plan, state)) {
+      changed = true
+      break
+    }
+
     const pathSegment = createIndexPathSegment(index)
     const itemPath = appendCanonicalPathSegment(canonicalPath, pathSegment)
     pathSegments.push(pathSegment)
@@ -1313,8 +1373,14 @@ const transformCompletedArray = (
   const transformedValue: unknown[] = new Array(snapshot.items.length)
   const removedIndexes: number[] = []
   let pathStable = true
+  let truncatedLength: number | undefined
 
   for (let index = 0; index < snapshot.items.length; index += 1) {
+    if (shouldStopEnumerating(plan, state)) {
+      truncatedLength = index
+      break
+    }
+
     const itemSnapshot = snapshot.items[index]
 
     if (itemSnapshot === undefined || !itemSnapshot.present) {
@@ -1360,6 +1426,11 @@ const transformCompletedArray = (
     }
   }
 
+  if (truncatedLength !== undefined) {
+    cacheValue.length = truncatedLength
+    transformedValue.length = truncatedLength
+  }
+
   if (removedIndexes.length === 0) {
     return {
       cacheValue,
@@ -1403,6 +1474,10 @@ const transformCompletedObject = (
   let pathStable = true
 
   for (const entry of snapshot.entries) {
+    if (shouldStopEnumerating(plan, state)) {
+      break
+    }
+
     const pathSegment = createPropertyPathSegment(entry.key)
     const propertyPath = appendCanonicalPathSegment(canonicalPath, pathSegment)
     if (entry.diagnostic !== undefined) {
@@ -1508,7 +1583,7 @@ const transformNode = (
 ): TraversalResult => {
   state.budget.nodesVisited += 1
   if (isNodeBudgetExceeded(state.budget, plan.maxNodes)) {
-    throwBudgetExceeded(plan, context, 'nodes')
+    return reportBudgetExceeded(plan, context, 'nodes', state)
   }
 
   let activePolicy = context.suppressDescendantRedaction

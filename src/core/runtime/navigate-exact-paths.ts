@@ -1424,8 +1424,16 @@ export const buildPathDrivenExecutor = (
         undefined,
       )
     } catch (error) {
-      // BudgetExceededError propagates — the caller must see it, not a fallback result.
-      if (isBudgetExceededError(error)) throw error
+      if (isBudgetExceededError(error)) {
+        // Under `onBudgetExceeded: 'throw'` the caller must see the error, not a fallback result.
+        if (plan.onBudgetExceeded !== 'truncate') throw error
+
+        // Under truncate the partially-navigated graph cannot be returned: this engine visits only
+        // configured terminals, so the ones it had not reached yet would still be present and
+        // unredacted. Hand the whole payload to the general traversal, which re-runs on a fresh
+        // budget and truncates fail-closed. Costly, but only on the breach path.
+        return fallback(input)
+      }
       // A hostile accessor (throwing getter / proxy trap) encountered while shallow-copying a
       // touched ancestor — delegate so the general traversal can degrade it consistently.
       return fallback(input)

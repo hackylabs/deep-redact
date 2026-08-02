@@ -6,6 +6,7 @@ export type {
   DiagnosticSink,
 } from './diagnostics.js'
 export type {
+  BudgetOverflowMode,
   DeepRedactOptions,
   KeyRule,
   KeySelector,
