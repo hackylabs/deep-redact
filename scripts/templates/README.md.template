@@ -178,6 +178,8 @@ Transformers control how non-JSON-safe runtime types are represented when `seria
 
 The built-in transformers produce deterministic marker objects (e.g. `{ _transformer: 'date', datetime: '<ISO string>' }`). See [`docs/architecture/serialise-output.md`](docs/architecture/serialise-output.md) for the full dispatch order and marker shapes.
 
+**Execution phases.** User `byConstructor.custom` and `byConstructor.Error` transformers run **before regular traversal**, in both serialise modes: the matched class instance is converted to the plain object you return, which is then scrubbed by your `keys`/`paths` rules. This is how PII nested inside a class instance — for example an `Error`/`AxiosError` carrying a `config.data` payload — gets redacted without a pre-normalise step (see [Redacting PII inside Error instances](docs/examples/custom-error-transformer.md)). Every other bucket (`byType`, `fallback`, and user `byConstructor.{Date,Map,RegExp,Set,URL}`) runs only during the `serialise: true` pass; relying on that serialise-only behaviour — where the transformer output escapes redaction — is **deprecated** in favour of the per-class buckets above.
+
 ### `DiagnosticsOptions`
 
 | Field | Type | Description |
@@ -208,6 +210,7 @@ const same = createRedactor({ keys: ['secret'] })
 - [Replacement and removal](docs/examples/replacement-and-removal.md)
 - [Structured vs serialised output](docs/examples/serialised-output.md)
 - [Custom transformers](docs/examples/custom-transformer.md)
+- [Redacting PII inside Error instances](docs/examples/custom-error-transformer.md)
 - [Value-type allowlist](docs/examples/value-type-allowlist-default.md)
 - [Singleton / service-root setup](docs/examples/singleton-setup.md)
 - [Console redaction adapter](docs/examples/console-redaction.md)

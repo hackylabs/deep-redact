@@ -415,6 +415,7 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
       ...Object.values(compiledPathRules.exactPathRules).map((rule) => rule.segments),
       ...compiledPathRules.dynamicPathRules.map((rule) => rule.segments),
     ])
+  const transformers = compileTransformers(options.transformers)
   const pathDrivenOnly = everyDynamicRuleIsSingleWildcard
     && hasAnyPathRule
     && !hasUnsafeOverlap
@@ -423,6 +424,10 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
     && substringRules.length === 0
     && !options.fuzzyKeyMatch
     && options.caseSensitiveKeyMatch !== false
+    // Pre-traversal user transformers must be able to convert a matching class instance ANYWHERE in
+    // the payload. The rule-driven engine only visits configured path terminals, so it would skip
+    // off-path instances — force the general traversal whenever such a transformer is configured.
+    && !transformers.preTraversal.enabled
   const ignoredValueTypes = compileIgnoredValueTypes(options.ignoredValueTypes)
   const hasIgnoredValueTypes = ignoredValueTypes.bigint
     || ignoredValueTypes.Date
@@ -447,7 +452,7 @@ export const compileRedactorPlan = (options: DeepRedactOptions = {}): CompiledRe
     regexKeyRules,
     serialise: options.serialise,
     substringRules,
-    transformers: compileTransformers(options.transformers),
+    transformers,
     valueTypes: compileValueTypes(options.types),
   })
 }

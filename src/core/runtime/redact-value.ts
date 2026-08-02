@@ -42,6 +42,7 @@ import {
 } from './traversal-budget.js'
 import {
   isSupportedTransformableValue,
+  resolvePreTraversalTransformedValue,
 } from '../../transformers/resolve-transformer.js'
 
 type TraversableContainer = Map<unknown, unknown> | Record<string, unknown> | Set<unknown> | unknown[]
@@ -116,6 +117,10 @@ interface TraversalState {
   readonly completedIdentities: WeakMap<TrackableIdentity, CompletedTraversalRecord[]>;
   readonly completedSnapshots: WeakMap<TrackableIdentity, CompletedTraversalSnapshot>;
   readonly cycleRegistry: WeakMap<TrackableIdentity, string> | undefined;
+  // Number of active pre-traversal transformer re-applications on the current descent path. Bounds
+  // an adversarial transformer that keeps returning a fresh matching instance, degrading it to
+  // [UNSUPPORTED] without throwing (mirrors the serialise pass's MAX_SERIALISE_DEPTH).
+  preTransformDepth: number;
 }
 
 interface TraversalBranchState {
@@ -123,6 +128,13 @@ interface TraversalBranchState {
 }
 
 const unsupportedValue = '[UNSUPPORTED]'
+
+// Caps pre-traversal transformer re-application on a single descent path for the pathological
+// bare-return case (a transformer returning a fresh matching instance with no intervening
+// container, where `budget.depth` never grows). Sits far above any realistic nested-class
+// conversion depth and well below the default maxDepth (500) and the JS stack limit — mirrors the
+// serialise pass's MAX_SERIALISE_DEPTH rationale so runaway recursion degrades to [UNSUPPORTED].
+const MAX_PRE_TRANSFORM_APPLICATIONS = 100
 
 const createCircularMarker = (path: string, value: string): Record<string, string> => ({
   _transformer: 'circular',
@@ -325,6 +337,7 @@ const createTraversalState = (cycleRegistry?: WeakMap<TrackableIdentity, string>
     completedIdentities: new WeakMap<TrackableIdentity, CompletedTraversalRecord[]>(),
     completedSnapshots: new WeakMap<TrackableIdentity, CompletedTraversalSnapshot>(),
     cycleRegistry,
+    preTransformDepth: 0,
   }
 }
 
@@ -1584,6 +1597,53 @@ const transformNode = (
   state.budget.nodesVisited += 1
   if (isNodeBudgetExceeded(state.budget, plan.maxNodes)) {
     return reportBudgetExceeded(plan, context, 'nodes', state)
+  }
+
+  // Pre-traversal transformer phase (issue #41). When a USER per-class transformer matches a
+  // non-plain object, convert it to a plain object BEFORE regular redaction runs — in both serialise
+  // modes — then re-enter traversal so `keys`/`paths` rules scrub the converted result. Only user
+  // `byConstructor.custom`/`byConstructor.Error` transformers participate (see
+  // resolvePreTraversalTransformedValue); the built-in defaults stay serialise-only, so an
+  // unconfigured `Error`/`Date`/… remains a terminal leaf and existing serialise output is unchanged.
+  // `ignoredValueTypes` still wins.
+  if (
+    plan.transformers.preTraversal.enabled
+    && value !== null
+    && typeof value === 'object'
+    && !isPlainTraversableContainer(value)
+    && !(plan.hasIgnoredValueTypes && isIgnoredTraversalValue(value, plan))
+  ) {
+    let converted: unknown
+    try {
+      converted = resolvePreTraversalTransformedValue(value, plan.transformers)
+    } catch {
+      // A throwing transformer (or a hostile `Symbol.hasInstance` while scanning custom
+      // registrations) fails closed to [UNSUPPORTED], silently — mirrors the serialise pass's bare
+      // catch and avoids walking a live object graph.
+      return createUnsupportedTraversalResult()
+    }
+
+    if (converted !== undefined && converted !== value) {
+      // Bound runaway re-application (a transformer returning a fresh matching instance every call):
+      // degrade to [UNSUPPORTED] before the depth budget would throw, failing closed without a throw.
+      if (state.preTransformDepth >= MAX_PRE_TRANSFORM_APPLICATIONS || state.budget.depth >= plan.maxDepth) {
+        return createUnsupportedTraversalResult()
+      }
+
+      state.preTransformDepth += 1
+      try {
+        const recursed = transformNode(converted, plan, context, state, branchState)
+
+        return {
+          cacheValue: recursed.cacheValue,
+          changed: true,
+          pathStable: recursed.pathStable,
+          value: recursed.value,
+        }
+      } finally {
+        state.preTransformDepth -= 1
+      }
+    }
   }
 
   let activePolicy = context.suppressDescendantRedaction

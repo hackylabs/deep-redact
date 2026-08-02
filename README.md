@@ -84,7 +84,7 @@ v4, v3, and fast-redact all return a plain JavaScript object.
 
 _† fast-redact is a third-party library, not a deep-redact version. It is shown as a throughput reference; its feature set and guarantees differ from deep-redact's, so it is not a like-for-like comparison._
 
-v4 is **~15× faster** than v3 on path-based workloads and **~9× faster** on wildcard workloads.
+v4 is **~17× faster** than v3 on path-based workloads and **~10× faster** on wildcard workloads.
 
 ### Serialised output (`serialise: true`)
 
@@ -96,7 +96,7 @@ _† fast-redact is a third-party library; json-stringify-regex is a naive nativ
 
 v4 remains faster than v3 in serialised mode. fast-redact and json-stringify-regex have a throughput advantage because their output path is oriented entirely toward string production.
 
-Against deep-redact v2 the serialised picture is mixed: v4 is roughly at parity on path-based workloads but slower on breadth-heavy (wildcard) ones. That gap is the cost of safety v2 does not provide — under `serialise: true`, v4 runs the type transformers that make `BigInt`, `Date`, `Map`, `Set`, `Error`, `RegExp`, and `URL` values JSON-safe, and it detects and neutralises circular references instead of throwing on them. (Node and depth budgeting via `maxNodes`/`maxDepth` is opt-in and unlimited by default, so it adds nothing unless you enable it.)
+Against deep-redact v2 the serialised picture is mixed: v4 is roughly at parity on path-based workloads but slower on breadth-heavy (wildcard) ones. That gap is the cost of safety v2 does not provide — under `serialise: true`, v4 runs the type transformers that make `BigInt`, `Date`, `Map`, `Set`, `Error`, `RegExp`, and `URL` values JSON-safe, and it detects and neutralises circular references instead of throwing on them. (Node and depth budgeting via `maxNodes`/`maxDepth` runs by default — 500 / 50,000 — and throws on breach; the checks are counter increments and add negligible cost. Set `onBudgetExceeded: 'truncate'` to fail closed with a `[TRUNCATED]` marker instead of throwing.)
 
 These safety passes are intrinsic to `serialise: true` and cannot be switched off individually. If you do not need those guarantees and want to match v2's throughput (or better), set `serialise: false` and run your own `JSON.stringify`: the structured-output path skips the transformer and circular-reference passes entirely. This restores v2's trade-offs too — your `JSON.stringify` will throw on `BigInt` and circular references, `Map`/`Set` serialise as `{}`, and `undefined` is dropped.
 
@@ -121,10 +121,11 @@ Full speed and resource benchmark results: [`docs/benchmarks/speed-results.md`](
 | `types` | `ValueTypeName[]` | `['string']` | No | `typeof` categories eligible for redaction; a matched key whose value's type is not listed is left untouched |
 | `fuzzyKeyMatch` | `boolean` | `false` | No | Match when the configured key is a substring of the field name (e.g. `'pass'` matches `'password'`) |
 | `caseSensitiveKeyMatch` | `boolean` | `true` | No | When `false`, normalises key names (strips non-word characters, lowercases) before comparing |
-| `maxDepth` | `number` | unlimited | No | Stop traversal beyond this nesting depth; guards against deeply nested payload DoS |
-| `maxNodes` | `number` | unlimited | No | Stop traversal after this many nodes; guards against excessively large payload DoS |
+| `maxDepth` | `number` | `500` | No | Stop traversal beyond this nesting depth; guards against deeply nested payload DoS |
+| `maxNodes` | `number` | `50000` | No | Stop traversal after this many nodes; guards against excessively large payload DoS |
+| `onBudgetExceeded` | `'throw' \| 'truncate'` | `'throw'` | No | On a `maxDepth`/`maxNodes` breach, `'throw'` raises an internal budget error; `'truncate'` replaces the offending node with `[TRUNCATED]` and stops, failing closed |
 | `transformers` | `TransformersOption` | built-in defaults | No | Override how runtime types are represented in serialised output |
-| `diagnostics` | `DiagnosticsOptions` | — | No | Receive a structured event when a value is degraded to `[UNSUPPORTED]` during serialisation |
+| `diagnostics` | `DiagnosticsOptions` | — | No | Opt-in sink for structured degrade/budget events; silent by default (no console output). Pass `getNodeConsoleDiagnosticSink()` as the `sink` to log to the console |
 
 `ValueTypeName` is one of: `'string'`, `'number'`, `'bigint'`, `'boolean'`, `'object'`, `'function'`, `'symbol'`, `'undefined'`.
 
@@ -194,6 +195,8 @@ Transformers control how non-JSON-safe runtime types are represented when `seria
 
 The built-in transformers produce deterministic marker objects (e.g. `{ _transformer: 'date', datetime: '<ISO string>' }`). See [`docs/architecture/serialise-output.md`](docs/architecture/serialise-output.md) for the full dispatch order and marker shapes.
 
+**Execution phases.** User `byConstructor.custom` and `byConstructor.Error` transformers run **before regular traversal**, in both serialise modes: the matched class instance is converted to the plain object you return, which is then scrubbed by your `keys`/`paths` rules. This is how PII nested inside a class instance — for example an `Error`/`AxiosError` carrying a `config.data` payload — gets redacted without a pre-normalise step (see [Redacting PII inside Error instances](docs/examples/custom-error-transformer.md)). Every other bucket (`byType`, `fallback`, and user `byConstructor.{Date,Map,RegExp,Set,URL}`) runs only during the `serialise: true` pass; relying on that serialise-only behaviour — where the transformer output escapes redaction — is **deprecated** in favour of the per-class buckets above.
+
 ### `DiagnosticsOptions`
 
 | Field | Type | Description |
@@ -224,6 +227,7 @@ const same = createRedactor({ keys: ['secret'] })
 - [Replacement and removal](docs/examples/replacement-and-removal.md)
 - [Structured vs serialised output](docs/examples/serialised-output.md)
 - [Custom transformers](docs/examples/custom-transformer.md)
+- [Redacting PII inside Error instances](docs/examples/custom-error-transformer.md)
 - [Value-type allowlist](docs/examples/value-type-allowlist-default.md)
 - [Singleton / service-root setup](docs/examples/singleton-setup.md)
 - [Console redaction adapter](docs/examples/console-redaction.md)

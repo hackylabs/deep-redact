@@ -4598,6 +4598,163 @@ describe('Built-in and custom transformer resolution', () => {
   })
 })
 
+describe('user class transformers run before regular traversal (issue #41)', () => {
+  class AxiosLikeError extends Error {
+    config: { data: { password: string; safe: string } }
+
+    constructor(message: string) {
+      super(message)
+      this.name = 'AxiosLikeError'
+      this.config = { data: { password: 'hunter2', safe: 'keep' } }
+    }
+  }
+
+  const errorToPlain = (value: unknown): unknown => {
+    if (!(value instanceof Error)) {
+      return value
+    }
+
+    return {
+      name: value.name,
+      message: value.message,
+      config: (value as AxiosLikeError).config,
+    }
+  }
+
+  it('converts an Error to a plain object before traversal so nested PII is redacted (serialise: false)', () => {
+    const redact = deepRedact({
+      keys: ['password'],
+      transformers: { byConstructor: { Error: [errorToPlain] } },
+    })
+
+    const result = redact({ err: new AxiosLikeError('boom') }) as { err: Record<string, unknown> }
+
+    expect(result.err).toEqual({
+      name: 'AxiosLikeError',
+      message: 'boom',
+      config: { data: { password: '[REDACTED]', safe: 'keep' } },
+    })
+  })
+
+  it('runs the Error transformer before the serialise gate so nested PII is redacted (serialise: true)', () => {
+    const redact = deepRedact({
+      keys: ['password'],
+      serialise: true,
+      transformers: { byConstructor: { Error: [errorToPlain] } },
+    })
+
+    expect(redact({ err: new AxiosLikeError('boom') })).toBe(JSON.stringify({
+      err: {
+        name: 'AxiosLikeError',
+        message: 'boom',
+        config: { data: { password: '[REDACTED]', safe: 'keep' } },
+      },
+    }))
+  })
+
+  it('converts an arbitrary class instance before traversal so keys redact its converted fields', () => {
+    class Account {
+      constructor(public id: string, public password: string) {}
+    }
+
+    const redact = deepRedact({
+      keys: ['password'],
+      transformers: {
+        byConstructor: {
+          custom: [{
+            constructor: Account,
+            transformers: [(value: unknown): unknown => {
+              const account = value as Account
+              return { id: account.id, password: account.password }
+            }],
+          }],
+        },
+      },
+    })
+
+    expect(redact({ account: new Account('a1', 'hunter2') })).toEqual({
+      account: { id: 'a1', password: '[REDACTED]' },
+    })
+  })
+
+  it('lets ignoredValueTypes.Error win: the Error stays a leaf and is not converted', () => {
+    const err = new AxiosLikeError('boom')
+    const redact = deepRedact({
+      keys: ['password'],
+      ignoredValueTypes: { Error: true },
+      transformers: { byConstructor: { Error: [errorToPlain] } },
+    })
+
+    const result = redact({ err }) as { err: unknown }
+
+    // Ignored wins: the raw Error identity is preserved, never converted or descended.
+    expect(result.err).toBe(err)
+  })
+
+  it('degrades to [UNSUPPORTED] without throwing when a pre-traversal transformer throws', () => {
+    class Widget {}
+
+    const redact = deepRedact({
+      keys: ['password'],
+      transformers: {
+        byConstructor: {
+          custom: [{
+            constructor: Widget,
+            transformers: [(): unknown => { throw new Error('transformer boom') }],
+          }],
+        },
+      },
+    })
+
+    let result: unknown
+    expect(() => { result = redact({ widget: new Widget(), safe: 'ok' }) }).not.toThrow()
+    expect(result).toEqual({ widget: '[UNSUPPORTED]', safe: 'ok' })
+  })
+
+  it('forces the general traversal so an off-path class instance is still converted', () => {
+    const optionsWithout = { paths: ['user.name'] } satisfies DeepRedactOptions
+    const optionsWith = {
+      paths: ['user.name'],
+      transformers: { byConstructor: { Error: [errorToPlain] } },
+    } satisfies DeepRedactOptions
+
+    // Without a pre-traversal transformer this config is rule-driven; adding one forces the general
+    // traversal so the off-path Error at `err` is still converted rather than skipped.
+    expect(compileRedactorPlan(optionsWithout).pathDrivenOnly).toBe(true)
+    expect(compileRedactorPlan(optionsWith).pathDrivenOnly).toBe(false)
+
+    const result = deepRedact(optionsWith)({
+      user: { name: 'alice' },
+      err: new AxiosLikeError('boom'),
+    }) as { user: { name: unknown }; err: unknown }
+
+    expect(result.user.name).toBe('[REDACTED]')
+    // The Error was converted to a plain object (transformer ran off-path); it is no longer an Error.
+    expect(result.err).not.toBeInstanceOf(Error)
+    expect(result.err).toEqual({
+      name: 'AxiosLikeError',
+      message: 'boom',
+      config: { data: { password: 'hunter2', safe: 'keep' } },
+    })
+  })
+
+  it('bounds a bare-recursive pre-traversal transformer to [UNSUPPORTED] without throwing', () => {
+    class Loop {}
+
+    const redact = deepRedact({
+      transformers: {
+        byConstructor: {
+          custom: [{ constructor: Loop, transformers: [(): unknown => new Loop()] }],
+        },
+      },
+    })
+
+    let result: unknown
+    expect(() => { result = redact({ loop: new Loop() }) }).not.toThrow()
+    expect(result).toEqual({ loop: '[UNSUPPORTED]' })
+  })
+})
+
 describe('Ignored value types suppress descendant redaction inside transformed runtime values', () => {
   it('keeps the safe transformed root output for ignored bigint values', () => {
     const redact = deepRedact({
