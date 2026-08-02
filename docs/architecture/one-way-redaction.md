@@ -9,6 +9,7 @@ The public root value exports are:
 
 - `createRedactor`
 - `deepRedact`
+- `getNodeConsoleDiagnosticSink`
 
 The public console adapter value exports are:
 
