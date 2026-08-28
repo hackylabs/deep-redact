@@ -94,7 +94,7 @@
     "all dependencies are for development purposes only"
   ],
   "devDependencies": {
-    "@eslint/js": "9.39.4",
+    "@eslint/js": "10.0.1",
     "@stylistic/eslint-plugin": "4.4.1",
     "@types/fast-redact": "3.0.4",
     "@types/node": "24.1.0",
